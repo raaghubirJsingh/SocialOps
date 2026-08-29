@@ -1,0 +1,178 @@
+# SocialOps bootstrap CI/security foundation (AGENTS.md sections 5.6, 12, 13).
+# GitHub Actions. Node.js 22. npm / plain npm workspaces.
+# Locked checks: lint, type checks, Jest, Playwright, build, Prisma/DB validation,
+# Redis-dependent validation, and security checks:
+#   - npm audit --audit-level=high  (fails on High/Critical; never suppressed)
+#   - Gitleaks OSS binary           (pinned 8.30.1; free; no GHAS / CodeQL / paid services)
+# Dependabot runs server-side via .github/dependabot.yml (npm + github-actions, weekly).
+#
+# Jobs that depend on application scaffolding (not part of this milestone yet) are gated
+# with hashFiles(...) so they are truthfully SKIPPED until the corresponding bootstrap
+# phase lands - never silently reported as passing.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  # Least privilege (AGENTS.md section 7/12). No write scopes needed for CI validation.
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22" # Node.js 22 LTS, same major locally and in CI (AGENTS.md section 5.3). Switch to node-version-file: .nvmrc once the repo skeleton adds .nvmrc.
+  GITLEAKS_VERSION: "8.30.1" # Pinned Gitleaks OSS release (verified stable, non-prerelease)
+  # Ephemeral, throwaway dev/test placeholder connection strings for this CI run only.
+  # Never real credentials; never point at any live environment (AGENTS.md section 8/12).
+  DATABASE_URL: postgresql://socialops:socialops_dev@localhost:5432/socialops
+  REDIS_URL: redis://localhost:6379
+
+jobs:
+  security:
+    name: Security (npm audit + Gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install dependencies (npm ci)
+        if: hashFiles('**/package-lock.json') != ''
+        run: npm ci
+      - name: npm audit (fail on High/Critical)
+        if: hashFiles('**/package-lock.json') != ''
+        run: npm audit --audit-level=high
+      - name: Download pinned Gitleaks OSS binary (with checksum verification)
+        run: |
+          set -euo pipefail
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_checksums.txt" -o gitleaks_checksums.txt
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o gitleaks.tar.gz
+          grep "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" gitleaks_checksums.txt | sha256sum -c -
+          tar -xzf gitleaks.tar.gz
+          ./gitleaks version
+      - name: Gitleaks secret scan (full repository)
+        run: ./gitleaks detect --source "$GITHUB_WORKSPACE" --redact --exit-code 1
+
+  test-api:
+    name: API tests (ephemeral Postgres + Redis service containers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: hashFiles('**/package-lock.json') != '' && hashFiles('apps/api/package.json') != ''
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: socialops
+          POSTGRES_PASSWORD: socialops_dev
+          POSTGRES_DB: socialops
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U socialops -d socialops"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install dependencies (npm ci)
+        run: npm ci
+      - name: Prisma migrate deploy (database/Prisma validation)
+        if: hashFiles('apps/api/prisma/schema.prisma') != ''
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+      - name: Prisma migrate status
+        if: hashFiles('apps/api/prisma/schema.prisma') != ''
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: npx prisma migrate status --schema apps/api/prisma/schema.prisma
+      - name: Jest unit + integration tests (API)
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          REDIS_URL: ${{ env.REDIS_URL }}
+        run: npm run test --workspace=apps/api --if-present
+
+  test-web:
+    name: Web E2E/smoke tests (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: hashFiles('**/package-lock.json') != '' && hashFiles('apps/web/package.json') != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install dependencies (npm ci)
+        run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: Playwright E2E/smoke tests
+        run: npm run test:e2e --workspace=apps/web --if-present
+
+  lint-typecheck:
+    name: Lint + type checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: hashFiles('**/package-lock.json') != '' && hashFiles('package.json') != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install dependencies (npm ci)
+        run: npm ci
+      - name: Lint (ESLint across workspaces)
+        run: npm run lint --workspaces --if-present
+      - name: Type checks (tsc --noEmit across workspaces)
+        run: npm run typecheck --workspaces --if-present
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: hashFiles('**/package-lock.json') != '' && hashFiles('package.json') != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install dependencies (npm ci)
+        run: npm ci
+      - name: Build (npm workspaces)
+        run: npm run build --workspaces --if-present
+      - name: Upload build artifacts (immutable-artifact / build-once-promote principle)
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: |
+            apps/*/dist
+            apps/*/.next
+          if-no-files-found: warn
