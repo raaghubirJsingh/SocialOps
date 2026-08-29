@@ -1,0 +1,33 @@
+# Local development Docker services for SocialOps
+# Used for running integration tests and local development against real databases.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: socialops_postgres
+    environment:
+      POSTGRES_USER: socialops
+      POSTGRES_PASSWORD: SocialOps_DB_2026!
+      POSTGRES_DB: socialops
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U socialops -d socialops']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: socialops_redis
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:

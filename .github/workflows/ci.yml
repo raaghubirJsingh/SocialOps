@@ -31,6 +31,12 @@ env:
   # Never real credentials; never point at any live environment (AGENTS.md section 8/12).
   DATABASE_URL: postgresql://socialops:socialops_dev@localhost:5432/socialops
   REDIS_URL: redis://localhost:6379
+  # Stage B6 authentication (JWT + Argon2id). Throwaway dev placeholders only.
+  # Never real secrets; never point at any live environment.
+  JWT_ACCESS_SECRET: ci-access-throwaway-secret-32-chars-min
+  JWT_REFRESH_SECRET: ci-refresh-throwaway-secret-32-chars-min
+  JWT_ACCESS_TTL: "900"
+  JWT_REFRESH_TTL: "604800"
 
 jobs:
   security:
@@ -112,6 +118,10 @@ jobs:
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           REDIS_URL: ${{ env.REDIS_URL }}
+          JWT_ACCESS_SECRET: ${{ env.JWT_ACCESS_SECRET }}
+          JWT_REFRESH_SECRET: ${{ env.JWT_REFRESH_SECRET }}
+          JWT_ACCESS_TTL: ${{ env.JWT_ACCESS_TTL }}
+          JWT_REFRESH_TTL: ${{ env.JWT_REFRESH_TTL }}
         run: npm run test --workspace=apps/api --if-present
 
   test-web:

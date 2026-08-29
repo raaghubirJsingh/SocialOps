@@ -1,0 +1,110 @@
+// SocialOps Stage B database foundation schema.
+//
+// Governance (AGENTS.md):
+//   - Section 6: Organization is the top-level tenant / isolation boundary.
+//     A Workspace belongs to exactly one Organization; an Organization may
+//     have many Workspaces. A User has NO personal/default Workspace -
+//     access is always mediated through OrganizationMembership.
+//   - Section 7: Roles (Owner, Admin, Member, Viewer) are attached to the
+//     OrganizationMembership, never directly to User or Workspace.
+//   - Section 8: RefreshToken stores only a hash of the token.
+//   - Section 13: This schema contains ONLY the bootstrap foundation. No
+//     content, task, client-workflow, publishing, or analytics tables.
+//
+// Connection: Prisma reads DATABASE_URL from the environment (required by
+// the approved Stage B plan - no connection logic lives in code).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// The four locked RBAC roles (AGENTS.md section 7). No other role may be
+/// added without explicit human approval.
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String    @unique
+  // Nullable until the authentication foundation stage introduces credentials;
+  // Stage B creates no users itself.
+  passwordHash  String?
+  displayName   String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  memberships   OrganizationMembership[]
+  refreshTokens RefreshToken[]
+}
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaces  Workspace[]
+  memberships OrganizationMembership[]
+}
+
+model Workspace {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String
+  slug           String
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  // Slugs are namespaced per tenant, not globally.
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+}
+
+model OrganizationMembership {
+  id             String           @id @default(uuid()) @db.Uuid
+  userId         String           @db.Uuid
+  organizationId String           @db.Uuid
+  // Least privilege / deny by default (AGENTS.md section 7): the default is
+  // the most restrictive role; anything broader must be granted explicitly.
+  role           OrganizationRole @default(VIEWER)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  // A user holds at most one role per organization; different roles in
+  // different organizations are supported.
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  // Only the hash is ever stored; raw tokens must never hit the database
+  // (AGENTS.md section 8).
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
