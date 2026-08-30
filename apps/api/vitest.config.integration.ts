@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import tsconfigPaths from 'vite-tsconfig-paths';
-
+process.loadEnvFile();
 /**
  * Real-instance integration tests (checkpoints B4/B5 and CI service
  * containers). These require live PostgreSQL (DATABASE_URL) and Redis

@@ -1,6 +1,8 @@
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
+import { IS_JWT_PUBLIC_KEY } from '../../rbac/rbac.constants.js';
 
 const JWT_ACCESS_SECRET = 'test-access-secret-32-chars-minimum';
 
@@ -11,6 +13,13 @@ function makeMockJwt() {
       return { sub: 'user-1', email: 'a@b.com' };
     }),
   } as unknown as JwtService;
+}
+
+function makeMockReflector(isPublic: boolean): Reflector {
+  return {
+    getAllAndOverride: <T>(_key: string): T | undefined =>
+      _key === IS_JWT_PUBLIC_KEY ? (isPublic as unknown as T) : undefined,
+  } as unknown as Reflector;
 }
 
 function makeContext(authHeader?: string): ExecutionContext {
@@ -28,7 +37,7 @@ describe('JwtAuthGuard', () => {
   beforeEach(() => {
     process.env.JWT_ACCESS_SECRET = JWT_ACCESS_SECRET;
     mockJwt = makeMockJwt();
-    guard = new JwtAuthGuard(mockJwt);
+    guard = new JwtAuthGuard(mockJwt, makeMockReflector(false));
   });
 
   it('throws UnauthorizedException when Authorization header is missing', () => {
@@ -54,5 +63,11 @@ describe('JwtAuthGuard', () => {
     const result = guard.canActivate(ctx);
     expect(result).toBe(true);
     expect(request.user).toEqual({ sub: 'user-1', email: 'a@b.com' });
+  });
+
+  it('returns true without bearer when @Public() metadata is set', () => {
+    const publicGuard = new JwtAuthGuard(mockJwt, makeMockReflector(true));
+    const result = publicGuard.canActivate(makeContext());
+    expect(result).toBe(true);
   });
 });

@@ -24,8 +24,11 @@ async function bootstrap() {
     .setTitle('SocialOps API')
     .setDescription(
       'SocialOps - social media operations management platform. ' +
-        'Stage B6 (Authentication Foundation) exposes user registration, login, ' +
-        'refresh-token rotation, and logout under the `auth` tag.',
+        'Stage B7 (Authentication + RBAC Foundation) exposes user registration, ' +
+        'login, refresh-token rotation, and logout under the `auth` tag, ' +
+        'and authenticated-membership read under the `memberships` tag. ' +
+        'Organization context is provided through the `X-Organization-Id` ' +
+        'header on every non-public route.',
     )
     .setVersion('0.1.0')
     .addBearerAuth(
@@ -39,6 +42,17 @@ async function bootstrap() {
       'bearer',
     )
     .addTag('auth', 'Authentication: register, login, refresh, logout.')
+    .addTag(
+      'memberships',
+      "Authenticated user's OrganizationMembership rows (joined with their organizations).",
+    )
+    .addTag(
+      'rbac',
+      'Organization-scoped routes. Every route under this tag requires the ' +
+        '`X-Organization-Id` header and a verified membership for the ' +
+        'authenticated user.',
+    )
+    .addTag('app', 'Application health and root endpoints.')
     .build();
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, swaggerDocument);
