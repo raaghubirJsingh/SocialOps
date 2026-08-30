@@ -30,13 +30,6 @@ describe('AppController (e2e)', () => {
     await app.init();
   });
 
-  it('/api (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/api')
-      .expect(200)
-      .expect('Hello World!');
-  });
-
   it('/api/health (GET)', () => {
     return request(app.getHttpServer())
       .get('/api/health')

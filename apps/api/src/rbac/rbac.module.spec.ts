@@ -5,6 +5,7 @@ import { OrganizationContextService } from './organization-context.service.js';
 import { OrganizationMembershipGuard } from './guards/organization-membership.guard.js';
 import { RoleGuard } from './guards/role.guard.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { jest } from '@jest/globals';
 
 describe('RbacModule', () => {
   it('compiles and exposes the required providers', async () => {
@@ -19,7 +20,7 @@ describe('RbacModule', () => {
         {
           provide: PrismaService,
           useValue: {
-            organizationMembership: { findUnique: vi.fn() },
+            organizationMembership: { findUnique: jest.fn() },
           },
         },
       ],
@@ -43,7 +44,7 @@ describe('RbacModule', () => {
         {
           provide: PrismaService,
           useValue: {
-            organizationMembership: { findUnique: vi.fn() },
+            organizationMembership: { findUnique: jest.fn() },
           },
         },
       ],

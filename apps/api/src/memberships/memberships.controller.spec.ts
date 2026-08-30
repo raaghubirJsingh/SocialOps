@@ -2,11 +2,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtModule } from '@nestjs/jwt';
 import { MembershipsController } from './memberships.controller.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { jest } from '@jest/globals';
 
 function makePrismaMock() {
   return {
     organizationMembership: {
-      findMany: vi.fn(),
+      // Typed as `jest.Mock<any, any>` so mockResolvedValue / mockResolvedValueOnce
+      // accept any argument. The PrismaService contract for findMany is
+      // already exercised in the integration tests against real PostgreSQL;
+      // here we only need a mock that the controller can call.
+      findMany: jest.fn() as jest.Mock<any>,
     },
   };
 }

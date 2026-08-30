@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { OrganizationMembershipGuard } from './organization-membership.guard.js';
 import { OrganizationContextService } from '../organization-context.service.js';
 import { IS_PUBLIC_KEY } from '../rbac.constants.js';
+import { jest } from '@jest/globals';
 
 const VALID_ORG = randomUUID();
 const VALID_USER = randomUUID();
@@ -30,11 +31,11 @@ function reflectorReturning(value: unknown): Reflector {
 }
 
 describe('OrganizationMembershipGuard', () => {
-  let mockResolve: ReturnType<typeof vi.fn>;
+  let mockResolve: ReturnType<typeof jest.fn>;
   let service: Pick<OrganizationContextService, 'resolve'>;
 
   beforeEach(() => {
-    mockResolve = vi.fn();
+    mockResolve = jest.fn();
     service = { resolve: mockResolve } as Pick<
       OrganizationContextService,
       'resolve'

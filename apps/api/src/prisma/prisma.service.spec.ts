@@ -1,4 +1,5 @@
 import { PrismaService } from './prisma.service.js';
+import { jest } from '@jest/globals';
 
 describe('PrismaService', () => {
   it('connects on module init and disconnects on module destroy', async () => {
@@ -6,8 +7,8 @@ describe('PrismaService', () => {
     // real connection attempt (unit test, not an integration test).
     process.env.DATABASE_URL ??= 'postgresql://placeholder:placeholder@localhost:5432/placeholder';
     const service = new PrismaService();
-    const connect = vi.spyOn(service, '$connect').mockResolvedValue(undefined);
-    const disconnect = vi.spyOn(service, '$disconnect').mockResolvedValue(undefined);
+    const connect = jest.spyOn(service, '$connect').mockResolvedValue(undefined);
+    const disconnect = jest.spyOn(service, '$disconnect').mockResolvedValue(undefined);
 
     await service.onModuleInit();
     await service.onModuleDestroy();
@@ -19,7 +20,7 @@ describe('PrismaService', () => {
   it('propagates connection failures (fail fast, no silent fallback)', async () => {
     process.env.DATABASE_URL ??= 'postgresql://placeholder:placeholder@localhost:5432/placeholder';
     const service = new PrismaService();
-    vi.spyOn(service, '$connect').mockRejectedValue(new Error('connection refused'));
+    jest.spyOn(service, '$connect').mockRejectedValue(new Error('connection refused'));
 
     await expect(service.onModuleInit()).rejects.toThrow('connection refused');
   });

@@ -3,12 +3,13 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { IS_JWT_PUBLIC_KEY } from '../../rbac/rbac.constants.js';
+import { jest } from '@jest/globals';
 
 const JWT_ACCESS_SECRET = 'test-access-secret-32-chars-minimum';
 
 function makeMockJwt() {
   return {
-    verify: vi.fn((token: string) => {
+    verify: jest.fn((token: string) => {
       if (token === 'invalid-token') throw new Error('jwt invalid');
       return { sub: 'user-1', email: 'a@b.com' };
     }),
@@ -27,6 +28,13 @@ function makeContext(authHeader?: string): ExecutionContext {
     switchToHttp: () => ({
       getRequest: () => ({ headers: { authorization: authHeader } }),
     }),
+    // JwtAuthGuard.canActivate() calls reflector.getAllAndOverride() with
+    // [context.getHandler(), context.getClass()] as the metadata targets.
+    // The guard runs on real NestJS ExecutionContext instances, so the test
+    // mock must provide these methods. Return a no-op function so the mock
+    // Reflector can be called with the values without throwing.
+    getHandler: () => undefined,
+    getClass: () => undefined,
   } as unknown as ExecutionContext;
 }
 
@@ -58,6 +66,8 @@ describe('JwtAuthGuard', () => {
     const request: { user?: unknown } = { headers: { authorization: 'Bearer valid-token' } };
     const ctx = {
       switchToHttp: () => ({ getRequest: () => request }),
+      getHandler: () => undefined,
+      getClass: () => undefined,
     } as unknown as ExecutionContext;
 
     const result = guard.canActivate(ctx);
