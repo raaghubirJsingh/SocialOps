@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaClient } from '@prisma/client';
+import { PrismaService } from '../src/prisma/prisma.service.js';
 import * as argon2 from 'argon2';
 import { AuthService } from '../src/auth/auth.service.js';
 import type { LoginDto } from '../src/auth/dto/login.dto.js';
@@ -12,7 +12,7 @@ if (!process.env.JWT_REFRESH_SECRET) process.env.JWT_REFRESH_SECRET = 'integrati
 if (!process.env.JWT_ACCESS_TTL) process.env.JWT_ACCESS_TTL = '900';
 if (!process.env.JWT_REFRESH_TTL) process.env.JWT_REFRESH_TTL = '604800';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaService();
 const jwtService = new JwtService();
 const authService = new AuthService(prisma, jwtService);
 

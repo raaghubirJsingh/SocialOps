@@ -1,13 +1,27 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller.js';
-import { AuthService, type TokenPair } from './auth.service.js';
+import { AuthService } from './auth.service.js';
 import { jest } from '@jest/globals';
 
-const makeMockService=(overrides)=>({login:jest.fn(),register:jest.fn(),refresh:jest.fn(),logout:jest.fn(),...overrides});
+type MockAuthService = {
+  login: jest.Mock;
+  register: jest.Mock;
+  refresh: jest.Mock;
+  logout: jest.Mock;
+};
 
-describe('AuthController',()=>{
-  let controller, mockService;
+const makeMockService = (overrides: Partial<MockAuthService> = {}): MockAuthService => ({
+  login: jest.fn(),
+  register: jest.fn(),
+  refresh: jest.fn(),
+  logout: jest.fn(),
+  ...overrides,
+});
+
+describe('AuthController', () => {
+  let controller: AuthController;
+  let mockService: MockAuthService;
 
   beforeEach(async()=>{
     mockService=makeMockService();

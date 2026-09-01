@@ -1,8 +1,10 @@
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
+import type { Request } from 'express';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { IS_JWT_PUBLIC_KEY } from '../../rbac/rbac.constants.js';
+import type { JwtAccessPayload } from '../types/jwt-payload.type.js';
 import { jest } from '@jest/globals';
 
 const JWT_ACCESS_SECRET = 'test-access-secret-32-chars-minimum';
@@ -63,7 +65,9 @@ describe('JwtAuthGuard', () => {
   });
 
   it('attaches user payload to the request on valid token', () => {
-    const request: { user?: unknown } = { headers: { authorization: 'Bearer valid-token' } };
+    const request: Request & { user: JwtAccessPayload } = {
+      headers: { authorization: 'Bearer valid-token' },
+    } as unknown as Request & { user: JwtAccessPayload };
     const ctx = {
       switchToHttp: () => ({ getRequest: () => request }),
       getHandler: () => undefined,

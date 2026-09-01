@@ -2,7 +2,6 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
-import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module.js';
 
 // The integration-test environment requires the JWT secrets in
@@ -15,7 +14,7 @@ if (!process.env.JWT_REFRESH_SECRET) process.env.JWT_REFRESH_SECRET = 'integrati
 if (!process.env.JWT_ACCESS_TTL) process.env.JWT_ACCESS_TTL = '900';
 if (!process.env.JWT_REFRESH_TTL) process.env.JWT_REFRESH_TTL = '604800';
 
-let app: INestApplication<App>;
+let app: INestApplication;
 let http: ReturnType<typeof request>;
 
 beforeAll(async () => {
