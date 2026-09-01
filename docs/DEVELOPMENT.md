@@ -17,9 +17,18 @@ The GitHub Actions workflow at `.github/workflows/ci.yml` already
 satisfies the §5.6 / §12 requirement to validate against real
 infrastructure: the `test-api` job declares ephemeral PostgreSQL
 (`postgres:16-alpine`) and Redis (`redis:7-alpine`) service containers
-and runs the Jest unit and integration suites against them. Integration
-tests use the real database, never a mock. No additional CI change is
-required for this stage.
+and runs the Jest unit tests, the Jest integration tests, and the API
+e2e smoke tests against them. Integration tests use the real database,
+never a mock. Because the integration Jest configuration
+(`apps/api/jest.config.integration.cjs`) calls `process.loadEnvFile()`,
+which throws when no `.env` file exists, the workflow creates a
+throwaway, gitignored `apps/api/.env` placeholder before the Jest
+steps; all real connection strings and JWT secrets are provided as
+ephemeral, throwaway job-level environment variables. The `test-web`
+job builds the Next.js production bundle (`npm run build
+--workspace=apps/web`) before Playwright starts, because Playwright's
+web server (`next start`) requires an existing `.next` build. No
+additional CI change is required for this stage.
 
 ## 3. Local development without Docker (this machine's verified path)
 

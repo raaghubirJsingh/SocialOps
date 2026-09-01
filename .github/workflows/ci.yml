@@ -104,6 +104,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install dependencies (npm ci)
         run: npm ci
+      - name: Create throwaway apps/api .env (integration config calls process.loadEnvFile)
+        run: echo "# CI placeholder - DATABASE_URL/REDIS_URL/JWT_* are provided by the job environment" > apps/api/.env
       - name: Prisma migrate deploy (database/Prisma validation)
         if: hashFiles('apps/api/prisma/schema.prisma') != ''
         env:
@@ -114,7 +116,7 @@ jobs:
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
         run: npx prisma migrate status --schema apps/api/prisma/schema.prisma
-      - name: Jest unit + integration tests (API)
+      - name: Jest unit tests (API)
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           REDIS_URL: ${{ env.REDIS_URL }}
@@ -123,6 +125,24 @@ jobs:
           JWT_ACCESS_TTL: ${{ env.JWT_ACCESS_TTL }}
           JWT_REFRESH_TTL: ${{ env.JWT_REFRESH_TTL }}
         run: npm run test --workspace=apps/api --if-present
+      - name: Jest integration tests (API - real ephemeral Postgres + Redis)
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          REDIS_URL: ${{ env.REDIS_URL }}
+          JWT_ACCESS_SECRET: ${{ env.JWT_ACCESS_SECRET }}
+          JWT_REFRESH_SECRET: ${{ env.JWT_REFRESH_SECRET }}
+          JWT_ACCESS_TTL: ${{ env.JWT_ACCESS_TTL }}
+          JWT_REFRESH_TTL: ${{ env.JWT_REFRESH_TTL }}
+        run: npm run test:integration --workspace=apps/api
+      - name: Jest API e2e smoke tests
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          REDIS_URL: ${{ env.REDIS_URL }}
+          JWT_ACCESS_SECRET: ${{ env.JWT_ACCESS_SECRET }}
+          JWT_REFRESH_SECRET: ${{ env.JWT_REFRESH_SECRET }}
+          JWT_ACCESS_TTL: ${{ env.JWT_ACCESS_TTL }}
+          JWT_REFRESH_TTL: ${{ env.JWT_REFRESH_TTL }}
+        run: npm run test:e2e --workspace=apps/api
 
   test-web:
     name: Web E2E/smoke tests (Playwright)
@@ -138,6 +158,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install dependencies (npm ci)
         run: npm ci
+      - name: Build web (production build required by next start)
+        run: npm run build --workspace=apps/web
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
       - name: Playwright E2E/smoke tests
