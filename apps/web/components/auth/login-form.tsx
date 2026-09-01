@@ -61,7 +61,7 @@ export function LoginForm() {
   const {
     register,
     handleSubmit,
-    formState: { errors, isValid },
+    formState: { errors },
   } = useForm<LoginFormValues>({
     resolver: loginResolver,
     mode: 'onBlur',
@@ -139,7 +139,7 @@ export function LoginForm() {
       <Button
         type="submit"
         className="w-full"
-        disabled={isLoading || !isValid}
+        disabled={isLoading}
       >
         {isLoading ? 'Signing in…' : 'Sign in'}
       </Button>
