@@ -6,9 +6,11 @@
 #   - Gitleaks OSS binary           (pinned 8.30.1; free; no GHAS / CodeQL / paid services)
 # Dependabot runs server-side via .github/dependabot.yml (npm + github-actions, weekly).
 #
-# Jobs that depend on application scaffolding (not part of this milestone yet) are gated
-# with hashFiles(...) so they are truthfully SKIPPED until the corresponding bootstrap
-# phase lands - never silently reported as passing.
+# Gating: step-level hashFiles(...) guards (npm audit, prisma migration steps) remain
+# in place. Job-level guards were removed: hashFiles() is not valid in jobs.<job_id>.if
+# (GitHub rejects it at workflow validation), and the scaffolding those guards tested
+# (lockfile, workspace manifests, prisma schema) is a permanent, committed part of this
+# repository.
 name: CI
 
 on:
@@ -71,7 +73,6 @@ jobs:
     name: API tests (ephemeral Postgres + Redis service containers)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: hashFiles('**/package-lock.json') != '' && hashFiles('apps/api/package.json') != ''
     services:
       postgres:
         image: postgres:16-alpine
@@ -148,7 +149,6 @@ jobs:
     name: Web E2E/smoke tests (Playwright)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: hashFiles('**/package-lock.json') != '' && hashFiles('apps/web/package.json') != ''
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -169,7 +169,6 @@ jobs:
     name: Lint + type checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    if: hashFiles('**/package-lock.json') != '' && hashFiles('package.json') != ''
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -188,7 +187,6 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: hashFiles('**/package-lock.json') != '' && hashFiles('package.json') != ''
     steps:
       - name: Checkout
         uses: actions/checkout@v4
