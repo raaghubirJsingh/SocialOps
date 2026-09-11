@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
+import { MembershipsModule } from '../memberships/memberships.module.js';
 
 /**
  * Stage B6 authentication module.
@@ -13,6 +14,11 @@ import { AuthService } from './auth.service.js';
  *
  * PrismaModule and RedisModule are already global; they do not need to be
  * imported here.
+ *
+ * MembershipsModule is imported so AuthService can inject
+ * OrganizationProvisioningService for Service Provider tenant provisioning
+ * (approved scope). MembershipsModule re-registers JwtModule locally; that
+ * is independent of the JwtModule registered here.
  */
 @Module({
   imports: [
@@ -22,6 +28,7 @@ import { AuthService } from './auth.service.js';
       secret: process.env.JWT_ACCESS_SECRET,
       signOptions: { expiresIn: Number(process.env.JWT_ACCESS_TTL ?? 900) },
     }),
+    MembershipsModule,
   ],
   controllers: [AuthController],
   providers: [AuthService],

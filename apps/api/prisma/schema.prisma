@@ -8,8 +8,9 @@
 //   - Section 7: Roles (Owner, Admin, Member, Viewer) are attached to the
 //     OrganizationMembership, never directly to User or Workspace.
 //   - Section 8: RefreshToken stores only a hash of the token.
-//   - Section 13: This schema contains ONLY the bootstrap foundation. No
-//     content, task, client-workflow, publishing, or analytics tables.
+//   - Section 13: The bootstrap foundation plus the human-approved Phase 2
+//     Client Module V1 domain. Other deferred modules (content, task,
+//     publishing, analytics, OAuth, S3) are deliberately not modeled.
 //
 // Connection: Prisma reads DATABASE_URL from the environment (required by
 // the approved Stage B plan - no connection logic lives in code).
@@ -32,6 +33,84 @@ enum OrganizationRole {
   VIEWER
 }
 
+/// Account type selected on the public registration page
+/// (AGENTS.md §17.1). Exactly two choices; employee is intentionally
+/// NOT here — employee registration is a separate future flow.
+enum AccountType {
+  SERVICE_PROVIDER
+  INDIVIDUAL_BUSINESS
+}
+
+/// Client Module V1 (Phase 2, human-approved under AGENTS.md §13).
+///
+/// Governance notes:
+///   - Direct User -> Client ownership (binding) is established ONLY through
+///     the controlled onboarding/acceptance flow; an Agency creating a
+///     Client NEVER becomes the owner.
+///   - ClientStatus is EXACTLY ACTIVE | INACTIVE | SUSPENDED. Onboarding
+///     lifecycle is tracked separately via ClientOnboardingStatus.
+///   - SOCIALOPS_ADMIN (User-level global authority) is separate from the
+///     organization-scoped OWNER/ADMIN/MEMBER/VIEWER roles.
+///   - No new RBAC roles: Dedicated Manager / Content Team are business
+///     concepts only and are NOT modeled here.
+enum ClientType {
+  INDIVIDUAL
+  BUSINESS
+}
+
+/// Operational status of a Client. Exactly three values (approved); the
+/// onboarding lifecycle is NOT part of this enum (see
+/// ClientOnboardingStatus).
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+/// Onboarding lifecycle of a Client. Client-facing operational/self-service
+/// access requires onboarding status ACTIVE; PENDING clients are not
+/// operationally usable by the Client account.
+enum ClientOnboardingStatus {
+  PENDING
+  ACTIVE
+}
+
+/// Lifecycle of a Client <-> Agency relationship. A Client may have at most
+/// one ACTIVE relationship at a time (enforced in service logic; no silent
+/// replacement - explicit termination first).
+enum AgencyRelationshipStatus {
+  PENDING_REQUEST
+  PENDING_INVITATION
+  ACTIVE
+  TERMINATED
+}
+
+/// Status of a Client field-change request (cooldown + verification).
+enum FieldChangeRequestStatus {
+  PENDING_VERIFICATION
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+/// Named Client fields subject to change-control / cooldown enforcement.
+/// Cooldown periods are defined in the application layer
+/// (src/clients/constants/field-cooldowns.ts) using the exact approved table.
+enum ClientField {
+  NAME
+  DIRECT_EMAIL
+  DIRECT_MOBILE
+  PRIMARY_CONTACT_NAME
+  PRIMARY_CONTACT_MOBILE
+  WEBSITE
+  ADDRESS
+  DESCRIPTION
+  INDUSTRY
+  CLIENT_TYPE
+  LOGO_AVATAR
+  NOTES
+}
+
 model User {
   id            String    @id @default(uuid()) @db.Uuid
   email         String    @unique
@@ -39,12 +118,38 @@ model User {
   // Stage B creates no users itself.
   passwordHash  String?
   displayName   String?
-  isActive      Boolean   @default(true)
+  // AGENTS.md §17.2 registration fields. Nullable so pre-migration rows
+  // remain valid without a backfill.
+  fullName      String?
+  phone         String?
+  accountType   AccountType?
+  // AGENTS.md §17.2: new users are INACTIVE until email verification.
+  // The default applies to future inserts only; existing rows keep
+  // their current value (see 20260903220000 migration note).
+  isActive      Boolean   @default(false)
+  emailVerifiedAt DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   memberships   OrganizationMembership[]
   refreshTokens RefreshToken[]
+  verificationTokens EmailVerificationToken[]
+  mobileVerificationRequests MobileVerificationToken[] @relation("MobileVerificationRequester")
+
+  // Client Module V1: direct User -> Client ownership (binding). Set only
+  // through the controlled onboarding/acceptance flow - never at Agency
+  // creation and never via normal Client profile APIs.
+  ownedClients Client[] @relation("ClientOwner")
+
+  // SOCIALOPS_ADMIN: user-level GLOBAL authority (Option A), independent of
+  // organization membership. Separate from OWNER/ADMIN/MEMBER/VIEWER. An
+  // Agency ADMIN never implies this flag. Powers are limited to the approved
+  // Client V1 platform operations (Client status management and Agency
+  // discovery approval). This is not an organization-scoped role.
+  isSocialOpsAdmin Boolean  @default(false)
+  socialOpsAdminGrantedAt DateTime?
+  socialOpsAdminGrantedById String? @db.Uuid
+  socialOpsAdminRevokedAt DateTime?
 }
 
 model Organization {
@@ -55,8 +160,19 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Client Module V1: Agency discovery. An Agency becomes discoverable only
+  // when BOTH opt-in and SOCIALOPS_ADMIN approval are present.
+  discoveryOptIn            Boolean   @default(false)
+  discoveryApprovedAt       DateTime?
+  discoveryApprovedByUserId String?   @db.Uuid
+
   workspaces  Workspace[]
   memberships OrganizationMembership[]
+  // Agency-side Client relationships (the Organization represents the
+  // Agency / Service Provider tenant; Organization is NOT the Client).
+  clientRelationships ClientAgencyRelationship[]
+
+  @@index([discoveryOptIn])
 }
 
 model Workspace {
@@ -107,4 +223,202 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  // Only the SHA-256 hash is ever stored; the raw token never touches
+  // the database (AGENTS.md section 8).
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Client Module V1 domain (Phase 2, human-approved under AGENTS.md §13).
+// ---------------------------------------------------------------------------
+
+/// A Client is a first-class entity: the person/business whose social-media
+/// or account-management service is being handled. The Client account always
+/// belongs to the Client regardless of who created or registered it.
+///
+/// Ownership (binding) is a direct `User -> Client` relation established ONLY
+/// through the controlled onboarding/acceptance flow. A Client may be created
+/// by an Agency (unbound until an invited user accepts) or via self-
+/// registration (bound to the registering user on onboarding completion).
+///
+/// No permanent deletion is implemented: Clients are never hard-deleted.
+model Client {
+  id            String                @id @default(uuid()) @db.Uuid
+  // The Client's owner account. NULL until the controlled onboarding binds
+  // a User. An Agency creator NEVER becomes the owner.
+  ownerUserId   String?               @db.Uuid
+  type          ClientType
+  name          String
+  description   String?
+  // Metadata only: no file storage / S3 / image processing for Logo/Avatar.
+  logoUrl       String?
+  directEmail   String
+  directPhone   String
+  primaryContactName  String?
+  primaryContactPhone String?
+  website       String?
+  addressLine1  String?
+  addressLine2  String?
+  city          String?
+  state         String?
+  country       String?
+  postalCode    String?
+  // Predefined list + "Other", validated at the application layer.
+  industry      String?
+  // Operational status - EXACTLY ACTIVE | INACTIVE | SUSPENDED.
+  status        ClientStatus          @default(ACTIVE)
+  statusReason  String?
+  statusChangedAt DateTime?
+  // Onboarding lifecycle is separate from operational status. Client-facing
+  // operational/self-service access requires onboardingStatus = ACTIVE.
+  onboardingStatus    ClientOnboardingStatus @default(PENDING)
+  onboardingCompletedAt DateTime?
+  notes         String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  ownerUser     User?                 @relation("ClientOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  relationships ClientAgencyRelationship[]
+  invitations   ClientInvitation[]
+  fieldChanges  ClientFieldChange[]
+  events        ClientEvent[]
+  mobileVerificationTokens MobileVerificationToken[]
+
+  @@index([ownerUserId])
+  @@index([status])
+  @@index([onboardingStatus])
+}
+
+/// History of a Client <-> Agency relationship. At most one ACTIVE
+/// relationship per Client (enforced in service logic; explicit termination
+/// first, no silent replacement). The `organizationId` references the Agency
+/// (Organization represents the Agency / Service Provider tenant - Option A).
+model ClientAgencyRelationship {
+  id             String                @id @default(uuid()) @db.Uuid
+  clientId       String                @db.Uuid
+  organizationId String                @db.Uuid
+  status         AgencyRelationshipStatus
+  initiatedBy    ClientAgencyFlow      // CLIENT | AGENCY
+  startedAt      DateTime?
+  terminatedAt   DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([clientId, status])
+  @@index([organizationId, status])
+}
+
+/// Who initiated a Client <-> Agency relationship flow.
+enum ClientAgencyFlow {
+  CLIENT
+  AGENCY
+}
+
+/// Invitation/acceptance token for Client onboarding (Agency-created path).
+/// Mirrors the EmailVerificationToken security pattern: only the SHA-256 hash
+/// is ever stored; single-use with expiry.
+model ClientInvitation {
+  id        String    @id @default(uuid()) @db.Uuid
+  clientId  String    @db.Uuid
+  email     String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([email])
+}
+
+/// A requested Client profile field change, subject to the exact approved
+/// cooldown table and (for NAME / DIRECT_EMAIL / DIRECT_MOBILE) the locked
+/// re-authentication + verification controls.
+model ClientFieldChange {
+  id                String                @id @default(uuid()) @db.Uuid
+  clientId          String                @db.Uuid
+  field             ClientField
+  newValue          String?
+  status            FieldChangeRequestStatus @default(PENDING_VERIFICATION)
+  requestedByUserId String?               @db.Uuid
+  requestedAt       DateTime              @default(now())
+  approvedAt        DateTime?
+  appliedAt         DateTime?
+  rejectedReason    String?
+  // Security-controlled DIRECT_EMAIL / DIRECT_MOBILE changes (locked rule):
+  // re-authentication plus verification of the NEW value. Hash-only token
+  // storage (mirrors EmailVerificationToken / MobileVerificationToken);
+  // single-use + expiry enforced in the service layer. NULL for fields
+  // that require no second verification step (e.g. NAME: re-auth only).
+  verificationTokenHash String?           @unique
+  verificationExpiresAt DateTime?
+  verifiedAt            DateTime?
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, field])
+  @@index([clientId, status])
+}
+
+/// Immutable audit trail for Client Module V1 operations (AGENTS.md §8:
+/// all important operations are auditable). Insert-only.
+model ClientEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  clientId    String   @db.Uuid
+  actorUserId String?  @db.Uuid
+  action      String
+  details     Json?
+  createdAt   DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt])
+}
+
+/// Mobile verification token (Client Module V1, approved decision D3).
+///
+/// A dedicated, semantically separate model from EmailVerificationToken:
+/// mobile verification is a Client-scoped concern (onboarding verification
+/// and DIRECT_MOBILE field changes), and the Client record exists before a
+/// User binding does.
+///
+/// Security properties (mirroring EmailVerificationToken):
+///   - Only the SHA-256 hash is ever stored; the raw token never touches
+///     the database (AGENTS.md section 8).
+///   - Single-use: consumption is recorded via `usedAt`.
+///   - Expiry is enforced in the service layer against `expiresAt`.
+///   - Provider-independent: no SMS provider is assumed; V1 delivery is
+///     the gated local development log only. No paid provider.
+model MobileVerificationToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  clientId  String    @db.Uuid
+  // Audit only: which authenticated User requested this verification.
+  // Nullable because a pre-binding onboarding verification has no bound
+  // owner yet.
+  requestedByUserId String? @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  requestedBy User? @relation("MobileVerificationRequester", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
 }

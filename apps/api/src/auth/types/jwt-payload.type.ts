@@ -4,10 +4,15 @@
  * `sub` is the user ID (standard JWT subject claim).
  * `email` is included for convenience to avoid an extra DB lookup
  * in the most common authorization checks.
+ * `accountType` is product metadata describing how the registrant
+ * intends to use SocialOps (AGENTS.md §17). It is NOT authorization
+ * state; roles live on OrganizationMembership and are enforced
+ * server-side on every request.
  */
 export interface JwtAccessPayload {
   sub: string;
   email: string;
+  accountType: string | null;
 }
 
 /**

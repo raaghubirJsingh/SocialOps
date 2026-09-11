@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { MembershipsController } from './memberships.controller.js';
+import { OrganizationProvisioningService } from './organization-provisioning.service.js';
 
 /**
  * Stage B7 memberships module.
@@ -15,6 +16,11 @@ import { MembershipsController } from './memberships.controller.js';
  *
  * PrismaModule and RbacModule are global and do not need to be
  * imported here.
+ *
+ * `OrganizationProvisioningService` is exported so AuthModule can inject
+ * it for Service Provider tenant provisioning (approved scope). It does
+ * not affect the `/memberships/me` route, which remains JWT-only and
+ * read-only.
  */
 @Module({
   imports: [
@@ -24,5 +30,7 @@ import { MembershipsController } from './memberships.controller.js';
     }),
   ],
   controllers: [MembershipsController],
+  providers: [OrganizationProvisioningService],
+  exports: [OrganizationProvisioningService],
 })
 export class MembershipsModule {}

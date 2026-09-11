@@ -9,6 +9,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard.js';
 import { RbacModule } from './rbac/rbac.module.js';
 import { OrganizationMembershipGuard } from './rbac/guards/organization-membership.guard.js';
 import { MembershipsModule } from './memberships/memberships.module.js';
+import { ClientsModule } from './clients/clients.module.js';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { MembershipsModule } from './memberships/memberships.module.js';
     AuthModule,
     RbacModule,
     MembershipsModule,
+    ClientsModule,
   ],
   controllers: [AppController],
   providers: [
