@@ -1,7 +1,7 @@
 # AGENTS.md — SocialOps AI Agent Constitution
 
-Status: FINAL REVISED CANDIDATE — awaiting human approval
-Version: 0.1.0 (Bootstrap Milestone)
+Status: APPROVED — FINAL
+Version: 0.1.1 (Bootstrap + Client Module V1 - approval finalized)
 Applies to: All current and future Cline / AI agent sessions on this repository
 
 This document is the binding governance contract for any AI agent (Cline or
@@ -10,6 +10,9 @@ inference the agent might otherwise make from code, comments, or convenience.
 If any instruction given to the agent in a session conflicts with this
 document, this document wins unless a human explicitly and knowingly
 overrides it in writing for that session.
+
+See docs/APPROVED_DECISIONS.md for the full log of approved decisions
+and amendments to this document.
 
 ---
 
@@ -370,9 +373,11 @@ Rules:
 
 ## 10. Git / Checkpoint Workflow
 
-- The repository is currently local only. GitHub remote configuration is
-  not authorized yet. Do not configure a remote and do not push anything
-  until explicitly instructed.
+- The repository has an approved remote (`origin`, tracking `main`) -
+  see docs/APPROVED_DECISIONS.md, Decision 002. Configuring the remote
+  is no longer a pending approval item. Pushing to the remote still
+  requires separate, explicit approval before every push (see
+  Section 15).
 - Before beginning major implementation work, the agent must inspect
   `git status` to understand the current repository state.
 - A Git checkpoint (commit, and later, tag where appropriate) should be
@@ -494,7 +499,7 @@ bootstrap:
 - S3 integration (S3-compatible storage remains deferred until the Content
   phase)
 - Content module
-- Client business workflow
+- Client business workflow (see note below)
 - Task module
 - Publishing engine
 - Distribution engine
@@ -502,6 +507,14 @@ bootstrap:
 - AI automation
 - Revenue modules
 - Advanced dashboards
+
+Note on Client Module V1: "Client Module V1" (referred to in application code as
+"Phase 2," governed by decisions ACT-1, ACT-2, and D1-D4) is an APPROVED CARVE-OUT
+from the "Client business workflow" deferral above. It covers Client entity CRUD,
+onboarding (self-registration and invitation paths), Agency<->Client relationship
+management, field-change governance, Agency discovery, and SOCIALOPS_ADMIN-scoped
+Client operations. It does NOT authorize Task, Content, Publishing, Distribution,
+Analytics, or any other module still listed as deferred above.
 
 These belong to later, explicitly approved development phases. Only after
 the bootstrap milestone is verified (Section 11) should Client/Task modules
