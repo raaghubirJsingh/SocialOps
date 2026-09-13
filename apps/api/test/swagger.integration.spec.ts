@@ -56,7 +56,11 @@ beforeAll(async () => {
       },
       'bearer',
     )
-    .addTag('auth', 'Authentication: register, login, refresh, logout.')
+    .addTag(
+      'auth',
+      'Authentication: register (unverified), email verification, ' +
+        'verification resend, login, refresh, logout.',
+    )
     .addTag(
       'memberships',
       "Authenticated user's OrganizationMembership rows (joined with their organizations).",

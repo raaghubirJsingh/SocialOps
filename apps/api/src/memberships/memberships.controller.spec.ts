@@ -51,6 +51,7 @@ describe('MembershipsController', () => {
     const result = await controller.getMyMemberships({
       sub: 'user-1',
       email: 'a@b.com',
+      accountType: 'SERVICE_PROVIDER'
     });
 
     expect(result).toEqual({
@@ -65,7 +66,7 @@ describe('MembershipsController', () => {
   it('constrains the query using req.user.sub (no caller-supplied userId parameter)', async () => {
     prisma.organizationMembership.findMany.mockResolvedValue([]);
 
-    await controller.getMyMemberships({ sub: 'user-1', email: 'a@b.com' });
+    await controller.getMyMemberships({ sub: 'user-1', email: 'a@b.com', accountType: 'SERVICE_PROVIDER' });
 
     expect(prisma.organizationMembership.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { userId: 'user-1' } }),
@@ -91,7 +92,7 @@ describe('MembershipsController', () => {
     void userIdFromRequest; // not used by the controller
 
     return controller
-      .getMyMemberships({ sub: 'real-user', email: 'real@b.com' })
+      .getMyMemberships({ sub: 'real-user', email: 'real@b.com', accountType: 'SERVICE_PROVIDER' })
       .then((result) => {
         const arg = (prisma.organizationMembership.findMany.mock.calls[0]?.[0] ?? {}) as {
           where?: { userId?: string };
@@ -113,6 +114,7 @@ describe('MembershipsController', () => {
     const result = await controller.getMyMemberships({
       sub: 'user-2',
       email: 'other@b.com',
+      accountType: 'SERVICE_PROVIDER'
     });
 
     expect(result.userId).toBe('user-2');

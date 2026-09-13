@@ -37,11 +37,15 @@ async function bootstrap() {
         scheme: 'bearer',
         bearerFormat: 'JWT',
         description:
-          'Paste the `accessToken` returned from /api/auth/login or /api/auth/register.',
+          'Paste the `accessToken` returned from /api/auth/login. Registration does NOT return tokens - accounts start unverified and must complete email verification before login.',
       },
       'bearer',
     )
-    .addTag('auth', 'Authentication: register, login, refresh, logout.')
+    .addTag(
+      'auth',
+      'Authentication: register (unverified), email verification, ' +
+        'verification resend, login, refresh, logout.',
+    )
     .addTag(
       'memberships',
       "Authenticated user's OrganizationMembership rows (joined with their organizations).",
@@ -53,6 +57,28 @@ async function bootstrap() {
         'authenticated user.',
     )
     .addTag('app', 'Application health and root endpoints.')
+    .addTag(
+      'clients',
+      'Client Module V1 - Agency-side operations (CRUD, status, invite, ' +
+        'management requests). Requires `X-Organization-Id`; management ' +
+        'operations require Agency OWNER or ADMIN.',
+    )
+    .addTag(
+      'client',
+      'Client Module V1 - Client self-service (profile, agency requests, ' +
+        'relationships, discovery). Requires the bound User + X-Client-Id.',
+    )
+    .addTag(
+      'client-onboarding',
+      'Client Module V1 - controlled pre-activation flows (invitation ' +
+        'acceptance, self-registration). These are the only PENDING-time ' +
+        'exception paths.',
+    )
+    .addTag(
+      'client-admin',
+      'Client Module V1 - SOCIALOPS_ADMIN operations: Client status ' +
+        'management and Agency discovery approval.',
+    )
     .build();
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, swaggerDocument);
