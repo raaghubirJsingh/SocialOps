@@ -10,8 +10,12 @@ export const metadata: Metadata = {
 };
 
 /**
- * Login route. The route group `(auth)` keeps the login URL flat
- * (no `/auth/` segment) while letting the layout omit the app shell.
+ * Login route (/login) — public.
+ *
+ * Moved from (auth)/login into (public)/(auth): nested route groups
+ * keep the URL flat (no extra path segments) while grouping all
+ * public pages under (public). Only VERIFIED accounts receive tokens;
+ * unverified accounts are rejected by the backend with 403.
  */
 export default function LoginPage() {
   return (
@@ -25,25 +29,25 @@ export default function LoginPage() {
             Social<span className="text-blue-400">Ops</span>
           </Link>
           <p className="mt-2 text-sm text-slate-400">
-            Sign in to continue
+            Sign in to your workspace
           </p>
         </div>
         <Card>
           <CardHeader>
-            <CardTitle>Welcome back</CardTitle>
+            <CardTitle>Sign in</CardTitle>
             <CardDescription>
-              Enter the email and password associated with your
-              account.
+              Use your verified email address and password.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <LoginForm />
           </CardContent>
         </Card>
-        <p className="mt-6 text-center text-xs text-slate-500">
-          Authentication is server-side authoritative. The frontend
-          only stores the issued access and refresh tokens locally
-          for the duration of the session.
+        <p className="mt-6 text-center text-sm text-slate-500">
+          Do not have an account?{' '}
+          <Link href="/register" className="text-blue-400 hover:underline">
+            Register
+          </Link>
         </p>
       </div>
     </div>

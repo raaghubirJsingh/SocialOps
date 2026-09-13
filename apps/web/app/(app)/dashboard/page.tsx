@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/card';
 import { apiFetch } from '@/lib/api';
 import { useSession } from '@/hooks/use-session';
+import type { AccountType } from '@/types/auth';
 
 interface HealthResponse {
   status: 'ok';
@@ -21,8 +22,33 @@ interface HealthResponse {
 }
 
 /**
- * Dashboard entry route. The (app) route group provides the
- * application shell, this page renders the foundation dashboard.
+ * Maps the public-registration account-type enum to the user-facing
+ * label shown in the dashboard and (in the future) the user menu.
+ *
+ * AGENTS.md §17.1: the two public account-type values are
+ *   - SERVICE_PROVIDER
+ *   - INDIVIDUAL_BUSINESS
+ * The label is presentational; the underlying value is unchanged.
+ */
+function labelForAccountType(t: AccountType | null | undefined): string {
+  if (t === 'SERVICE_PROVIDER') return 'Service Provider';
+  if (t === 'INDIVIDUAL_BUSINESS') return 'Individual / Business';
+  return '';
+}
+
+/**
+ * Dashboard route (/dashboard).
+ *
+ * Moved from (app)/page.tsx so that "/" is owned exclusively by the
+ * public Home page (approved routing matrix). The (app) route group
+ * provides the application shell and the AuthGuard; this page renders
+ * the foundation dashboard.
+ *
+ * The dashboard greets the authenticated user by their registered
+ * Full Name (AGENTS.md §17) and identifies their account type. The
+ * greeting and account-type label are both sourced from the Session
+ * (which carries the identity returned by `POST /api/auth/login`),
+ * never from the login-form input.
  *
  * The dashboard calls the real public `/api/health` endpoint via
  * TanStack Query - this is the only real network call the foundation
@@ -36,14 +62,15 @@ interface HealthResponse {
  */
 export default function DashboardPage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading: sessionLoading } = useSession();
+  const { isAuthenticated, isLoading: sessionLoading, session } = useSession();
 
-  // Client-side session guard. Server components cannot read
-  // localStorage, so the route is rendered and then the guard
-  // navigates away if the user is not signed in.
+  // Defense-in-depth page guard. The (app) layout AuthGuard already
+  // redirects unauthenticated visitors to the public home page "/"
+  // (approved routing matrix — NOT /login); this page-level effect
+  // mirrors that target in case the layout guard is ever bypassed.
   useEffect(() => {
     if (!sessionLoading && !isAuthenticated) {
-      router.replace('/login');
+      router.replace('/');
     }
   }, [isAuthenticated, sessionLoading, router]);
 
@@ -60,16 +87,40 @@ export default function DashboardPage() {
     return null;
   }
 
+  // Identity display (AGENTS.md §17):
+  //   - The primary greeting uses the registered Full Name, not the
+  //     email. This is the persona the user set up at registration.
+  //   - If Full Name is missing (pre-migration row, or a stale
+  //     session loaded from localStorage with no identity), we fall
+  //     back to a generic greeting. The dashboard never breaks.
+  //   - The email is shown as secondary information.
+  const fullName = session?.user.fullName;
+  const accountType = session?.user.accountType;
+  const accountTypeLabel = labelForAccountType(accountType);
+  const greetingTarget = fullName ?? 'there';
+
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
       <header className="space-y-1">
         <h2 className="text-2xl font-semibold text-slate-100">
-          Welcome to SocialOps
+          Welcome, {greetingTarget}
         </h2>
         <p className="text-sm text-slate-400">
-          The frontend foundation is in place. This page shows
-          real backend connectivity; everything else is left
-          empty until later modules are explicitly approved.
+          {accountTypeLabel ? (
+            <>
+              Signed in as a{' '}
+              <span className="font-medium text-slate-200">
+                {accountTypeLabel}
+              </span>
+              {session?.user.email ? (
+                <> · {session.user.email}</>
+              ) : null}
+            </>
+          ) : session?.user.email ? (
+            <>Signed in as {session.user.email}</>
+          ) : (
+            <>Signed in to SocialOps</>
+          )}
         </p>
       </header>
 
