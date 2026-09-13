@@ -78,10 +78,25 @@ async function seedUser(
   });
 
   const authService = app.get(AuthService);
-  const tokens = await authService.register({
-    email: testEmail(name),
-    password: 'StrongPassword123!',
+  const email = testEmail(name);
+  const password = 'StrongPassword123!';
+  await authService.register({
+    accountType: 'SERVICE_PROVIDER',
+    fullName: `RBAC ${name}`,
+    email,
+    password,
   });
+
+  // Registration creates an UNVERIFIED user and returns no tokens
+  // (approved contract). Mark the seeded user verified directly so login
+  // succeeds; RBAC seeding does not exercise the email-verification
+  // lifecycle (covered in auth.integration.spec.ts).
+  await prisma.user.update({
+    where: { email },
+    data: { isActive: true, emailVerifiedAt: new Date() },
+  });
+
+  const tokens = await authService.login({ email, password });
 
   const user = await prisma.user.findUnique({ where: { email: testEmail(name) } });
   if (!user) throw new Error(`seeded user not found: ${testEmail(name)}`);
