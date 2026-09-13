@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { makeQueryClient } from '@/lib/query-client';
 import { SessionProvider } from '@/hooks/use-session';
+import { ActiveOrganizationProvider } from '@/hooks/use-active-organization';
 
 /**
  * Root client-side provider tree.
@@ -26,7 +27,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = React.useState<QueryClient>(() => makeQueryClient());
   return (
     <QueryClientProvider client={queryClient}>
-      <SessionProvider>{children}</SessionProvider>
+      <SessionProvider>
+        <ActiveOrganizationProvider>{children}</ActiveOrganizationProvider>
+      </SessionProvider>
     </QueryClientProvider>
   );
 }
