@@ -10,6 +10,12 @@
  * previous rule hard-coded Arial/Helvetica which clashed with
  * the loaded variable font.
  */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 body {
   font-family: var(--font-sans), system-ui, -apple-system, "Segoe UI",
     sans-serif;

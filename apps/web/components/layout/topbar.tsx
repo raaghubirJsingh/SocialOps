@@ -11,7 +11,7 @@ import { UserMenu } from '@/components/layout/user-menu';
  * and the user menu.
  */
 const TITLES: Record<string, string> = {
-  '/': 'Dashboard',
+  '/dashboard': 'Dashboard',
 };
 
 function deriveTitle(pathname: string): string {

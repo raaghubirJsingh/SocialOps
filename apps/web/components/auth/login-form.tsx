@@ -73,7 +73,9 @@ export function LoginForm() {
     clearError();
     try {
       await login(values);
-      router.push('/');
+      // Successful verified login lands on the protected dashboard
+      // (approved routing matrix — never on "/").
+      router.push('/dashboard');
       router.refresh();
     } catch (err) {
       if (err instanceof Error) {

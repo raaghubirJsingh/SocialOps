@@ -16,15 +16,21 @@ import { useSession } from '@/hooks/use-session';
 /**
  * User menu in the top bar.
  *
- * Shows the authenticated user's email and a logout action. The
- * logout button calls the backend `/api/auth/logout` to revoke the
- * refresh token, then wipes local session state and navigates to
- * the root path.
+ * Shows the authenticated user's registered Full Name (with the
+ * email as a secondary fallback) and a logout action. The logout
+ * button calls the backend `/api/auth/logout` to revoke the refresh
+ * token, then wipes local session state and navigates to the root
+ * path.
  */
 export function UserMenu() {
   const router = useRouter();
   const { session, logout, isLoading } = useSession();
-  const email = session?.email;
+  // The primary trigger label prefers the registered Full Name
+  // (AGENTS.md §17). It falls back to the email only when the Full
+  // Name is unavailable (pre-migration row, stale session, etc.).
+  const fullName = session?.user.fullName;
+  const email = session?.user.email ?? session?.email;
+  const triggerLabel = fullName ?? email ?? 'Signed in';
 
   const handleLogout = async () => {
     await logout();
@@ -40,15 +46,18 @@ export function UserMenu() {
         disabled={isLoading}
       >
         <UserRound className="h-4 w-4" aria-hidden="true" />
-        <span className="hidden sm:inline">
-          {email ?? 'Signed in'}
-        </span>
+        <span className="hidden sm:inline">{triggerLabel}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[14rem]">
         <DropdownMenuLabel>Signed in as</DropdownMenuLabel>
         <div className="px-2 pb-2 text-sm text-slate-300 break-all">
-          {email ?? '(unknown)'}
+          {fullName ?? '(unknown)'}
         </div>
+        {email ? (
+          <div className="px-2 pb-2 text-xs text-slate-500 break-all">
+            {email}
+          </div>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={(event) => {

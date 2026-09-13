@@ -1,10 +1,14 @@
 import type {
+  AuthenticatedUser,
+  GenericStatusResponse,
   LogoutRequest,
   LoginRequest,
   RefreshRequest,
   RegisterRequest,
+  RegisterResult,
   Session,
   TokenPair,
+  VerifyEmailResponse,
 } from '@/types/auth';
 
 import { ApiError, apiFetch } from './api';
@@ -37,16 +41,42 @@ export function loadSession(): Session | null {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<Session>;
+    const parsed = JSON.parse(raw) as Partial<Session> & {
+      user?: Partial<AuthenticatedUser>;
+    };
     if (
       typeof parsed.accessToken === 'string' &&
-      typeof parsed.refreshToken === 'string' &&
-      typeof parsed.email === 'string'
+      typeof parsed.refreshToken === 'string'
     ) {
+      // Backward compatibility with sessions written by previous
+      // versions of this client (which stored only the email at the
+      // top level and had no `user` object). If a stale session is
+      // loaded, reconstruct a minimal `user` from whatever fields are
+      // available. The dashboard and sidebar use `??` fallbacks for
+      // null `fullName` / `accountType`, so the UI degrades gracefully
+      // and the user is prompted to log in again to refresh.
+      const email =
+        typeof parsed.email === 'string'
+          ? parsed.email
+          : typeof parsed.user?.email === 'string'
+          ? parsed.user.email
+          : '';
+      const user: AuthenticatedUser = {
+        id: typeof parsed.user?.id === 'string' ? parsed.user.id : '',
+        email,
+        fullName:
+          typeof parsed.user?.fullName === 'string' ? parsed.user.fullName : null,
+        accountType:
+          parsed.user?.accountType === 'SERVICE_PROVIDER' ||
+          parsed.user?.accountType === 'INDIVIDUAL_BUSINESS'
+            ? parsed.user.accountType
+            : null,
+      };
       return {
         accessToken: parsed.accessToken,
         refreshToken: parsed.refreshToken,
-        email: parsed.email,
+        user,
+        email,
       };
     }
     return null;
@@ -65,32 +95,85 @@ export function clearSession(): void {
   window.localStorage.removeItem(STORAGE_KEY);
 }
 
+/**
+ * Login response shape from POST /api/auth/login.
+ *
+ * The endpoint returns the access/refresh token pair AND the
+ * authenticated user identity fields (id, email, fullName,
+ * accountType) needed to render the post-login UI. The identity
+ * fields are non-secret product data, not authorization state
+ * (AGENTS.md §7, §17).
+ */
+interface LoginResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: AuthenticatedUser;
+}
+
 export async function login(input: LoginRequest): Promise<Session> {
-  const tokenPair = await apiFetch<TokenPair>('/auth/login', {
+  const response = await apiFetch<LoginResponse>('/auth/login', {
     method: 'POST',
     body: input,
   });
+  // The session identity comes from the backend login response, NOT
+  // from the login form input. This ensures the displayed Full Name
+  // and account type reflect the server's view (AGENTS.md §17).
   const session: Session = {
-    accessToken: tokenPair.accessToken,
-    refreshToken: tokenPair.refreshToken,
-    email: input.email,
+    accessToken: response.accessToken,
+    refreshToken: response.refreshToken,
+    user: response.user,
+    email: response.user.email,
   };
   saveSession(session);
   return session;
 }
 
-export async function register(input: RegisterRequest): Promise<Session> {
-  const tokenPair = await apiFetch<TokenPair>('/auth/register', {
+/**
+ * Register a new account.
+ *
+ * Registration NEVER issues tokens or an authenticated session
+ * (approved contract): the backend creates an UNVERIFIED user and
+ * queues a verification email. The caller must navigate the user to
+ * /verify-email afterwards. No session is saved here.
+ */
+export async function register(
+  input: RegisterRequest,
+): Promise<RegisterResult> {
+  return apiFetch<RegisterResult>('/auth/register', {
     method: 'POST',
     body: input,
   });
-  const session: Session = {
-    accessToken: tokenPair.accessToken,
-    refreshToken: tokenPair.refreshToken,
-    email: input.email,
-  };
-  saveSession(session);
-  return session;
+}
+
+/**
+ * Consume a single-use verification token from the verification link.
+ *
+ * Invalid, expired, and already-used tokens all produce the same
+ * generic backend error; the UI must not (and cannot) distinguish
+ * them. The raw token is never persisted client-side - it only lives
+ * in the verification URL and is sent once to the backend.
+ */
+export async function verifyEmail(
+  token: string,
+): Promise<VerifyEmailResponse> {
+  return apiFetch<VerifyEmailResponse>('/auth/verify-email', {
+    method: 'POST',
+    body: { token },
+  });
+}
+
+/**
+ * Queue a new verification email. The backend responds with the
+ * identical generic body regardless of whether the email exists or is
+ * already verified - the UI must not infer account state from it.
+ */
+export async function resendVerification(
+  email: string,
+): Promise<GenericStatusResponse> {
+  return apiFetch<GenericStatusResponse>('/auth/resend-verification', {
+    method: 'POST',
+    body: { email },
+  });
 }
 
 export async function logout(session: Session): Promise<void> {
@@ -120,9 +203,12 @@ export async function refreshAccessToken(session: Session): Promise<TokenPair> {
     method: 'POST',
     body,
   });
+  // Refresh only returns tokens; the user identity is preserved
+  // unchanged from the existing session.
   const next: Session = {
     accessToken: tokenPair.accessToken,
     refreshToken: tokenPair.refreshToken,
+    user: session.user,
     email: session.email,
   };
   saveSession(next);

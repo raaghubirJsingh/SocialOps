@@ -1,47 +1,67 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * Smoke coverage for the frontend foundation.
+ * Landing-page smoke coverage for the public "/" route.
  *
- * The application entry route is `/`. When unauthenticated, the
- * client-side session guard navigates to `/login`. The login
- * page is the only stable public surface in the foundation
- * (subsequent pages are gated by an authenticated session and
- * would require backend fixtures the foundation intentionally
- * avoids creating).
+ * "/" is the informational landing page (approved routing matrix):
+ * sticky anchor tabs scroll to same-page sections — no new routes.
+ * The authenticated app lives at /dashboard behind the session guard.
  *
- * Two cases are covered:
- *   1. The login form renders with the email + password fields.
- *   2. Submitting the empty form surfaces client-side validation
+ * Covered:
+ *   1. Hero renders with headline + Register/Sign-in entry points.
+ *   2. Anchor tabs navigate to each section (About … Contact).
+ *   3. Empty contact-form submit surfaces client-side validation
  *      errors before any network call.
  */
 
-test('login page renders the email and password fields', async ({ page }) => {
+test('landing hero renders with entry points', async ({ page }) => {
   const response = await page.goto('/');
   expect(response, 'navigation response').not.toBeNull();
   expect(response!.status(), 'HTTP status').toBe(200);
 
   await expect(
-    page.getByRole('heading', { name: 'Welcome back', level: 3 }),
+    page.getByRole('heading', { name: /one story/i, level: 1 }),
   ).toBeVisible();
-
-  await expect(page.getByLabel('Email')).toBeVisible();
-  await expect(page.getByLabel('Password')).toBeVisible();
   await expect(
-    page.getByRole('button', { name: /sign in/i }),
-  ).toBeEnabled();
+    page.getByRole('link', { name: /start free today/i }),
+  ).toBeVisible();
 });
 
-test('empty submit shows validation errors', async ({ page }) => {
+test('anchor tabs reach every section', async ({ page }) => {
   await page.goto('/');
 
-  const submit = page.getByRole('button', { name: /sign in/i });
+  // Scope to the sticky header nav to avoid the footer copies.
+  const headerNav = page.getByRole('navigation', { name: 'Page sections' });
+
+  const tabs: Array<{ tab: string; href: string; heading: string }> = [
+    { tab: 'About', href: '#about', heading: 'Operations, not just posting' },
+    { tab: 'Platforms', href: '#platforms', heading: 'Built for Instagram, Facebook' },
+    { tab: 'Workflow', href: '#workflow', heading: 'Client → Commitment' },
+    { tab: 'Reviews', href: '#reviews', heading: 'Loved by teams who hate chaos' },
+    { tab: 'FAQ', href: '#faq', heading: 'Questions, answered honestly' },
+    { tab: 'Contact', href: '#contact', heading: 'Talk to a human' },
+  ];
+
+  for (const { tab, href, heading } of tabs) {
+    await headerNav.getByRole('link', { name: tab, exact: true }).click();
+    // Anchor navigation is complete once the URL hash matches; only then
+    // assert the section heading is actually on screen.
+    await expect
+      .poll(() => page.evaluate(() => window.location.hash))
+      .toBe(href);
+    await expect(
+      page.getByRole('heading', { name: new RegExp(`^${heading}`, 'i') }),
+    ).toBeVisible();
+  }
+});
+
+test('empty contact submit shows validation errors', async ({ page }) => {
+  await page.goto('/#contact');
+
+  const submit = page.getByRole('button', { name: /send message/i });
+  await submit.scrollIntoViewIfNeeded();
   await submit.click();
 
-  await expect(
-    page.getByText('Email is required', { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByText('Password is required', { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText('Name is required', { exact: true })).toBeVisible();
+  await expect(page.getByText('Email is required', { exact: true })).toBeVisible();
 });

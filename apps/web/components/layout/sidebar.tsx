@@ -13,19 +13,16 @@ import { cn } from '@/lib/cn';
  * are explicitly forbidden - they belong to deferred modules.
  *
  * The sidebar is NOT a security boundary. AGENTS.md §7 makes server-
- * side authorization authoritative; any role-based filtering here
- * would be a UX convenience only. The bootstrap intentionally avoids
- * this because the backend has no `GET /me` endpoint that returns the
- * caller's role without an `X-Organization-Id` header.
+ * side authorization authoritative; this is a UX convenience only.
  */
 
-const ITEMS: ReadonlyArray<{
+const NAV_ITEMS: ReadonlyArray<{
   href: string;
   label: string;
   description: string;
 }> = [
   {
-    href: '/',
+    href: '/dashboard',
     label: 'Dashboard',
     description: 'Application entry point and overview',
   },
@@ -33,14 +30,19 @@ const ITEMS: ReadonlyArray<{
 
 export function Sidebar() {
   const pathname = usePathname();
+  const items = NAV_ITEMS;
+
   return (
     <aside
       className="hidden w-64 shrink-0 border-r border-slate-800 bg-slate-900 md:flex md:flex-col"
       aria-label="Primary navigation"
     >
       <div className="border-b border-slate-800 px-6 py-5">
+        {/* Brand target is /dashboard: "/" is the public home page in the
+            approved routing matrix, so the in-app brand link stays inside
+            the protected area. */}
         <Link
-          href="/"
+          href="/dashboard"
           className="text-xl font-bold tracking-tight text-slate-100"
         >
           Social<span className="text-blue-400">Ops</span>
@@ -54,11 +56,9 @@ export function Sidebar() {
           Workspace
         </p>
         <ul className="space-y-1">
-          {ITEMS.map((item) => {
+          {items.map((item) => {
             const isActive =
-              item.href === '/'
-                ? pathname === '/'
-                : pathname === item.href || pathname.startsWith(item.href + '/');
+              pathname === item.href || pathname.startsWith(item.href + '/');
             return (
               <li key={item.href}>
                 <Link
