@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 
 import { CreateClientForm } from '@/components/clients/create-client-form';
 import { Button } from '@/components/ui/button';
@@ -190,26 +191,32 @@ export default function AgencyClientsPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {clientsQuery.data.map((client) => (
-            <Card key={client.id}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">{client.name}</CardTitle>
-                <CardDescription>
-                  {client.type === 'BUSINESS' ? 'Business' : 'Individual'} · created{' '}
-                  {new Date(client.createdAt).toLocaleDateString()}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-1">
-                <p className="text-sm text-slate-300">
-                  Status: <span className="font-medium">{client.status}</span>
-                </p>
-                <p className="text-sm text-slate-300">
-                  Onboarding: <span className="font-medium">{client.onboardingStatus}</span>
-                </p>
-                <p className="text-sm text-slate-400">
-                  {client.directEmail} · {client.directPhone}
-                </p>
-              </CardContent>
-            </Card>
+            <Link
+              key={client.id}
+              href={`/clients/${client.id}`}
+              className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+            >
+              <Card className="h-full transition-colors hover:border-slate-600">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">{client.name}</CardTitle>
+                  <CardDescription>
+                    {client.type === 'BUSINESS' ? 'Business' : 'Individual'} · created{' '}
+                    {new Date(client.createdAt).toLocaleDateString()}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-1">
+                  <p className="text-sm text-slate-300">
+                    Status: <span className="font-medium">{client.status}</span>
+                  </p>
+                  <p className="text-sm text-slate-300">
+                    Onboarding: <span className="font-medium">{client.onboardingStatus}</span>
+                  </p>
+                  <p className="text-sm text-slate-400">
+                    {client.directEmail} · {client.directPhone}
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
           ))}
         </div>
       )}

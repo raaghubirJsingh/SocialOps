@@ -7,6 +7,7 @@
 import { ApiError, apiFetch } from './api';
 import type {
   ClientDto,
+  ClientEventDto,
   StartOnboardingRequest,
   StartOnboardingResponse,
   ActivateOnboardingRequest,
@@ -46,6 +47,23 @@ export const clientApi = {
       method: 'POST',
       body: data,
     }),
+
+  /**
+   * Agency-side: fetch ONE client. The backend scopes this to the ACTIVE
+   * organization (verified X-Organization-Id header + ACTIVE
+   * ClientAgencyRelationship) and answers a uniform 404 'Client not found'
+   * for anything outside it — no cross-agency leakage, no existence hint.
+   * Requires an active organization — never call without one.
+   */
+  getClient: (clientId: string): Promise<ClientDto> =>
+    apiFetch<ClientDto>(`/clients/${clientId}`),
+
+  /**
+   * Agency-side audit history for one client: only events recorded at or
+   * after this organization's relationship started (max 200, newest first).
+   */
+  getClientHistory: (clientId: string): Promise<ClientEventDto[]> =>
+    apiFetch<ClientEventDto[]>(`/clients/${clientId}/history`),
 
   /**
    * Public: resolve an invitation token.

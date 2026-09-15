@@ -122,6 +122,21 @@ export interface CreateClientResponse {
   invitationHint: string;
 }
 
+/**
+ * Mirrors the backend ClientEvent model (insert-only audit trail,
+ * AGENTS.md §8). Returned by GET /api/clients/:id/history — scoped to the
+ * ACTIVE organization's relationship (events from a previous Agency are
+ * not exposed) and capped at 200 items server-side.
+ */
+export interface ClientEventDto {
+  id: string;
+  clientId: string;
+  actorUserId: string | null;
+  action: string;
+  details: unknown;
+  createdAt: string;
+}
+
 export interface ActivateOnboardingRequest {
   token: string;
 }
