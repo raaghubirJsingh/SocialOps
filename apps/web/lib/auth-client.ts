@@ -3,7 +3,8 @@ import type {
   GenericStatusResponse,
   LogoutRequest,
   LoginRequest,
-  RefreshRequest,
+    RefreshRequest,
+  RegisterEmployeeRequest,
   RegisterRequest,
   RegisterResult,
   Session,
@@ -12,6 +13,7 @@ import type {
 } from '@/types/auth';
 
 import { ApiError, apiFetch } from './api';
+import { clearSession, saveSession } from './session-storage';
 
 /**
  * Client-side authentication helpers.
@@ -22,78 +24,11 @@ import { ApiError, apiFetch } from './api';
  *   - POST /api/auth/refresh
  *   - POST /api/auth/logout (requires Authorization: Bearer <accessToken>)
  *
- * Session storage
- * ---------------
- * Tokens are persisted in `localStorage` under the single key
- * `socialops.session`. AGENTS.md §8 explicitly defers encrypted token
- * storage to a later phase; the bootstrap foundation therefore uses
- * `localStorage` and accepts the standard browser-storage trade-off.
- *
- * The frontend NEVER persists a server-side secret. The access/refresh
- * tokens are user-issued JWTs returned by the backend; they are not
- * server signing keys.
+ * Session storage lives in `lib/session-storage.ts` (localStorage,
+ * key `socialops.session`); this module only consumes it. It is a leaf
+ * module so `lib/api.ts` can import `loadSession` from it without
+ * creating an import cycle back into this file.
  */
-
-const STORAGE_KEY = 'socialops.session';
-
-export function loadSession(): Session | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<Session> & {
-      user?: Partial<AuthenticatedUser>;
-    };
-    if (
-      typeof parsed.accessToken === 'string' &&
-      typeof parsed.refreshToken === 'string'
-    ) {
-      // Backward compatibility with sessions written by previous
-      // versions of this client (which stored only the email at the
-      // top level and had no `user` object). If a stale session is
-      // loaded, reconstruct a minimal `user` from whatever fields are
-      // available. The dashboard and sidebar use `??` fallbacks for
-      // null `fullName` / `accountType`, so the UI degrades gracefully
-      // and the user is prompted to log in again to refresh.
-      const email =
-        typeof parsed.email === 'string'
-          ? parsed.email
-          : typeof parsed.user?.email === 'string'
-          ? parsed.user.email
-          : '';
-      const user: AuthenticatedUser = {
-        id: typeof parsed.user?.id === 'string' ? parsed.user.id : '',
-        email,
-        fullName:
-          typeof parsed.user?.fullName === 'string' ? parsed.user.fullName : null,
-        accountType:
-          parsed.user?.accountType === 'SERVICE_PROVIDER' ||
-          parsed.user?.accountType === 'INDIVIDUAL_BUSINESS'
-            ? parsed.user.accountType
-            : null,
-      };
-      return {
-        accessToken: parsed.accessToken,
-        refreshToken: parsed.refreshToken,
-        user,
-        email,
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-export function saveSession(session: Session): void {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-}
-
-export function clearSession(): void {
-  if (typeof window === 'undefined') return;
-  window.localStorage.removeItem(STORAGE_KEY);
-}
 
 /**
  * Login response shape from POST /api/auth/login.
@@ -140,6 +75,28 @@ export async function register(
   input: RegisterRequest,
 ): Promise<RegisterResult> {
   return apiFetch<RegisterResult>('/auth/register', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+/**
+ * Register a new EMPLOYEE account (Employee Module V1).
+ *
+ * Mirrors register(): the backend creates the User + 1:1 EmployeeProfile
+ * atomically, queues an email-verification token (production), or
+ * auto-verifies (dev-only bypass). Registration NEVER issues tokens or a
+ * session — the response discriminator guides the same post-registration
+ * navigation as standard registration (/verify-email or /login).
+ *
+ * Field contract (mirrors backend RegisterEmployeeDto): fullName, email,
+ * phone (optional), password. NO accountType is sent — the EmployeeProfile
+ * row is the discriminator (AGENTS.md §17.1).
+ */
+export async function registerEmployee(
+  input: RegisterEmployeeRequest,
+): Promise<RegisterResult> {
+  return apiFetch<RegisterResult>('/auth/register-employee', {
     method: 'POST',
     body: input,
   });

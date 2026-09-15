@@ -55,6 +55,9 @@ export function loadSession(): Session | null {
           parsed.user?.accountType === 'INDIVIDUAL_BUSINESS'
             ? parsed.user.accountType
             : null,
+        // Backward compat: older sessions predate isEmployee. Default
+        // to false so the UI degrades to standard (non-employee) routing.
+        isEmployee: parsed.user?.isEmployee === true,
       };
       return {
         accessToken: parsed.accessToken,

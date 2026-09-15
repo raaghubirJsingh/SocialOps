@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import { cn } from '@/lib/cn';
+import { useSession } from '@/hooks/use-session';
 
 /**
  * Application sidebar.
@@ -20,17 +21,32 @@ const NAV_ITEMS: ReadonlyArray<{
   href: string;
   label: string;
   description: string;
+  hiddenForEmployees?: boolean;
 }> = [
   {
     href: '/dashboard',
     label: 'Dashboard',
     description: 'Application entry point and overview',
   },
+  {
+    href: '/clients',
+    label: 'Clients',
+    description: 'Manage client relationships',
+    hiddenForEmployees: true,
+  },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
-  const items = NAV_ITEMS;
+  const { session } = useSession();
+  const isEmployee = session?.user?.isEmployee ?? false;
+
+  // Employees are not Organization members and must not see the
+  // Service Provider /clients navigation (AGENTS.md §6). This is a
+  // UX convenience only — the backend enforces the real boundary.
+  const items = isEmployee
+    ? NAV_ITEMS.filter((item) => !item.hiddenForEmployees)
+    : NAV_ITEMS;
 
   return (
     <aside

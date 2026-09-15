@@ -42,8 +42,15 @@ export type AccountType = 'SERVICE_PROVIDER' | 'INDIVIDUAL_BUSINESS';
 export interface AuthenticatedUser {
   id: string;
   email: string;
-  fullName: string | null;
+    fullName: string | null;
   accountType: AccountType | null;
+  /**
+   * Employee Module V1: true when a 1:1 EmployeeProfile row exists for
+   * this user (derived at login time from the EmployeeProfile relation).
+   * UI routing convenience only — not authorization state. The
+   * server-side authority is EmployeeContextGuard, verified per request.
+   */
+  isEmployee: boolean;
 }
 
 /**
@@ -62,6 +69,21 @@ export interface AuthenticatedUser {
  */
 export interface RegisterRequest {
   accountType: AccountType;
+  fullName: string;
+  email: string;
+  phone?: string;
+  password: string;
+}
+
+/**
+ * Employee registration request body.
+ *
+ * Mirrors the backend RegisterEmployeeDto (apps/api/src/auth/dto/
+ * register-employee.dto.ts): fullName, email, phone (optional),
+ * password. NO accountType — employee is discriminated by the 1:1
+ * EmployeeProfile row, not AccountType (AGENTS.md §17.1).
+ */
+export interface RegisterEmployeeRequest {
   fullName: string;
   email: string;
   phone?: string;
