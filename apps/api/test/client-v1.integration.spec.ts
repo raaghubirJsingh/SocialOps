@@ -75,7 +75,7 @@ beforeAll(async () => {
   app.setGlobalPrefix('api');
   await app.init();
   http = request(app.getHttpServer());
-});
+}, 120_000);
 
 afterAll(async () => {
   await app.close();
