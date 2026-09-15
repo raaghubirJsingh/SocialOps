@@ -97,6 +97,31 @@ export interface StartOnboardingResponse {
   mobileVerificationExpiresAt: string;
 }
 
+/**
+ * Agency-side Client creation (POST /api/clients).
+ *
+ * Mirrors the backend `createClientSchema`
+ * (apps/api/src/clients/dto/create-client.dto.ts): the same intake shape
+ * as self-registration onboarding (`StartOnboardingRequest`) plus the
+ * Agency-only `notes` field. The created Client is PENDING and UNBOUND —
+ * the creating Agency user NEVER becomes the owner; the ACTIVE
+ * organization (from the verified `X-Organization-Id` header) becomes the
+ * managing Agency.
+ */
+export interface CreateClientRequest extends StartOnboardingRequest {
+  notes?: string;
+}
+
+/**
+ * Mirrors the backend response of POST /api/clients
+ * (ClientsController.create): the created Client plus a hint pointing at
+ * the invitation endpoint for binding a Client account later.
+ */
+export interface CreateClientResponse {
+  client: ClientDto;
+  invitationHint: string;
+}
+
 export interface ActivateOnboardingRequest {
   token: string;
 }

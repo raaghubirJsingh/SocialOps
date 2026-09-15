@@ -18,9 +18,35 @@ import type {
   AcceptInvitationResponse,
   ManagementRequestDto,
   AcceptManagementRequestResponse,
+  CreateClientRequest,
+  CreateClientResponse,
 } from '@/types/client';
 
 export const clientApi = {
+  /**
+   * Agency-side: list the Clients managed by the ACTIVE organization.
+   *
+   * GET /api/clients is organization-scoped on the backend: the global
+   * OrganizationMembershipGuard verifies the `X-Organization-Id` header
+   * (attached automatically by apiFetch from the ActiveOrganizationProvider
+   * registry) against the caller's membership, and the response contains
+   * ONLY Clients with an ACTIVE ClientAgencyRelationship to that
+   * organization. Requires an active organization - never call without one.
+   */
+  listClients: (): Promise<ClientDto[]> => apiFetch<ClientDto[]>('/clients'),
+
+  /**
+   * Agency-side: create an unbound, PENDING Client for the ACTIVE
+   * organization. Backend authorization: organization role OWNER or ADMIN
+   * (RoleGuard + @RequireMinimumRole('ADMIN')) - the UI gate on this
+   * action is a convenience only, the server remains authoritative.
+   */
+  createClient: (data: CreateClientRequest): Promise<CreateClientResponse> =>
+    apiFetch<CreateClientResponse>('/clients', {
+      method: 'POST',
+      body: data,
+    }),
+
   /**
    * Public: resolve an invitation token.
    * No authentication required.
