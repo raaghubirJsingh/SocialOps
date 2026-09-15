@@ -16,9 +16,21 @@ import { apiFetch } from '@/lib/api';
 import { useSession } from '@/hooks/use-session';
 import type { AccountType } from '@/types/auth';
 
+/**
+ * Readiness contract of GET /api/health (apps/api/src/health).
+ * `status` is ok | degraded | unhealthy; database and redis report
+ * their individual probe results independently.
+ */
+interface HealthCheckResult {
+  status: 'ok' | 'error';
+  detail?: string;
+  error?: string;
+}
+
 interface HealthResponse {
-  status: 'ok';
-  service: 'socialops-api';
+  status: 'ok' | 'degraded' | 'unhealthy';
+  database: HealthCheckResult;
+  redis: HealthCheckResult;
 }
 
 /**
@@ -151,7 +163,8 @@ export default function DashboardPage() {
                   {health.data.status.toUpperCase()}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Service: {health.data.service}
+                  Database: {health.data.database.status} · Redis:{' '}
+                  {health.data.redis.status}
                 </p>
               </>
             ) : null}

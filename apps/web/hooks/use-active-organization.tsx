@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useSession } from './use-session';
+import { setActiveOrganizationIdHeader } from '@/lib/api';
 
 /**
  * Active organization context for the Client Foundation.
@@ -51,6 +52,16 @@ export function ActiveOrganizationProvider({ children }: { children: React.React
     }),
     [activeOrganizationId],
   );
+
+  // Keep the apiFetch `X-Organization-Id` registry in sync with the
+  // in-memory selection. This writes a module-level variable only
+  // (no setState), so it stays compliant with the React Compiler's
+  // `react-hooks/set-state-in-effect` rule. When authentication is
+  // lost, the render-adjust block above resets the state to `null`,
+  // which clears the header through this same effect.
+  React.useEffect(() => {
+    setActiveOrganizationIdHeader(activeOrganizationId);
+  }, [activeOrganizationId]);
 
   return (
     <ActiveOrganizationContext.Provider value={value}>
