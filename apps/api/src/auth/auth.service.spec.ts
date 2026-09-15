@@ -96,6 +96,10 @@ describe('AuthService', () => {
         emailVerifiedAt: new Date(),
         fullName: 'Service Provider E2E',
         accountType: 'SERVICE_PROVIDER',
+        // Employee Module V1: the login query selects the 1:1
+        // employeeProfile relation in the SAME read, so a
+        // non-employee SERVICE_PROVIDER row resolves it to null.
+        employeeProfile: null,
       });
       const result = await service.login({
         email: 'user@example.com', password: 'Password123!',
@@ -110,7 +114,35 @@ describe('AuthService', () => {
         email: 'user@example.com',
         fullName: 'Service Provider E2E',
         accountType: 'SERVICE_PROVIDER',
+        // Derived from employeeProfile === null (Employee Module V1).
+        isEmployee: false,
       });
+    });
+
+    it('reports isEmployee true when an EmployeeProfile row exists', async () => {
+      const { service, prisma } = makeService();
+      const argon2 = await import('argon2');
+      const hash = await argon2.hash('Password123!', { type: argon2.argon2id });
+      // Employee Module V1: an employee logs in with accountType NULL
+      // (AccountType intentionally has no EMPLOYEE value — AGENTS.md
+      // §17.1); the EmployeeProfile relation is the discriminator.
+      (prisma.user.findUnique as ReturnType<typeof jest.fn>).mockResolvedValue({
+        id: 'emp-1',
+        email: 'employee@example.com',
+        passwordHash: hash,
+        isActive: true,
+        emailVerifiedAt: new Date(),
+        fullName: 'Employee One',
+        accountType: null,
+        employeeProfile: { userId: 'emp-1' },
+      });
+      const result = await service.login({
+        email: 'employee@example.com', password: 'Password123!',
+      });
+      // UI routing hint ONLY — EmployeeContextGuard remains the
+      // server-side authority, re-verified per request.
+      expect(result.user.isEmployee).toBe(true);
+      expect(result.user.accountType).toBeNull();
     });
 
     it('returns null fullName/accountType for a pre-migration user row', async () => {

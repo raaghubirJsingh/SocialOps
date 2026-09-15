@@ -305,4 +305,53 @@ describe('L1 HTTP surface', () => {
     const after = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
     expect(after.ownerUserId).toBe(clientUser.id);
   });
+
+  it('HTTP 409 Conflict when attempting silent replacement of ACTIVE Agency relationship (Rule 11)', async () => {
+    const agency = await seedOrgUser('hs-agency7', 'OWNER');
+    const clientUser = await registerClientUser('hs-client7');
+    const start = await withLogs(() =>
+      http
+        .post('/api/onboarding/start')
+        .set('Authorization', `Bearer ${clientUser.accessToken}`)
+        .send({ type: 'INDIVIDUAL', name: `HS t7 ${runTag}`, directEmail: testEmail('t7-direct'), directPhone: '+15550001111' }),
+    );
+    const clientId = start.result.body.clientId as string;
+    const raw = tokenFromLogs(start.logs, 'Mobile verification token');
+    await http.post('/api/onboarding/activate').set('Authorization', `Bearer ${clientUser.accessToken}`).send({ token: raw });
+    await prisma.organization.update({ where: { id: agency.orgId }, data: { discoveryOptIn: true, discoveryApprovedAt: new Date() } });
+
+    // Establish first ACTIVE relationship
+    const req1 = await http
+      .post('/api/client/me/agency-requests')
+      .set('Authorization', `Bearer ${clientUser.accessToken}`)
+      .set('X-Client-Id', clientId)
+      .send({ organizationId: agency.orgId });
+    expect(req1.status).toBe(201);
+    const relId1 = req1.body.id as string;
+    const accept1 = await http
+      .post(`/api/clients/agency-requests/${relId1}/accept`)
+      .set('Authorization', `Bearer ${agency.accessToken}`)
+      .set('X-Organization-Id', agency.orgId)
+      .send({});
+    expect(accept1.status).toBe(201);
+
+    // Verify the client has an ACTIVE relationship
+    const relBefore = await prisma.clientAgencyRelationship.findFirst({
+      where: { clientId, status: 'ACTIVE' },
+    });
+    expect(relBefore).toBeDefined();
+
+    // Attempt to create a second ACTIVE relationship (silent replacement)
+    // This should fail with HTTP 409 Conflict
+    const secondAgency = await seedOrgUser('hs-agency8', 'ADMIN');
+    const silentReplaceAttempt = await http
+      .post('/api/client/me/agency-requests')
+      .set('Authorization', `Bearer ${clientUser.accessToken}`)
+      .set('X-Client-Id', clientId)
+      .send({ organizationId: secondAgency.orgId });
+    expect(silentReplaceAttempt.status).toBe(409);
+    expect(silentReplaceAttempt.body).toMatchObject({
+      code: 'ACTIVE_RELATIONSHIP_EXISTS',
+    });
+  });
 });

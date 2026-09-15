@@ -323,7 +323,11 @@ model ClientAgencyRelationship {
   client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
 
-  @@index([clientId, status])
+  /// Enforces the ONE ACTIVE Agency invariant at the database level.
+  /// A partial unique index ensures a clientId can have at most one
+  /// ACTIVE ClientAgencyRelationship, preventing silent replacement.
+  /// See migration 20260916000000_enforce_one_active_agency for the raw SQL.
+  @@index([clientId, status], name: "ClientAgencyRelationship_clientId_status_idx")
   @@index([organizationId, status])
 }
 

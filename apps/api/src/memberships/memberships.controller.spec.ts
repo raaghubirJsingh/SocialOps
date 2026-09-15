@@ -40,11 +40,11 @@ describe('MembershipsController', () => {
     prisma.organizationMembership.findMany.mockResolvedValue([
       {
         role: 'OWNER',
-        organization: { id: 'org-1', name: 'Org One', slug: 'org-one' },
+        organization: { id: 'org-1', name: 'Org One', slug: 'org-one', isActive: true },
       },
       {
         role: 'MEMBER',
-        organization: { id: 'org-2', name: 'Org Two', slug: 'org-two' },
+        organization: { id: 'org-2', name: 'Org Two', slug: 'org-two', isActive: true },
       },
     ]);
 
@@ -54,13 +54,43 @@ describe('MembershipsController', () => {
       accountType: 'SERVICE_PROVIDER'
     });
 
+    // The controller selects organization.isActive and returns the
+    // selected organization shape (tenant-isolation boundary, commit
+    // 9acb721). Active memberships are returned as-is.
     expect(result).toEqual({
       userId: 'user-1',
       memberships: [
-        { role: 'OWNER', organization: { id: 'org-1', name: 'Org One', slug: 'org-one' } },
-        { role: 'MEMBER', organization: { id: 'org-2', name: 'Org Two', slug: 'org-two' } },
+        { role: 'OWNER', organization: { id: 'org-1', name: 'Org One', slug: 'org-one', isActive: true } },
+        { role: 'MEMBER', organization: { id: 'org-2', name: 'Org Two', slug: 'org-two', isActive: true } },
       ],
     });
+  });
+
+  it('excludes memberships whose organization is deactivated (isActive !== true)', async () => {
+    // Tenant-isolation boundary: GET /memberships/me must not advertise
+    // deactivated organizations, otherwise the frontend could offer an
+    // organization that the global OrganizationMembershipGuard rejects.
+    prisma.organizationMembership.findMany.mockResolvedValue([
+      {
+        role: 'OWNER',
+        organization: { id: 'org-active', name: 'Active Org', slug: 'active-org', isActive: true },
+      },
+      {
+        role: 'MEMBER',
+        organization: { id: 'org-off', name: 'Off Org', slug: 'off-org', isActive: false },
+      },
+    ]);
+
+    const result = await controller.getMyMemberships({
+      sub: 'user-1',
+      email: 'a@b.com',
+      accountType: 'SERVICE_PROVIDER'
+    });
+
+    // The deactivated organization must not appear in the response.
+    expect(result.memberships.map((m) => m.organization.id)).not.toContain('org-off');
+    expect(result.memberships).toHaveLength(1);
+    expect(result.memberships[0]!.organization.id).toBe('org-active');
   });
 
   it('constrains the query using req.user.sub (no caller-supplied userId parameter)', async () => {

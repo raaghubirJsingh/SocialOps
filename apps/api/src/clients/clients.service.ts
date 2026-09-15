@@ -52,6 +52,15 @@ export class ClientsService {
    * Agency-side creation: the Client starts PENDING and UNBOUND — the
    * creating Agency User NEVER becomes the owner. The creating
    * Organization becomes the (single, ACTIVE) managing Agency.
+   *
+   * Defense-in-depth note (Rule 10 — ONE ACTIVE Agency invariant):
+   * This method is safe by construction and does NOT need an explicit
+   * assertNoActiveRelationship() guard. It always creates a brand-new
+   * Client record (prisma.client.create produces a fresh UUID), so no
+   * pre-existing ACTIVE relationship for this client can exist.
+   * Adding the guard here would be a no-op, but if this method is ever
+   * refactored to operate on an existing Client (e.g., upsert), the
+   * guard must be added immediately to prevent invariant violation.
    */
   async createClientForOrganization(
     data: CreateClientDto,
