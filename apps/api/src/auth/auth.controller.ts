@@ -23,6 +23,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 
 import { loginSchema } from './dto/login.dto.js';
 import { registerSchema } from './dto/register.dto.js';
+import { registerEmployeeSchema } from './dto/register-employee.dto.js';
 import { refreshTokenSchema } from './dto/refresh-token.dto.js';
 import { verifyEmailSchema } from './dto/verify-email.dto.js';
 import { resendVerificationSchema } from './dto/resend-verification.dto.js';
@@ -32,6 +33,7 @@ import { PublicAuth } from '../rbac/decorators/public-auth.decorator.js';
 
 import type { LoginDto } from './dto/login.dto.js';
 import type { RegisterDto } from './dto/register.dto.js';
+import type { RegisterEmployeeDto } from './dto/register-employee.dto.js';
 import type { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import type { VerifyEmailDto } from './dto/verify-email.dto.js';
 import type { ResendVerificationDto } from './dto/resend-verification.dto.js';
@@ -124,6 +126,39 @@ export class AuthController {
     @Body(new ZodValidationPipe(registerSchema)) dto: RegisterDto,
   ): Promise<RegisterResult> {
     return this.authService.register(dto);
+  }
+
+  /**
+   * Register an EMPLOYEE account (Employee Module V1, Phase 2).
+   *
+   * Public authentication endpoint:
+   * - No JWT required (@PublicAuth, same as /register).
+   * - No organization context required (class-level @Public).
+   *
+   * Creates the User and the 1:1 EmployeeProfile in ONE atomic
+   * transaction. Same verification contract as /register: the response
+   * discriminator is `verification_required` (production) or
+   * `registration_complete` (dev-only bypass); NO tokens are ever
+   * issued at registration. accountType stays null — the EmployeeProfile
+   * row is the discriminator. Returns 403 on duplicate email.
+   */
+  @Post('register-employee')
+  @PublicAuth()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary:
+      'Register an employee account. Same response discriminator as /register; the User and the 1:1 EmployeeProfile are created atomically.',
+    description:
+      'Creates a User (Argon2id-hashed password, accountType null) plus the 1:1 EmployeeProfile in one transaction, and (in production) queues an email verification token (single-use, 24h expiry, only the SHA-256 hash is persisted). Registration NEVER returns a JWT, access token, refresh token, or session. Returns 403 on duplicate email. Dev-only AUTH_DEV_AUTO_VERIFY_REGISTER bypass behaves like /register.',
+  })
+  @ApiCreatedResponse({
+    description:
+      'Employee registered. Response body is one of: { status: "verification_required", email } (production) or { status: "registration_complete", email } (dev-only bypass).',
+  })
+  registerEmployee(
+    @Body(new ZodValidationPipe(registerEmployeeSchema)) dto: RegisterEmployeeDto,
+  ): Promise<RegisterResult> {
+    return this.authService.registerEmployee(dto);
   }
 
   /**

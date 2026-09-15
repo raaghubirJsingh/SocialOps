@@ -10,6 +10,7 @@ import { RbacModule } from './rbac/rbac.module.js';
 import { OrganizationMembershipGuard } from './rbac/guards/organization-membership.guard.js';
 import { MembershipsModule } from './memberships/memberships.module.js';
 import { ClientsModule } from './clients/clients.module.js';
+import { EmployeesModule } from './employees/employees.module.js';
 import { HealthModule } from './health/health.module.js';
 
 @Module({
@@ -20,6 +21,7 @@ import { HealthModule } from './health/health.module.js';
     RbacModule,
     MembershipsModule,
     ClientsModule,
+    EmployeesModule,
     HealthModule,
   ],
   controllers: [AppController],

@@ -33,6 +33,17 @@ export interface LoginUserDto {
   email: string;
   fullName: string | null;
   accountType: AccountType | null;
+  /**
+   * Employee Module V1: true when a 1:1 EmployeeProfile row exists for
+   * this user. Derived at read time from the EmployeeProfile relation
+   * (never stored in AccountType, which intentionally has no EMPLOYEE
+   * value — AGENTS.md §17.1).
+   *
+   * UI routing convenience ONLY — not authorization state. The server-side
+   * authority is EmployeeContextGuard, which re-verifies the profile
+   * against PostgreSQL on every employees/* request.
+   */
+  isEmployee: boolean;
 }
 
 export interface LoginResult {

@@ -136,6 +136,10 @@ model User {
   verificationTokens EmailVerificationToken[]
   mobileVerificationRequests MobileVerificationToken[] @relation("MobileVerificationRequester")
 
+  // Employee Module V1 (Phase 1): 1:1 employee-profile extension. At most
+  // one profile per user (UNIQUE userId on EmployeeProfile).
+  employeeProfile EmployeeProfile?
+
   // Client Module V1: direct User -> Client ownership (binding). Set only
   // through the controlled onboarding/acceptance flow - never at Agency
   // creation and never via normal Client profile APIs.
@@ -421,4 +425,28 @@ model MobileVerificationToken {
   requestedBy User? @relation("MobileVerificationRequester", fields: [requestedByUserId], references: [id], onDelete: SetNull)
 
   @@index([clientId])
+}
+
+// ---------------------------------------------------------------------------
+// Employee Module V1 (Phase 1, human-approved).
+//
+// Governance notes:
+//   - EmployeeProfile is a 1:1 extension of User: `userId` is UNIQUE, so a
+//     user has at most one profile.
+//   - Deliberately NO organizationId (an employee profile is not an
+//     OrganizationMembership) and NO ClientEmployee relation (not part of
+//     Phase 1).
+//   - AccountType remains exactly SERVICE_PROVIDER | INDIVIDUAL_BUSINESS
+//     (AGENTS.md §17.1); employee registration is a separate future flow.
+// ---------------------------------------------------------------------------
+
+/// A 1:1 extension of the User record for employee accounts.
+model EmployeeProfile {
+  id        String   @id @default(uuid()) @db.Uuid
+  // 1:1 with User: UNIQUE guarantees at most one profile per user.
+  userId    String   @unique @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

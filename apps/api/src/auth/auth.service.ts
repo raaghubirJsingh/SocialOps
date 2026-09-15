@@ -15,6 +15,7 @@ import { OrganizationProvisioningService } from '../memberships/organization-pro
 import type { JwtAccessPayload, JwtRefreshPayload } from './types/jwt-payload.type.js';
 import type { LoginDto } from './dto/login.dto.js';
 import type { RegisterDto } from './dto/register.dto.js';
+import type { RegisterEmployeeDto } from './dto/register-employee.dto.js';
 
 import type { RegisterResult } from './dto/register-response.dto.js';
 import type { LoginResult } from './dto/login-response.dto.js';
@@ -176,6 +177,74 @@ export class AuthService {
   }
 
   /**
+   * Register an employee account (Employee Module V1, Phase 2).
+   *
+   * Atomic contract: the User and the 1:1 EmployeeProfile are created in
+   * ONE interactive transaction — there is never a User with employee
+   * intent lacking its profile, and never an orphan profile. The
+   * verification token is issued AFTER the transaction commits, exactly
+   * like the standard register() flow (it is an independent write using
+   * this.prisma, not tx).
+   *
+   * accountType stays NULL: the AccountType enum intentionally has no
+   * EMPLOYEE value (AGENTS.md §17.1); the EmployeeProfile row is the
+   * discriminator surfaced as `isEmployee` at login. Registration NEVER
+   * issues a JWT, access token, refresh token, or session (§17.2).
+   * Tenant provisioning (ensureForServiceProvider) is deliberately NOT
+   * invoked: it is a no-op for non-SERVICE_PROVIDER users.
+   *
+   * The response discriminator matches register(): verification_required
+   * (production) or registration_complete (dev-only bypass).
+   */
+  async registerEmployee(dto: RegisterEmployeeDto): Promise<RegisterResult> {
+    const passwordHash = await this.hashPassword(dto.password);
+    const skipVerification = isAuthDevAutoVerifyRegister();
+
+    let user: { id: string; email: string };
+
+    try {
+      user = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            email: dto.email,
+            passwordHash,
+            // displayName back-compat, mirrors register().
+            displayName: dto.fullName,
+            fullName: dto.fullName,
+            phone: dto.phone ?? null,
+            // Employee accounts carry NO AccountType (AGENTS.md §17.1):
+            // the EmployeeProfile row is the discriminator.
+            accountType: null,
+            isActive: skipVerification,
+            emailVerifiedAt: skipVerification ? new Date() : null,
+          },
+          select: { id: true, email: true },
+        });
+        await tx.employeeProfile.create({
+          data: { userId: created.id },
+        });
+        return created;
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ForbiddenException('Email already in use');
+      }
+      throw error;
+    }
+
+    if (!skipVerification) {
+      await this.issueVerificationToken(user.id, user.email);
+    }
+
+    return skipVerification
+      ? { status: 'registration_complete', email: user.email }
+      : { status: 'verification_required', email: user.email };
+  }
+
+  /**
    * Generate and persist a fresh email-verification token.
    *
    * Security properties (approved plan):
@@ -319,6 +388,9 @@ export class AuthService {
         // returned (AGENTS.md §8, §17.2).
         fullName: true,
         accountType: true,
+        // Employee Module V1: 1:1 relation read in the SAME query so
+        // `isEmployee` is derived with zero extra round-trips.
+        employeeProfile: { select: { userId: true } },
       },
     });
 
@@ -360,6 +432,10 @@ export class AuthService {
         email: user.email,
         fullName: user.fullName,
         accountType: user.accountType,
+        // Employee Module V1: derived from the 1:1 EmployeeProfile
+        // relation (UI routing hint only — the server-side authority
+        // is EmployeeContextGuard, verified per request).
+        isEmployee: user.employeeProfile !== null,
       },
     };
   }
