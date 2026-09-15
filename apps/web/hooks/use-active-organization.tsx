@@ -2,7 +2,10 @@
 
 import * as React from 'react';
 import { useSession } from './use-session';
-import { setActiveOrganizationIdHeader } from '@/lib/api';
+import {
+  setActiveOrganizationIdHeader,
+  setOrganizationResetListener,
+} from '@/lib/api';
 
 /**
  * Active organization context for the Client Foundation.
@@ -62,6 +65,15 @@ export function ActiveOrganizationProvider({ children }: { children: React.React
   React.useEffect(() => {
     setActiveOrganizationIdHeader(activeOrganizationId);
   }, [activeOrganizationId]);
+
+  // apiFetch drops the module-level org header when the backend reports
+  // the organization context as lost (403 contract, e.g. deactivated
+  // organization). Mirror that here so the React state re-renders and the
+  // user is returned to organization selection on the next render.
+  React.useEffect(() => {
+    setOrganizationResetListener(() => setActiveOrganizationIdState(null));
+    return () => setOrganizationResetListener(null);
+  }, []);
 
   return (
     <ActiveOrganizationContext.Provider value={value}>

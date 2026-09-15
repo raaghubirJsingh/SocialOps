@@ -1,11 +1,16 @@
 import { QueryClient } from '@tanstack/react-query';
 
+import { ApiError } from './api';
+
 /**
  * Factory for the singleton `QueryClient` used by the app.
  *
  * Defaults are intentionally conservative:
- *   - `retry: 1` keeps transient network blips tolerable without
- *     amplifying server incidents.
+ *   - `retry` keeps transient network blips tolerable without amplifying
+ *     server incidents, but auth failures are NEVER retried blindly:
+ *     401s are recovered by apiFetch (single-flight refresh + one retry)
+ *     and 401/403 otherwise need user action (re-login, re-pick org), so
+ *     surfacing them immediately is correct.
  *   - `refetchOnWindowFocus: false` matches the dashboard's
  *     low-frequency read pattern (the foundation only calls the
  *     public health endpoint).
@@ -15,7 +20,15 @@ export function makeQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        retry: 1,
+        retry: (failureCount, error) => {
+          if (
+            error instanceof ApiError &&
+            (error.status === 401 || error.status === 403)
+          ) {
+            return false;
+          }
+          return failureCount < 1;
+        },
         refetchOnWindowFocus: false,
         staleTime: 30_000,
       },

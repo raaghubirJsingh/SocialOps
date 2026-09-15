@@ -4,11 +4,15 @@ import * as React from 'react';
 
 import { ApiError } from '@/lib/api';
 import {
-  clearSession,
-  loadSession,
   login as loginRequest,
   logout as logoutRequest,
+  refreshAccessToken,
 } from '@/lib/auth-client';
+import {
+  setSessionSyncListener,
+  setTokenRefreshInvoker,
+} from '@/lib/api';
+import { clearSession, loadSession } from '@/lib/session-storage';
 import type { LoginRequest, Session } from '@/types/auth';
 
 /**
@@ -97,6 +101,33 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [session]);
 
   const clearError = React.useCallback(() => setError(null), []);
+
+  // Wire the apiFetch recovery paths to this provider (the owner of the
+  // session lifecycle). Registered once on mount. The invoker re-reads the
+  // session from localStorage AT CALL TIME so it always presents the latest
+  // rotated refresh token, even after background refreshes.
+  React.useEffect(() => {
+    setSessionSyncListener(() => setSession(loadSession()));
+    setTokenRefreshInvoker(async () => {
+      const current = loadSession();
+      if (!current) return false;
+      try {
+        await refreshAccessToken(current);
+        return true;
+      } catch {
+        // Refresh failed: the refresh token is invalid, expired, or was
+        // replayed (backend reuse protection). Wipe the session; the sync
+        // listener (invoked by apiFetch right after) will flip
+        // isAuthenticated to false and the AuthGuard will redirect.
+        clearSession();
+        return false;
+      }
+    });
+    return () => {
+      setSessionSyncListener(null);
+      setTokenRefreshInvoker(null);
+    };
+  }, []);
 
   const value = React.useMemo<SessionContextValue>(
     () => ({
