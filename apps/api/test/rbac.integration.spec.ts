@@ -10,7 +10,7 @@
  *
  * Executed via `npm run test:integration --workspace=apps/api`.
  */
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Controller, Get, INestApplication, Module, UseGuards } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -20,11 +20,18 @@ import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
 import { RequireMinimumRole } from '../src/rbac/decorators/require-roles.decorator.js';
 import { RoleGuard } from '../src/rbac/guards/role.guard.js';
+import { OrganizationContextService } from '../src/rbac/organization-context.service.js';
 
 if (!process.env.JWT_ACCESS_SECRET) process.env.JWT_ACCESS_SECRET = 'integration-b7-access-secret-32-chars';
 if (!process.env.JWT_REFRESH_SECRET) process.env.JWT_REFRESH_SECRET = 'integration-b7-refresh-secret-32-chars';
 if (!process.env.JWT_ACCESS_TTL) process.env.JWT_ACCESS_TTL = '900';
 if (!process.env.JWT_REFRESH_TTL) process.env.JWT_REFRESH_TTL = '604800';
+
+// Force the dev-only auto-verify bypass OFF for this suite so the
+// registration tests exercise the real production path (email-verification
+// required) regardless of the local .env configuration. Mirrors the setup
+// in auth.integration.spec.ts.
+process.env.AUTH_DEV_AUTO_VERIFY_REGISTER = 'false';
 
 const prisma = new PrismaClient();
 const runTag = `stageb7-${randomUUID()}`;
@@ -88,9 +95,20 @@ async function seedUser(
   });
 
   // Registration creates an UNVERIFIED user and returns no tokens
-  // (approved contract). Mark the seeded user verified directly so login
-  // succeeds; RBAC seeding does not exercise the email-verification
-  // lifecycle (covered in auth.integration.spec.ts).
+  // (approved contract). Create the (user, orgA) membership BEFORE login
+  // so OrganizationProvisioningService.ensureForServiceProvider() finds an
+  // existing membership and skips the auto OWNER org; otherwise login
+  // provisions `sp-<userId>` and /me returns 2 rows instead of 1.
+  const preUser = await prisma.user.findUniqueOrThrow({ where: { email } });
+  await prisma.organizationMembership.upsert({
+    where: { userId_organizationId: { userId: preUser.id, organizationId: orgId } },
+    create: { userId: preUser.id, organizationId: orgId, role },
+    update: { role },
+  });
+
+  // Mark the seeded user verified directly so login succeeds; RBAC seeding
+  // does not exercise the email-verification lifecycle
+  // (covered in auth.integration.spec.ts).
   await prisma.user.update({
     where: { email },
     data: { isActive: true, emailVerifiedAt: new Date() },
@@ -100,12 +118,6 @@ async function seedUser(
 
   const user = await prisma.user.findUnique({ where: { email: testEmail(name) } });
   if (!user) throw new Error(`seeded user not found: ${testEmail(name)}`);
-
-  await prisma.organizationMembership.upsert({
-    where: { userId_organizationId: { userId: user.id, organizationId: orgId } },
-    create: { userId: user.id, organizationId: orgId, role },
-    update: { role },
-  });
 
   return {
     id: user.id,
@@ -134,6 +146,7 @@ afterAll(async () => {
   // FK-safe cleanup restricted to this run's rows.
   await app.close();
   await prisma.refreshToken.deleteMany({ where: { user: { email: { contains: runTag } } } });
+  await prisma.emailVerificationToken.deleteMany({ where: { user: { email: { contains: runTag } } } });
   await prisma.organizationMembership.deleteMany({
     where: { user: { email: { contains: runTag } } },
   });
@@ -146,25 +159,45 @@ describe('RBAC foundation (real PostgreSQL + real JWT)', () => {
   it('GET /api/health returns 200 without auth or organization context', async () => {
     const res = await http.get('/api/health');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: 'ok', service: 'socialops-api' });
+    expect(res.body.status).toBe('ok');
+    expect(res.body.database.status).toBe('ok');
+    // Redis is not asserted: degraded without Memurai is allowed.
   });
 
   it('POST /api/auth/register remains accessible without organization context (201)', async () => {
+    // The register contract (AGENTS.md §17.2) requires accountType and
+    // fullName; register creates an UNVERIFIED user and returns a
+    // RegisterResult discriminator — never tokens.
     const res = await http
       .post('/api/auth/register')
       .send({
+        accountType: 'SERVICE_PROVIDER',
+        fullName: 'RBAC Register Test',
         email: testEmail('regress-register'),
         password: 'RegisterMe123!',
       });
     expect(res.status).toBe(201);
-    expect(res.body.accessToken).toBeTruthy();
-    expect(res.body.refreshToken).toBeTruthy();
+    expect(res.body.status).toBe('verification_required');
+    expect(res.body.email).toBe(testEmail('regress-register'));
+    expect(res.body).not.toHaveProperty('accessToken');
+    expect(res.body).not.toHaveProperty('refreshToken');
   });
 
   it('POST /api/auth/login remains accessible without organization context (200)', async () => {
     const email = testEmail('regress-login');
     const password = 'LoginMe123!';
-    await http.post('/api/auth/register').send({ email, password });
+    await http.post('/api/auth/register').send({
+      accountType: 'SERVICE_PROVIDER',
+      fullName: 'RBAC Login Test',
+      email,
+      password,
+    });
+
+    // Production path leaves the user INACTIVE/unverified; login requires both.
+    await prisma.user.update({
+      where: { email },
+      data: { isActive: true, emailVerifiedAt: new Date() },
+    });
 
     const res = await http.post('/api/auth/login').send({ email, password });
     expect(res.status).toBe(200);
@@ -183,18 +216,32 @@ describe('RBAC foundation (real PostgreSQL + real JWT)', () => {
     // With valid bearer + refresh token + NO X-Organization-Id -> 204
     // (logout is @Public() with respect to the org guard, and the JWT
     // has been verified by JwtAuthGuard).
+    // The register contract requires accountType/fullName; register does
+    // NOT return tokens, so the user must be marked verified directly and
+    // a session obtained via login before logout can be exercised.
     const register = await http
       .post('/api/auth/register')
       .send({
+        accountType: 'SERVICE_PROVIDER',
+        fullName: 'RBAC Logout Test',
         email: testEmail('regress-logout'),
         password: 'LogoutMe123!',
       });
     expect(register.status).toBe(201);
 
+    await prisma.user.update({
+      where: { email: testEmail('regress-logout') },
+      data: { isActive: true, emailVerifiedAt: new Date() },
+    });
+    const login = await http
+      .post('/api/auth/login')
+      .send({ email: testEmail('regress-logout'), password: 'LogoutMe123!' });
+    expect(login.status).toBe(200);
+
     const res = await http
       .post('/api/auth/logout')
-      .set('Authorization', `Bearer ${register.body.accessToken}`)
-      .send({ refreshToken: register.body.refreshToken });
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .send({ refreshToken: login.body.refreshToken });
     expect(res.status).toBe(204);
   });
 
@@ -215,8 +262,15 @@ describe('RBAC foundation (real PostgreSQL + real JWT)', () => {
 
   it('GET /api/memberships/me - 400 with a valid JWT but no X-Organization-Id', async () => {
     const user = await seedUser('no-org-header', 'MEMBER');
-    const res = await http
+    // /me is @Public() for the org guard (JWT-only) so no header is required.
+    const me = await http
       .get('/api/memberships/me')
+      .set('Authorization', `Bearer ${user.accessToken}`);
+    expect(me.status).toBe(200);
+    expect(me.body.userId).toBe(user.id);
+    // The guarded route still enforces the header contract.
+    const res = await http
+      .get('/api/rbac-test/admin')
       .set('Authorization', `Bearer ${user.accessToken}`);
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/X-Organization-Id/);
@@ -224,31 +278,124 @@ describe('RBAC foundation (real PostgreSQL + real JWT)', () => {
 
   it('GET /api/memberships/me - 400 with a malformed X-Organization-Id', async () => {
     const user = await seedUser('malformed-header', 'MEMBER');
-    const res = await http
+    // Header is ignored on /me; guard 400s live on guarded routes.
+    const me = await http
       .get('/api/memberships/me')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .set('X-Organization-Id', 'not-a-uuid');
+    expect(me.status).toBe(200);
+    const res = await http
+      .get('/api/rbac-test/admin')
       .set('Authorization', `Bearer ${user.accessToken}`)
       .set('X-Organization-Id', 'not-a-uuid');
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/UUID/);
   });
 
-  it('GET /api/memberships/me - 403 when the user is NOT a member of the requested organization', async () => {
-    const user = await seedUser('non-member', 'MEMBER');
-    const foreignOrgId = testOrgId();
+  it('GET /api/memberships/me - 403 when the requested organization is deactivated (Organization.isActive === false)', async () => {
+    const user = await seedUser('deactivated-tenant', 'MEMBER');
+    const deactivatedOrgId = testOrgId();
+
     await prisma.organization.create({
       data: {
-        id: foreignOrgId,
-        name: `Foreign Org ${runTag}`,
-        slug: testSlug('foreign'),
+        id: deactivatedOrgId,
+        name: `Deactivated Org ${runTag}`,
+        slug: testSlug('deactivated'),
+        isActive: false,
+      },
+    });
+    // Guarded route resolves (user, org) so isActive is enforced server-side.
+    await prisma.organizationMembership.create({
+      data: { userId: user.id, organizationId: deactivatedOrgId, role: 'MEMBER' },
+    });
+
+    const res = await http
+      .get('/api/rbac-test/admin')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .set('X-Organization-Id', deactivatedOrgId);
+    expect(res.status).toBe(403);
+    expect(res.body.message).toMatch(/organization is not available/i);
+  });
+
+  it('OrganizationContextService.resolve throws ForbiddenException for a deactivated organization', async () => {
+    const authService = app.get(AuthService);
+    const email = testEmail('resolve-deactivated');
+    const password = 'StrongPassword123!';
+    await authService.register({
+      accountType: 'SERVICE_PROVIDER',
+      fullName: 'Resolve Deactivated',
+      email,
+      password,
+    });
+
+    const targetUserId = (await prisma.user.findUniqueOrThrow({ where: { email } })).id;
+    const rawToken = randomBytes(32).toString('base64url');
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    await prisma.emailVerificationToken.create({
+      data: { userId: targetUserId, tokenHash, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) },
+    });
+    await authService.verifyEmail(rawToken);
+    const login = await authService.login({ email, password });
+    const userId = login.user.id;
+
+    const deactivatedOrgId = testOrgId();
+    await prisma.organization.create({
+      data: {
+        id: deactivatedOrgId,
+        name: `Resolve Deactivated Org ${runTag}`,
+        slug: testSlug('resolve-deactivated'),
+        isActive: false,
+      },
+    });
+    // resolve() checks membership first, then isActive. Seed membership so
+    // the test reaches the isActive branch and proves server-side tenant
+    // enforcement (mirrors the deactivated-tenant HTTP test).
+    await prisma.organizationMembership.create({
+      data: { userId, organizationId: deactivatedOrgId, role: 'MEMBER' },
+    });
+
+    const contextService = app.get(OrganizationContextService);
+    await expect(
+      contextService.resolve(userId, deactivatedOrgId),
+    ).rejects.toMatchObject({
+      name: 'ForbiddenException',
+      response: { message: 'The requested organization is not available' },
+    });
+  });
+
+  it('GET /api/memberships/me omits memberships for deactivated organizations', async () => {
+    const user = await seedUser('memberships-filter', 'MEMBER');
+    const deactivatedOrgId = testOrgId();
+
+    await prisma.organization.create({
+      data: {
+        id: deactivatedOrgId,
+        name: `Filtered Deactivated Org ${runTag}`,
+        slug: testSlug('filtered-deactivated'),
+        isActive: false,
+      },
+    });
+    await prisma.organizationMembership.create({
+      data: {
+        userId: user.id,
+        organizationId: deactivatedOrgId,
+        role: 'VIEWER',
       },
     });
 
     const res = await http
       .get('/api/memberships/me')
-      .set('Authorization', `Bearer ${user.accessToken}`)
-      .set('X-Organization-Id', foreignOrgId);
-    expect(res.status).toBe(403);
-    expect(res.body.message).toMatch(/not a member/i);
+      .set('Authorization', `Bearer ${user.accessToken}`);
+    expect(res.status).toBe(200);
+
+    const rows = res.body.memberships as Array<{
+      role: string;
+      organization: { id: string; name: string; slug: string };
+    }>;
+    // Active seed org remains; deactivated org is filtered server-side.
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.organization.id).toBe(user.organizationId);
+    expect(rows.some((r) => r.organization.id === deactivatedOrgId)).toBe(false);
   });
 
   it('GET /api/memberships/me - 200 with only the caller\'s own membership row, not the row of any other user', async () => {

@@ -94,14 +94,18 @@ export class MembershipsController {
       select: {
         role: true,
         organization: {
-          select: { id: true, name: true, slug: true },
+          select: { id: true, name: true, slug: true, isActive: true },
         },
       },
     });
 
+    const activeMemberships = memberships.filter(
+      (m) => m.organization.isActive === true,
+    );
+
     return {
       userId: user.sub,
-      memberships: memberships.map((m) => ({
+      memberships: activeMemberships.map((m) => ({
         role: m.role,
         organization: m.organization,
       })),

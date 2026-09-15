@@ -54,6 +54,17 @@ export class OrganizationContextService {
       throw new ForbiddenException('Not a member of the requested organization');
     }
 
+    const organization = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { isActive: true },
+    });
+
+    if (organization === null || organization.isActive !== true) {
+      throw new ForbiddenException(
+        'The requested organization is not available',
+      );
+    }
+
     return { id: organizationId, role: membership.role };
   }
 }
