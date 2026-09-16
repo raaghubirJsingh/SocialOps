@@ -112,28 +112,28 @@ enum ClientField {
 }
 
 model User {
-  id            String    @id @default(uuid()) @db.Uuid
-  email         String    @unique
+  id              String       @id @default(uuid()) @db.Uuid
+  email           String       @unique
   // Nullable until the authentication foundation stage introduces credentials;
   // Stage B creates no users itself.
-  passwordHash  String?
-  displayName   String?
+  passwordHash    String?
+  displayName     String?
   // AGENTS.md §17.2 registration fields. Nullable so pre-migration rows
   // remain valid without a backfill.
-  fullName      String?
-  phone         String?
-  accountType   AccountType?
+  fullName        String?
+  phone           String?
+  accountType     AccountType?
   // AGENTS.md §17.2: new users are INACTIVE until email verification.
   // The default applies to future inserts only; existing rows keep
   // their current value (see 20260903220000 migration note).
-  isActive      Boolean   @default(false)
+  isActive        Boolean      @default(false)
   emailVerifiedAt DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
-  memberships   OrganizationMembership[]
-  refreshTokens RefreshToken[]
-  verificationTokens EmailVerificationToken[]
+  memberships                OrganizationMembership[]
+  refreshTokens              RefreshToken[]
+  verificationTokens         EmailVerificationToken[]
   mobileVerificationRequests MobileVerificationToken[] @relation("MobileVerificationRequester")
 
   // Employee Module V1 (Phase 1): 1:1 employee-profile extension. At most
@@ -145,15 +145,23 @@ model User {
   // creation and never via normal Client profile APIs.
   ownedClients Client[] @relation("ClientOwner")
 
+  // Unified Content & AI Foundation (Phase 1): AI Employee Fleet support.
+  // isBot distinguishes AI employees from humans; skillSpecialization carries
+  // the AI's declared capability (e.g. "AI Copywriter", "Video Editor").
+  // AI employees operate strictly under the existing MEMBER RBAC role
+  // (AGENTS.md §7) - these fields carry no authorization weight.
+  isBot               Boolean @default(false)
+  skillSpecialization String?
+
   // SOCIALOPS_ADMIN: user-level GLOBAL authority (Option A), independent of
   // organization membership. Separate from OWNER/ADMIN/MEMBER/VIEWER. An
   // Agency ADMIN never implies this flag. Powers are limited to the approved
   // Client V1 platform operations (Client status management and Agency
   // discovery approval). This is not an organization-scoped role.
-  isSocialOpsAdmin Boolean  @default(false)
-  socialOpsAdminGrantedAt DateTime?
-  socialOpsAdminGrantedById String? @db.Uuid
-  socialOpsAdminRevokedAt DateTime?
+  isSocialOpsAdmin          Boolean   @default(false)
+  socialOpsAdminGrantedAt   DateTime?
+  socialOpsAdminGrantedById String?   @db.Uuid
+  socialOpsAdminRevokedAt   DateTime?
 
   // Client Operations V1 (metadata only): audit-only creator/actor links.
   // None of these confer ownership or authorization - ownership lives on
@@ -165,6 +173,10 @@ model User {
   contentRevisionsCreated ContentRevision[]    @relation("ContentRevisionCreator")
   contentStatusActed      ContentStatusEvent[] @relation("ContentStatusActor")
   rawDataCaptured         RawData[]            @relation("RawDataCapturer")
+
+  // Unified Content & AI Foundation (Phase 1): boundary-enforced relations.
+  internalNotesAuthored InternalNote[]  @relation("InternalNoteAuthor")
+  changeRequestsMade    ChangeRequest[] @relation("ChangeRequestRequester")
 }
 
 model Organization {
@@ -181,11 +193,19 @@ model Organization {
   discoveryApprovedAt       DateTime?
   discoveryApprovedByUserId String?   @db.Uuid
 
-  workspaces  Workspace[]
-  memberships OrganizationMembership[]
+  workspaces          Workspace[]
+  memberships         OrganizationMembership[]
   // Agency-side Client relationships (the Organization represents the
   // Agency / Service Provider tenant; Organization is NOT the Client).
   clientRelationships ClientAgencyRelationship[]
+
+  // Unified Content & AI Foundation (Phase 1): Content items managed by
+  // this Agency. Nullable FK on Content.agencyId.
+  contents Content[] @relation("ContentAgency")
+
+  // Unified Content & AI Foundation (Phase 1): Internal notes authored by
+  // this Agency. Strict isolation: Client must never see these.
+  internalNotes InternalNote[]
 
   @@index([discoveryOptIn])
 }
@@ -270,54 +290,54 @@ model EmailVerificationToken {
 ///
 /// No permanent deletion is implemented: Clients are never hard-deleted.
 model Client {
-  id            String                @id @default(uuid()) @db.Uuid
+  id                    String                 @id @default(uuid()) @db.Uuid
   // The Client's owner account. NULL until the controlled onboarding binds
   // a User. An Agency creator NEVER becomes the owner.
-  ownerUserId   String?               @db.Uuid
-  type          ClientType
-  name          String
-  description   String?
+  ownerUserId           String?                @db.Uuid
+  type                  ClientType
+  name                  String
+  description           String?
   // Metadata only: no file storage / S3 / image processing for Logo/Avatar.
-  logoUrl       String?
-  directEmail   String
-  directPhone   String
-  primaryContactName  String?
-  primaryContactPhone String?
-  website       String?
-  addressLine1  String?
-  addressLine2  String?
-  city          String?
-  state         String?
-  country       String?
-  postalCode    String?
+  logoUrl               String?
+  directEmail           String
+  directPhone           String
+  primaryContactName    String?
+  primaryContactPhone   String?
+  website               String?
+  addressLine1          String?
+  addressLine2          String?
+  city                  String?
+  state                 String?
+  country               String?
+  postalCode            String?
   // Predefined list + "Other", validated at the application layer.
-  industry      String?
+  industry              String?
   // Operational status - EXACTLY ACTIVE | INACTIVE | SUSPENDED.
-  status        ClientStatus          @default(ACTIVE)
-  statusReason  String?
-  statusChangedAt DateTime?
+  status                ClientStatus           @default(ACTIVE)
+  statusReason          String?
+  statusChangedAt       DateTime?
   // Onboarding lifecycle is separate from operational status. Client-facing
   // operational/self-service access requires onboardingStatus = ACTIVE.
-  onboardingStatus    ClientOnboardingStatus @default(PENDING)
+  onboardingStatus      ClientOnboardingStatus @default(PENDING)
   onboardingCompletedAt DateTime?
-  notes         String?
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
+  notes                 String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
 
-  ownerUser     User?                 @relation("ClientOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  relationships ClientAgencyRelationship[]
-  invitations   ClientInvitation[]
-  fieldChanges  ClientFieldChange[]
-  events        ClientEvent[]
+  ownerUser                User?                      @relation("ClientOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  relationships            ClientAgencyRelationship[]
+  invitations              ClientInvitation[]
+  fieldChanges             ClientFieldChange[]
+  events                   ClientEvent[]
   mobileVerificationTokens MobileVerificationToken[]
 
   // Client Operations V1 (metadata only). Every child row is scoped by its
   // non-nullable clientId; these relations exist for query/joins only.
-  socialAccounts       SocialAccount[]
-  contents             Content[]
-  contentRevisions     ContentRevision[]
-  contentStatusEvents  ContentStatusEvent[]
-  rawData              RawData[]
+  socialAccounts      SocialAccount[]
+  contents            Content[]
+  contentRevisions    ContentRevision[]
+  contentStatusEvents ContentStatusEvent[]
+  rawData             RawData[]
 
   @@index([ownerUserId])
   @@index([status])
@@ -329,15 +349,15 @@ model Client {
 /// first, no silent replacement). The `organizationId` references the Agency
 /// (Organization represents the Agency / Service Provider tenant - Option A).
 model ClientAgencyRelationship {
-  id             String                @id @default(uuid()) @db.Uuid
-  clientId       String                @db.Uuid
-  organizationId String                @db.Uuid
+  id             String                   @id @default(uuid()) @db.Uuid
+  clientId       String                   @db.Uuid
+  organizationId String                   @db.Uuid
   status         AgencyRelationshipStatus
-  initiatedBy    ClientAgencyFlow      // CLIENT | AGENCY
+  initiatedBy    ClientAgencyFlow // CLIENT | AGENCY
   startedAt      DateTime?
   terminatedAt   DateTime?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
 
   client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
@@ -378,22 +398,22 @@ model ClientInvitation {
 /// cooldown table and (for NAME / DIRECT_EMAIL / DIRECT_MOBILE) the locked
 /// re-authentication + verification controls.
 model ClientFieldChange {
-  id                String                @id @default(uuid()) @db.Uuid
-  clientId          String                @db.Uuid
-  field             ClientField
-  newValue          String?
-  status            FieldChangeRequestStatus @default(PENDING_VERIFICATION)
-  requestedByUserId String?               @db.Uuid
-  requestedAt       DateTime              @default(now())
-  approvedAt        DateTime?
-  appliedAt         DateTime?
-  rejectedReason    String?
+  id                    String                   @id @default(uuid()) @db.Uuid
+  clientId              String                   @db.Uuid
+  field                 ClientField
+  newValue              String?
+  status                FieldChangeRequestStatus @default(PENDING_VERIFICATION)
+  requestedByUserId     String?                  @db.Uuid
+  requestedAt           DateTime                 @default(now())
+  approvedAt            DateTime?
+  appliedAt             DateTime?
+  rejectedReason        String?
   // Security-controlled DIRECT_EMAIL / DIRECT_MOBILE changes (locked rule):
   // re-authentication plus verification of the NEW value. Hash-only token
   // storage (mirrors EmailVerificationToken / MobileVerificationToken);
   // single-use + expiry enforced in the service layer. NULL for fields
   // that require no second verification step (e.g. NAME: re-auth only).
-  verificationTokenHash String?           @unique
+  verificationTokenHash String?                  @unique
   verificationExpiresAt DateTime?
   verifiedAt            DateTime?
 
@@ -433,19 +453,19 @@ model ClientEvent {
 ///   - Provider-independent: no SMS provider is assumed; V1 delivery is
 ///     the gated local development log only. No paid provider.
 model MobileVerificationToken {
-  id        String    @id @default(uuid()) @db.Uuid
-  clientId  String    @db.Uuid
+  id                String    @id @default(uuid()) @db.Uuid
+  clientId          String    @db.Uuid
   // Audit only: which authenticated User requested this verification.
   // Nullable because a pre-binding onboarding verification has no bound
   // owner yet.
-  requestedByUserId String? @db.Uuid
-  tokenHash String    @unique
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
+  requestedByUserId String?   @db.Uuid
+  tokenHash         String    @unique
+  expiresAt         DateTime
+  usedAt            DateTime?
+  createdAt         DateTime  @default(now())
 
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  requestedBy User? @relation("MobileVerificationRequester", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  client      Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  requestedBy User?  @relation("MobileVerificationRequester", fields: [requestedByUserId], references: [id], onDelete: SetNull)
 
   @@index([clientId])
 }
@@ -492,6 +512,12 @@ enum ContentStatus {
   CHANGES_REQUESTED
   APPROVED
   ARCHIVED
+  // Unified Content & AI Foundation (Phase 1): additional workflow states
+  // for the 3-scenario content pipeline. These extend the existing status
+  // machine without replacing it.
+  AWAITING_MANAGER_APPROVAL
+  UNDER_CLIENT_REVIEW
+  FINAL_CONFIRMED
 }
 
 /// Provenance of raw intake material.
@@ -500,6 +526,17 @@ enum RawDataSource {
   CLIENT_FORM
   AGENCY_UPLOAD
   EXTERNAL_IMPORT
+}
+
+/// Unified Content & AI Foundation (Phase 1): the three approved content
+/// production scenarios governing the Manager/AI/Client workflow.
+///   SCENARIO_1: Client provides raw input → AI drafts → Manager reviews → Client confirms
+///   SCENARIO_2: AI drafts from existing raw data → Manager reviews → Client confirms
+///   SCENARIO_3: Manager initiates → AI drafts → Client reviews and confirms
+enum ScenarioType {
+  SCENARIO_1
+  SCENARIO_2
+  SCENARIO_3
 }
 
 /// A social-media account recorded against exactly ONE Client.
@@ -517,11 +554,11 @@ enum RawDataSource {
 /// BY THE CLIENT/AGENCY, NOT VERIFIED: field names are deliberately neutral
 /// (`handle`, `profileUrl`) and no `isVerified` marker exists.
 model SocialAccount {
-  id        String         @id @default(uuid()) @db.Uuid
+  id       String         @id @default(uuid()) @db.Uuid
   /// Tenant key. Non-nullable: a SocialAccount can never exist outside a
   /// Client (AGENTS.md §6-§7 isolation).
-  clientId  String         @db.Uuid
-  platform  SocialPlatform
+  clientId String         @db.Uuid
+  platform SocialPlatform
 
   /// Platform-side identifier (IG user id / FB page id / YT channel id).
   /// NULLABLE: without OAuth/API access this is often unknown, and a required
@@ -538,12 +575,12 @@ model SocialAccount {
 
   /// Declarative enable/disable of the record (mirrors
   /// Organization.isActive / Workspace.isActive). Carries no OAuth meaning.
-  isActive          Boolean  @default(true)
+  isActive Boolean @default(true)
 
   /// Audit only (AGENTS.md §8: important operations are auditable).
-  createdByUserId   String?  @db.Uuid
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdByUserId String?  @db.Uuid
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   client        Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
   createdByUser User?  @relation("SocialAccountCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
@@ -569,13 +606,21 @@ model SocialAccount {
 /// returns status to DRAFT, and CLEARS the confirmation triple in the same
 /// transaction - approval can never be silently reused or invalidated.
 model Content {
-  id        String        @id @default(uuid()) @db.Uuid
+  id       String        @id @default(uuid()) @db.Uuid
   /// Tenant key. Non-nullable: Content can never exist outside a Client
   /// (AGENTS.md §6-§7 isolation).
-  clientId  String        @db.Uuid
-  title     String
-  body      String
-  status    ContentStatus @default(DRAFT)
+  clientId String        @db.Uuid
+  title    String
+  body     String
+  status   ContentStatus @default(DRAFT)
+
+  // --- Unified Content & AI Foundation (Phase 1) --------------------------
+  /// The approved production scenario governing the Manager/AI/Client
+  /// workflow. Nullable: pre-existing Content rows carry no scenario.
+  scenarioType ScenarioType?
+  /// Snapshot of the managing Agency (Organization) at the time of creation.
+  /// Nullable: Content may predate the agency tracking or exist without one.
+  agencyId     String?       @db.Uuid
 
   // --- Final Confirmation: the ONLY path to APPROVED ---------------------
   finalConfirmedAt         DateTime?
@@ -591,16 +636,20 @@ model Content {
   updatedAt       DateTime  @updatedAt
 
   client               Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  agency               Organization?        @relation("ContentAgency", fields: [agencyId], references: [id], onDelete: Restrict)
   createdByUser        User?                @relation("ContentCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   updatedByUser        User?                @relation("ContentUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
   finalConfirmedByUser User?                @relation("ContentFinalConfirmer", fields: [finalConfirmedByUserId], references: [id], onDelete: SetNull)
   revisions            ContentRevision[]
   statusEvents         ContentStatusEvent[]
   rawData              RawData[]
+  internalNotes        InternalNote[]
+  changeRequests       ChangeRequest[]
 
   @@index([clientId, status])
   @@index([clientId, createdAt])
   @@index([finalConfirmedByUserId])
+  @@index([agencyId])
 }
 
 /// INSERT-ONLY snapshot of a Content body. Rows are never updated or deleted
@@ -611,13 +660,13 @@ model Content {
 /// the Final Confirmation references a revision id, and the title/body/hash
 /// live in an immutable row.
 model ContentRevision {
-  id        String @id @default(uuid()) @db.Uuid
-  contentId String @db.Uuid
+  id              String   @id @default(uuid()) @db.Uuid
+  contentId       String   @db.Uuid
   /// Denormalized tenant key so revision queries stay client-scoped.
-  clientId  String @db.Uuid
-  revision  Int
-  title     String
-  body      String
+  clientId        String   @db.Uuid
+  revision        Int
+  title           String
+  body            String
   /// SHA-256 of (title + body): proves the confirmed text is unchanged.
   contentHash     String
   createdByUserId String?  @db.Uuid
@@ -715,4 +764,58 @@ model EmployeeProfile {
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Unified Content & AI Foundation (Phase 1) - Boundary Models.
+//
+// Governance:
+//   - InternalNote: STRICT AGENCY ISOLATION. Notes are visible ONLY to the
+//     Agency (Organization) that authored them. The Client must NEVER see
+//     internal notes. Enforcement is server-side in the service layer.
+//   - ChangeRequest: CLIENT-INITIATED only. Business logic enforces a maximum
+//     of 2 change requests per Content item under SCENARIO_1 (approved rule).
+//   - Both models are insert-only audit records (AGENTS.md §11).
+// ---------------------------------------------------------------------------
+
+/// Internal agency note on a Content item. STRICT BOUNDARY: the Client must
+/// never see these notes. The `agencyId` ensures isolation - only the Agency
+/// (Organization) that authored the note can read it. A human Manager or an
+/// AI Bot (User with `isBot = true`) may author notes.
+model InternalNote {
+  id        String   @id @default(uuid()) @db.Uuid
+  contentId String   @db.Uuid
+  /// The Agency (Organization) that owns this note. Enforces strict isolation:
+  /// the Client must never see notes from another Agency or their own.
+  agencyId  String   @db.Uuid
+  /// The author: a human Manager or an AI Bot (User.isBot = true).
+  authorId  String   @db.Uuid
+  body      String   @db.Text
+  createdAt DateTime @default(now())
+
+  content Content      @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  agency  Organization @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  author  User         @relation("InternalNoteAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([contentId])
+  @@index([agencyId, contentId])
+  @@index([authorId])
+}
+
+/// Client-initiated change request on a Content item. Business logic enforces
+/// a maximum of 2 change requests per Content under SCENARIO_1. The Client
+/// (owner User) submits the request; the Agency reviews and acts on it.
+model ChangeRequest {
+  id             String   @id @default(uuid()) @db.Uuid
+  contentId      String   @db.Uuid
+  /// The Client owner who requested the change.
+  requestedById  String   @db.Uuid
+  requestDetails String   @db.Text
+  createdAt      DateTime @default(now())
+
+  content     Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  requestedBy User    @relation("ChangeRequestRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+
+  @@index([contentId])
+  @@index([requestedById, contentId])
 }
