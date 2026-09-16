@@ -8,6 +8,7 @@ import { useSession } from '@/hooks/use-session';
 import { contentApi } from '@/lib/content-api';
 import { queryKeys } from '@/lib/query-keys';
 import type {
+  ConfirmFinalRequest,
   ContentDto,
   ContentRevisionDto,
   ContentStatus,
@@ -223,5 +224,33 @@ export function useTransitionContent(scope: ContentScope, clientId: string) {
         clientId,
         variables.contentId,
       ),
+  });
+}
+
+/**
+ * FINAL CONFIRMATION - CLIENT SELF-SERVICE ONLY.
+ *
+ * This is the only hook in the app that can move an item to APPROVED, and it
+ * deliberately has NO agency equivalent: the dedicated client endpoint is the
+ * one door to APPROVED (approved decision D4), and the backend re-verifies the
+ * User -> Client ownership binding plus the IN_REVIEW precondition on every
+ * call. An agency page must never import or render this hook - verifiable with
+ * `git grep 'final-confirmation' apps/web`.
+ *
+ * Like every other mutation, it is NOT optimistic: the server owns the
+ * confirmation triple, so the cache is invalidated on settle.
+ */
+export function useConfirmFinalContent(clientId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    ContentDto,
+    Error,
+    { contentId: string; body: ConfirmFinalRequest }
+  >({
+    mutationFn: ({ contentId, body }) =>
+      contentApi.confirmFinalMine(clientId, contentId, body),
+    onSettled: (_data, _error, variables) =>
+      invalidateContent(queryClient, 'mine', null, clientId, variables.contentId),
   });
 }

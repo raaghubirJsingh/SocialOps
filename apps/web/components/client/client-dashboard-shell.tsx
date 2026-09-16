@@ -1,5 +1,13 @@
 'use client';
 
+import Link from 'next/link';
+
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import type { ClientDto } from '@/types/client';
 import { ClientStatusBanner } from './client-status-banner';
 import { OnboardingPendingBanner } from './onboarding-pending-banner';
@@ -60,6 +68,36 @@ export function ClientDashboardShell({ client }: ClientDashboardShellProps) {
             </div>
           )}
         </dl>
+      </div>
+
+      {/* Client Operations V1 sections (link-only navigation, D-nav) */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Link
+          href={`/client/content?clientId=${client.id}`}
+          className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+        >
+          <Card className="h-full transition-colors hover:border-slate-600">
+            <CardHeader>
+              <CardTitle>Content</CardTitle>
+              <CardDescription>
+                Review drafts, request changes, and grant final confirmation.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+        <Link
+          href={`/client/social-accounts?clientId=${client.id}`}
+          className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+        >
+          <Card className="h-full transition-colors hover:border-slate-600">
+            <CardHeader>
+              <CardTitle>Social accounts</CardTitle>
+              <CardDescription>
+                Record the platforms you operate (metadata only).
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
       </div>
 
       {/* Placeholder sections */}
