@@ -344,6 +344,14 @@ describe('L1 HTTP surface', () => {
     // Attempt to create a second ACTIVE relationship (silent replacement)
     // This should fail with HTTP 409 Conflict
     const secondAgency = await seedOrgUser('hs-agency8', 'ADMIN');
+    // The discovery gate (DiscoveryService.assertDiscoverable) runs BEFORE the
+    // ACTIVE-relationship invariant check in ClientMeController, so the second
+    // Agency must itself be discoverable (opt-in AND approved) for this request
+    // to reach the 409 ACTIVE_RELATIONSHIP_EXISTS path being asserted here.
+    await prisma.organization.update({
+      where: { id: secondAgency.orgId },
+      data: { discoveryOptIn: true, discoveryApprovedAt: new Date() },
+    });
     const silentReplaceAttempt = await http
       .post('/api/client/me/agency-requests')
       .set('Authorization', `Bearer ${clientUser.accessToken}`)
