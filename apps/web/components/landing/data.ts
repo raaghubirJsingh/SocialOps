@@ -15,10 +15,11 @@ export interface NavTab {
 }
 
 export const NAV_TABS: NavTab[] = [
+  { label: 'Features', href: '#features' },
   { label: 'About', href: '#about' },
   { label: 'Platforms', href: '#platforms' },
   { label: 'Workflow', href: '#workflow' },
-  { label: 'Reviews', href: '#reviews' },
+  { label: 'Standards', href: '#standards' },
   { label: 'FAQ', href: '#faq' },
   { label: 'Contact', href: '#contact' },
 ];
@@ -52,55 +53,67 @@ export interface Review {
   stars: number;
 }
 
-export const REVIEWS: Review[] = [
+/**
+ * Capability cards (replaces the earlier illustrative testimonials).
+ *
+ * Approved replacement (decision F2): presenting named people with star ratings
+ * implied real social proof that does not exist yet, so the section now states
+ * what the product ENFORCES. Every claim below is verifiable in this
+ * repository - see docs/APPROVED_DECISIONS.md (Decisions 006, 008, 009) and the
+ * integration specs under apps/api/test.
+ */
+export interface Capability {
+  title: string;
+  body: string;
+}
+
+export const CAPABILITIES: Capability[] = [
   {
-    quote:
-      'Finally, one place where a client request becomes a task, a draft, an approval and a published post — without losing track in chat threads.',
-    name: 'Priya Sharma',
-    role: 'Boutique agency owner',
-    initials: 'PS',
-    stars: 5,
+    title: 'Approvals you can prove',
+    body: 'Every final confirmation pins an immutable revision snapshot and its SHA-256 digest, written in the same transaction as the approval. A database constraint rejects an approved record that is missing any part of that.',
   },
   {
-    quote:
-      'The approval-first flow is what sold me. Nothing goes live without a human sign-off, yet the repetitive follow-ups disappear.',
-    name: 'Rahul Verma',
-    role: 'Freelance social media manager',
-    initials: 'RV',
-    stars: 5,
+    title: 'Isolation by construction',
+    body: 'Your organization is the tenant boundary. Every client-owned row carries a non-nullable client id, and an agency must hold an ACTIVE relationship to see a client at all. Out-of-scope reads answer one uniform 404 — no existence leaks.',
   },
   {
-    quote:
-      'Role-based access means I can invite clients as Viewers and my team as Members. Everyone sees exactly what they should.',
-    name: 'Anita Desai',
-    role: 'Content studio founder',
-    initials: 'AD',
-    stars: 5,
+    title: 'Nothing secret is stored',
+    body: 'No social media password, no access token, no refresh token. This phase records platform metadata only, and connecting accounts is deferred to a separately approved phase — so there is nothing here to leak.',
   },
   {
-    quote:
-      'One story, repurposed for Instagram, Facebook and YouTube from a single workflow — that is exactly how small teams need to work.',
-    name: 'Karan Mehta',
-    role: 'D2C brand owner',
-    initials: 'KM',
-    stars: 4,
+    title: 'Insert-only history',
+    body: 'Content revisions and status transitions are append-only. Editing an approved item returns it to Draft and clears the confirmation, and the trail records exactly that — an approval can never be silently reused.',
   },
   {
-    quote:
-      'Auditability matters to us. Every stage carries user, permission, client scope and audit — compliance stops being scary.',
-    name: 'Sneha Iyer',
-    role: 'Operations lead',
-    initials: 'SI',
-    stars: 5,
+    title: 'Least privilege, server-enforced',
+    body: 'Four roles per organization membership — Owner, Admin, Member, Viewer. Every protected request re-verifies membership and tenant scope on the server; the interface hiding a button is never the control.',
   },
   {
-    quote:
-      'The dashboard is calm and honest: system status, empty states labelled clearly, no invented numbers. I trust tools like that.',
-    name: 'Amit Patel',
-    role: 'Independent consultant',
-    initials: 'AP',
-    stars: 4,
+    title: 'Honest by default',
+    body: 'If a capability is not built, this page says so. No invented metrics, no fabricated customer counts, and no testimonials until real ones exist.',
   },
+];
+
+/**
+ * The live-vs-next strip printed under the Features section.
+ *
+ * This exists so the page cannot imply that deferred modules (platform
+ * connections, publishing, analytics) are already working.
+ */
+export const LIVE_TODAY: string[] = [
+  'Accounts, sign-in and email verification',
+  'Organization roles: Owner, Admin, Member, Viewer',
+  'Client onboarding, invitations and agency linking',
+  'Content drafting, review, and client-owner final approval',
+  'Immutable revisions and append-only status history',
+  'Raw intake records (text and metadata)',
+];
+
+export const NEXT_PHASES: string[] = [
+  'Social platform connections (OAuth)',
+  'Publishing and scheduling',
+  'Distribution across formats',
+  'Analytics and client reporting',
 ];
 
 export interface Faq {

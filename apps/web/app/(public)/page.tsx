@@ -2,11 +2,12 @@ import type { Metadata } from 'next';
 
 import { LandingNavbar } from '@/components/landing/navbar';
 import { Hero } from '@/components/landing/hero';
+import { FeaturesSection } from '@/components/landing/features';
 import { AboutSection } from '@/components/landing/about';
 import { PlatformsSection } from '@/components/landing/platforms';
 import { WorkflowSection } from '@/components/landing/workflow';
 import { AudienceSection } from '@/components/landing/audience';
-import { ReviewsSection } from '@/components/landing/reviews';
+import { StandardsSection } from '@/components/landing/standards';
 import { FaqSection } from '@/components/landing/faq';
 import { ContactSection } from '@/components/landing/contact';
 import { FinalCta } from '@/components/landing/final-cta';
@@ -21,21 +22,26 @@ export const metadata: Metadata = {
 /**
  * Public home route — the ONLY "/" route (approved routing matrix).
  *
- * Single-page informational landing: sticky anchor tabs (About /
- * Platforms / Workflow / Reviews / FAQ / Contact) smooth-scroll to
- * sections on THIS page. No new routes — "/" never redirects and never
- * renders the dashboard. Entry points remain /register and /login.
+ * Single-page informational landing: sticky anchor tabs (Features / About /
+ * Platforms / Workflow / Standards / FAQ / Contact) smooth-scroll to sections on
+ * THIS page. No new routes — "/" never redirects and never renders the
+ * dashboard. Entry points remain /register and /login.
+ *
+ * Section order follows the standard SaaS narrative: promise (hero) → what is
+ * enforced (features) → what we are (about) → scope (platforms) → how it works
+ * (workflow) → who it is for (audience) → standards → FAQ → contact → CTA.
  */
 export default function HomePage() {
   return (
     <main className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
       <LandingNavbar />
       <Hero />
+      <FeaturesSection />
       <AboutSection />
       <PlatformsSection />
       <WorkflowSection />
       <AudienceSection />
-      <ReviewsSection />
+      <StandardsSection />
       <FaqSection />
       <ContactSection />
       <FinalCta />
