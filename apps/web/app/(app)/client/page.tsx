@@ -60,7 +60,9 @@ export default function ClientPage() {
     };
   }, [isAuthenticated, clientId, setClient]);
 
-  if (sessionLoading || isLoading) {
+  const shouldShowLoading = Boolean(isLoading && isAuthenticated && clientId);
+
+  if (sessionLoading || shouldShowLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-slate-100">
         <p className="text-sm text-slate-400">Loading...</p>

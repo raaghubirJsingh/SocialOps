@@ -82,8 +82,8 @@ export default function ClientOnboardingPage() {
     setLoading(true);
 
     try {
-      await clientApi.activateOnboarding({ token: verifyToken.trim() });
-      router.push('/client');
+      const client = await clientApi.activateOnboarding({ token: verifyToken.trim() });
+      router.push(`/client?clientId=${client.id}`);
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
         setVerifyErrors((prev) => ({

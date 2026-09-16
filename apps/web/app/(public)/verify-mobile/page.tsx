@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useForm, type Resolver } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -38,10 +38,8 @@ const verifyMobileResolver: Resolver<VerifyMobileFormValues> = async (raw) => {
  * or via SMS (production - deferred).
  */
 function VerifyMobileContent() {
-  const searchParams = useSearchParams();
   const router = useRouter();
   const { isAuthenticated } = useSession();
-  const clientId = searchParams.get('clientId');
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,8 +57,8 @@ function VerifyMobileContent() {
     try {
       setIsLoading(true);
       setError(null);
-      await clientApi.activateOnboarding({ token: values.token });
-      router.push(clientId ? `/client?clientId=${clientId}` : '/client');
+      const client = await clientApi.activateOnboarding({ token: values.token });
+      router.push(`/client?clientId=${client.id}`);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Verification failed.';
