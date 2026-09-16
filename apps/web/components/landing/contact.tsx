@@ -44,13 +44,13 @@ export function ContactInfoCard() {
       <h3 className="mt-4 text-lg font-semibold text-slate-100">
         Prefer email?
       </h3>
-      <p className="mt-2 text-sm leading-relaxed text-slate-400">
+      <p className="mt-2 text-pretty text-sm leading-relaxed text-slate-400">
         Reach us directly and we will reply within two business days.
       </p>
       <p className="surface-panel mt-4 rounded-lg px-4 py-3 text-sm font-medium text-blue-300">
         hello@socialops.example
       </p>
-      <p className="mt-4 text-xs leading-relaxed text-slate-500">
+      <p className="mt-4 text-xs leading-relaxed text-slate-400">
         Placeholder address — the production inbox is published at launch. The
         contact backend endpoint is deferred to a later approved phase, so the
         form validates and confirms your message in the browser.

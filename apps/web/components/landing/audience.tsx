@@ -30,7 +30,7 @@ export function AudienceSection() {
             <h3 className="mt-4 text-lg font-semibold text-slate-100">
               Service Provider
             </h3>
-            <p className="mt-2 text-sm leading-relaxed text-slate-400">
+            <p className="mt-2 text-pretty text-sm leading-relaxed text-slate-400">
               You handle social media for other people or businesses. Onboard
               each client, link them to your agency, and run every piece of
               content through review and client-owner approval. Workspaces, task
@@ -45,7 +45,7 @@ export function AudienceSection() {
             <h3 className="mt-4 text-lg font-semibold text-slate-100">
               Individual / Business
             </h3>
-            <p className="mt-2 text-sm leading-relaxed text-slate-400">
+            <p className="mt-2 text-pretty text-sm leading-relaxed text-slate-400">
               You manage your own accounts. Record the platforms you operate,
               draft your content, and keep a permanent, auditable history of
               what was approved and why.

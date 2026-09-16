@@ -15,20 +15,20 @@ export function LandingFooter() {
             <a
               key={tab.href}
               href={tab.href}
-              className="text-xs text-slate-500 transition-colors hover:text-slate-200"
+              className="text-xs text-slate-400 transition-colors duration-200 hover:text-slate-200"
             >
               {tab.label}
             </a>
           ))}
           <Link
             href="/register"
-            className="text-xs text-slate-500 transition-colors hover:text-slate-200"
+            className="text-xs text-slate-400 transition-colors duration-200 hover:text-slate-200"
           >
             Register
           </Link>
           <Link
             href="/login"
-            className="text-xs text-slate-500 transition-colors hover:text-slate-200"
+            className="text-xs text-slate-400 transition-colors duration-200 hover:text-slate-200"
           >
             Sign in
           </Link>
@@ -36,12 +36,12 @@ export function LandingFooter() {
       </div>
       <div className="border-t border-white/[0.06] bg-white/[0.02]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs leading-relaxed text-slate-600">
+          <p className="text-pretty text-xs leading-relaxed text-slate-400">
             SocialOps V1 — live today: accounts &amp; roles, client onboarding,
             agency↔client linking, content review &amp; final approval, intake
             records. Further modules ship only after explicit approval.
           </p>
-          <p className="text-xs text-slate-600">© 2026 SocialOps</p>
+          <p className="text-xs text-slate-400">© 2026 SocialOps</p>
         </div>
       </div>
     </footer>

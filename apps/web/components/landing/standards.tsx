@@ -36,7 +36,7 @@ export function StandardsSection() {
               <h3 className="text-lg font-semibold text-slate-100">
                 {capability.title}
               </h3>
-              <p className="mt-3 flex-1 text-sm leading-relaxed text-slate-400">
+              <p className="mt-3 flex-1 text-pretty text-sm leading-relaxed text-slate-400">
                 {capability.body}
               </p>
             </LandingCard>

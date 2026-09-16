@@ -25,7 +25,7 @@ export function WorkflowSection() {
                 </span>
                 <div>
                   <h3 className="font-semibold text-slate-100">{step.name}</h3>
-                  <p className="text-xs text-slate-500">{step.detail}</p>
+                  <p className="text-xs text-slate-400">{step.detail}</p>
                 </div>
               </div>
               {index < WORKFLOW_STEPS.length - 1 && (
@@ -41,7 +41,7 @@ export function WorkflowSection() {
           USER + PERMISSION + CLIENT SCOPE + AUDIT — present at every
           stage, enforced server-side, never trusted from client input.
           {' '}
-          <span className="text-slate-500">
+          <span className="text-slate-400">
             Stages after approval (publish, distribute, analytics, report) ship
             only in later approved phases — see the live-vs-next list above.
           </span>

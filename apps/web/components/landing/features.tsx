@@ -94,7 +94,7 @@ export function FeaturesSection() {
               <h3 className="mt-4 text-lg font-semibold text-slate-100">
                 {capability.title}
               </h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-400">
+              <p className="mt-2 text-pretty text-sm leading-relaxed text-slate-400">
                 {capability.body}
               </p>
             </LandingCard>
@@ -111,7 +111,7 @@ export function FeaturesSection() {
               <h3 className="mt-3 font-semibold text-slate-100">
                 {capability.title}
               </h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-400">
+              <p className="mt-2 text-pretty text-sm leading-relaxed text-slate-400">
                 {capability.body}
               </p>
             </LandingCard>
@@ -151,7 +151,7 @@ export function FeaturesSection() {
                 </li>
               ))}
             </ul>
-            <p className="mt-4 text-xs leading-relaxed text-slate-500">
+            <p className="mt-4 text-xs leading-relaxed text-slate-400">
               Each of these ships only after its own explicit approval. We would
               rather list them honestly than claim them early.
             </p>

@@ -44,7 +44,7 @@ export function AboutSection() {
               <h3 className="mt-4 text-lg font-semibold text-slate-100">
                 {card.title}
               </h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-400">
+              <p className="mt-2 text-pretty text-sm leading-relaxed text-slate-400">
                 {card.body}
               </p>
             </LandingCard>

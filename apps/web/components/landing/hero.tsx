@@ -64,7 +64,7 @@ export function Hero() {
           </a>
         </div>
 
-        <p className="mt-4 inline-flex items-center gap-2 text-xs text-slate-500">
+        <p className="mt-4 inline-flex items-center gap-2 text-xs text-slate-400">
           <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
           Human approval is a mandatory, recorded gate — nothing can be marked
           approved without it.
@@ -87,7 +87,7 @@ export function Hero() {
           ))}
         </dl>
 
-        <p className="mt-4 text-xs leading-relaxed text-slate-500">
+        <p className="mt-4 text-pretty text-xs leading-relaxed text-slate-400">
           Scope of the V1 design — not shipped integrations. Live today:
           accounts &amp; roles, client onboarding, content review &amp; final
           approval.

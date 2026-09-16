@@ -34,7 +34,7 @@ export function FaqSection() {
                   </span>
                 </span>
               </summary>
-              <p className="mt-3 text-sm leading-relaxed text-slate-400">
+              <p className="mt-3 text-pretty text-sm leading-relaxed text-slate-400">
                 {faq.a}
               </p>
             </details>

@@ -68,13 +68,13 @@ export function PlatformsSection() {
                 {platform.name}
                 <Badge variant="success">V1</Badge>
               </h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-400">
+              <p className="mt-2 text-pretty text-sm leading-relaxed text-slate-400">
                 {platform.body}
               </p>
             </LandingCard>
           ))}
         </div>
-        <p className="mx-auto mt-8 max-w-2xl text-center text-xs leading-relaxed text-slate-500">
+        <p className="mx-auto mt-8 max-w-2xl text-center text-xs leading-relaxed text-slate-400">
           X (Twitter) and WhatsApp Channels are explicitly out of V1 scope —
           we would rather be honest about three platforms than vague about
           five.
