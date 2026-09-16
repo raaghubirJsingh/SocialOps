@@ -71,7 +71,7 @@ export function FinalConfirmationPanel({
         <CardContent className="flex flex-wrap items-center gap-2">
           <Badge variant="success">Approved</Badge>
           {content.finalConfirmedRevisionId && (
-            <span className="font-mono text-xs text-slate-500">
+            <span className="font-mono text-xs text-slate-400">
               revision {content.finalConfirmedRevisionId.slice(0, 8)}…
             </span>
           )}
@@ -112,7 +112,7 @@ export function FinalConfirmationPanel({
                 htmlFor="confirm-note"
                 className="text-sm text-slate-300"
               >
-                Note <span className="text-slate-500">(optional)</span>
+                Note <span className="text-slate-400">(optional)</span>
               </label>
               <Textarea
                 id="confirm-note"
@@ -126,7 +126,7 @@ export function FinalConfirmationPanel({
             <label className="flex items-start gap-2 text-sm text-slate-300">
               <input
                 type="checkbox"
-                className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-900"
+                className="mt-0.5 h-4 w-4 rounded border-white/[0.12] bg-white/[0.04] accent-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
                 checked={acknowledged}
                 onChange={(event) => setAcknowledged(event.target.checked)}
                 disabled={isSubmitting}
@@ -138,7 +138,7 @@ export function FinalConfirmationPanel({
             {error && (
               <div
                 role="alert"
-                className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
+                className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
               >
                 {error}
               </div>

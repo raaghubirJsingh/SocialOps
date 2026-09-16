@@ -145,7 +145,7 @@ export function SocialAccountForm({
           ))}
         </select>
         {mode === 'edit' ? (
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-400">
             The platform is fixed after creation. Create a new record to change it.
           </p>
         ) : null}
@@ -153,7 +153,7 @@ export function SocialAccountForm({
 
       <div className="grid gap-2">
         <Label htmlFor="sa-handle" className="text-sm font-medium text-slate-300">
-          Handle <span className="text-slate-500">(optional)</span>
+          Handle <span className="text-slate-400">(optional)</span>
         </Label>
         <Input
           id="sa-handle"
@@ -168,7 +168,7 @@ export function SocialAccountForm({
 
       <div className="grid gap-2">
         <Label htmlFor="sa-display" className="text-sm font-medium text-slate-300">
-          Display name <span className="text-slate-500">(optional)</span>
+          Display name <span className="text-slate-400">(optional)</span>
         </Label>
         <Input id="sa-display" disabled={isSubmitting} {...register('displayName')} />
         {errors.displayName && (
@@ -178,7 +178,7 @@ export function SocialAccountForm({
 
       <div className="grid gap-2">
         <Label htmlFor="sa-url" className="text-sm font-medium text-slate-300">
-          Profile URL <span className="text-slate-500">(optional)</span>
+          Profile URL <span className="text-slate-400">(optional)</span>
         </Label>
         <Input
           id="sa-url"
@@ -195,7 +195,7 @@ export function SocialAccountForm({
         <input
           id="sa-active"
           type="checkbox"
-          className="h-4 w-4 rounded border-slate-700 bg-slate-900"
+          className="h-4 w-4 rounded border-white/[0.12] bg-white/[0.04] accent-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
           disabled={isSubmitting}
           {...register('isActive')}
         />
@@ -207,7 +207,7 @@ export function SocialAccountForm({
       {error && (
         <div
           role="alert"
-          className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
         >
           {error}
         </div>

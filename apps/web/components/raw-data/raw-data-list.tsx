@@ -33,17 +33,17 @@ export function RawDataList({
             {records.map((record) => (
               <li
                 key={record.id}
-                className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3"
+                className="surface-panel rounded-lg px-4 py-3"
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="neutral">
                     {RAW_DATA_SOURCE_LABELS[record.source]}
                   </Badge>
-                  <span className="font-mono text-xs text-slate-500">
+                  <span className="font-mono text-xs text-slate-400">
                     sha256:{record.contentHash.slice(0, 12)}…
                   </span>
                   {record.contentId && (
-                    <span className="font-mono text-xs text-slate-500">
+                    <span className="font-mono text-xs text-slate-400">
                       content {record.contentId.slice(0, 8)}…
                     </span>
                   )}
@@ -56,12 +56,12 @@ export function RawDataList({
                 )}
 
                 {record.metadata ? (
-                  <pre className="mt-2 max-h-40 overflow-auto rounded border border-slate-800 bg-slate-950 p-2 text-xs text-slate-400">
+                  <pre className="mt-2 max-h-40 overflow-auto rounded border border-white/[0.06] bg-slate-950 p-2 text-xs text-slate-300">
                     {JSON.stringify(record.metadata, null, 2)}
                   </pre>
                 ) : null}
 
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-slate-400">
                   captured {new Date(record.capturedAt).toLocaleString()}
                   {record.mimeType ? ` · ${record.mimeType}` : ''}
                 </p>

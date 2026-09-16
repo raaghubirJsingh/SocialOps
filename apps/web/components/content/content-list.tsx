@@ -40,14 +40,14 @@ export function ContentList({
               <div className="flex flex-wrap items-center gap-2">
                 <Link
                   href={detailHref(item.id)}
-                  className="truncate text-sm font-medium text-slate-100 underline-offset-4 hover:underline"
+                  className="truncate rounded text-sm font-medium text-slate-100 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
                 >
                   {item.title}
                 </Link>
                 <ContentStatusBadge status={item.status} />
               </div>
-              <p className="line-clamp-2 text-xs text-slate-500">{item.body}</p>
-              <p className="text-xs text-slate-500">
+              <p className="line-clamp-2 text-xs text-slate-400">{item.body}</p>
+              <p className="text-xs text-slate-400">
                 Updated {new Date(item.updatedAt).toLocaleString()}
                 {item.finalConfirmedAt
                   ? ` · confirmed ${new Date(item.finalConfirmedAt).toLocaleString()}`

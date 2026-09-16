@@ -30,17 +30,17 @@ export function ContentRevisionList({
             {revisions.map((revision) => (
               <li
                 key={revision.id}
-                className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3"
+                className="surface-panel rounded-lg px-4 py-3"
               >
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <span className="font-medium text-slate-200">
                     Revision {revision.revision}
                   </span>
-                  <span className="font-mono text-xs text-slate-500">
+                  <span className="font-mono text-xs text-slate-400">
                     sha256:{revision.contentHash.slice(0, 12)}…
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-slate-400">
                   {revision.title} ·{' '}
                   {new Date(revision.createdAt).toLocaleString()}
                 </p>

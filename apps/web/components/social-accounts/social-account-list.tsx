@@ -57,7 +57,7 @@ export function SocialAccountList({
                 )}
               </div>
 
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-400">
                 {account.platformAccountId
                   ? `Platform id ${account.platformAccountId}`
                   : 'Platform id not recorded'}
@@ -70,7 +70,7 @@ export function SocialAccountList({
                   href={account.profileUrl}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="text-xs text-blue-400 underline-offset-4 hover:underline"
+                  className="rounded text-xs text-blue-400 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
                 >
                   {account.profileUrl}
                 </a>

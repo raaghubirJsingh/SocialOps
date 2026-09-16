@@ -116,7 +116,7 @@ export function ContentForm({
       {willClearConfirmation && (
         <p
           role="note"
-          className="rounded-md border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"
+          className="rounded-lg border border-amber-900/60 bg-amber-950/40 px-3 py-2 text-xs text-amber-200"
         >
           This item already carries a final confirmation. Saving will append a new
           revision, return it to <span className="font-medium">Draft</span>, and clear
@@ -127,7 +127,7 @@ export function ContentForm({
       {error && (
         <div
           role="alert"
-          className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
         >
           {error}
         </div>

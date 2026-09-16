@@ -102,7 +102,7 @@ export function ContentStatusActions({
       {error && (
         <div
           role="alert"
-          className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
         >
           {error}
         </div>
@@ -136,7 +136,7 @@ export function ContentStatusActions({
       >
         <div className="grid gap-2">
           <Label htmlFor="archive-note" className="text-sm text-slate-300">
-            Note <span className="text-slate-500">(optional)</span>
+            Note <span className="text-slate-400">(optional)</span>
           </Label>
           <Textarea
             id="archive-note"

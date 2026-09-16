@@ -55,17 +55,17 @@ export function ContentStatusTimeline({
                 className={cn(
                   'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium',
                   isCurrent
-                    ? 'border-blue-800 bg-blue-950/50 text-blue-200'
+                    ? 'border-blue-500/30 bg-blue-500/10 text-blue-200'
                     : isDone
-                      ? 'border-slate-700 bg-slate-800 text-slate-300'
-                      : 'border-slate-800 bg-slate-900 text-slate-500',
+                      ? 'border-white/10 bg-white/[0.06] text-slate-200'
+                      : 'border-white/[0.06] bg-white/[0.02] text-slate-400',
                 )}
               >
                 <span aria-hidden="true">{isDone ? '✓' : index + 1}</span>
                 {label}
               </span>
               {index < STEPS.length - 1 && (
-                <span aria-hidden="true" className="text-slate-600">
+                <span aria-hidden="true" className="text-slate-500">
                   →
                 </span>
               )}
@@ -75,7 +75,7 @@ export function ContentStatusTimeline({
 
         {isArchived && (
           <li className="flex items-center gap-2">
-            <span aria-hidden="true" className="text-slate-600">
+            <span aria-hidden="true" className="text-slate-500">
               |
             </span>
             <Badge variant="muted" aria-current="step">
@@ -97,11 +97,11 @@ export function ContentStatusTimeline({
           <Badge variant="success">Final confirmation recorded</Badge>
           {confirmedAt && <span>Confirmed {new Date(confirmedAt).toLocaleString()}</span>}
           {confirmedRevisionId && (
-            <span className="font-mono text-slate-500">
+            <span className="font-mono text-slate-400">
               revision {confirmedRevisionId.slice(0, 8)}…
             </span>
           )}
-          <span className="text-slate-500">
+          <span className="text-slate-400">
             Editing this text will return it to Draft and clear the confirmation.
           </span>
         </div>

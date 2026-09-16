@@ -102,7 +102,7 @@ export function RawDataIntakeForm({
       {contentOptions && contentOptions.length > 0 && (
         <div className="grid gap-2">
           <Label htmlFor="raw-content" className="text-sm font-medium text-slate-300">
-            Link to content <span className="text-slate-500">(optional)</span>
+            Link to content <span className="text-slate-400">(optional)</span>
           </Label>
           <select
             id="raw-content"
@@ -123,7 +123,7 @@ export function RawDataIntakeForm({
 
       <div className="grid gap-2">
         <Label htmlFor="raw-text" className="text-sm font-medium text-slate-300">
-          Pasted text <span className="text-slate-500">(optional)</span>
+          Pasted text <span className="text-slate-400">(optional)</span>
         </Label>
         <Textarea
           id="raw-text"
@@ -137,7 +137,7 @@ export function RawDataIntakeForm({
 
       <div className="grid gap-2">
         <Label htmlFor="raw-metadata" className="text-sm font-medium text-slate-300">
-          Metadata JSON <span className="text-slate-500">(optional)</span>
+          Metadata JSON <span className="text-slate-400">(optional)</span>
         </Label>
         <Textarea
           id="raw-metadata"
@@ -152,7 +152,7 @@ export function RawDataIntakeForm({
       {(localError || error) && (
         <div
           role="alert"
-          className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
         >
           {localError ?? error}
         </div>

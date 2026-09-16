@@ -31,7 +31,7 @@ export function ContentStatusEventList({
             {events.map((event) => (
               <li
                 key={event.id}
-                className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm"
+                className="surface-panel rounded-lg px-4 py-3 text-sm"
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-slate-300">
@@ -50,7 +50,7 @@ export function ContentStatusEventList({
                 {event.note && (
                   <p className="mt-1 text-xs text-slate-400">{event.note}</p>
                 )}
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-slate-400">
                   {new Date(event.createdAt).toLocaleString()}
                 </p>
               </li>
