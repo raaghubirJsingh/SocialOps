@@ -17,6 +17,12 @@ import { ContentStatus } from '@prisma/client';
  *   3. APPROVED -> DRAFT exists only as the edit-only revert edge below, so a
  *      confirmation can never be silently reused after the text changes.
  *
+ * Phase 2 (Unified Content & AI Foundation) adds workflow states for the
+ * 3-scenario content pipeline:
+ *   - AWAITING_MANAGER_APPROVAL: AI draft pending manager review
+ *   - UNDER_CLIENT_REVIEW: Manager-approved draft sent to client
+ *   - FINAL_CONFIRMED: Client has confirmed (terminal before publishing)
+ *
  * Do NOT invent additional transitions or add PUBLISHED without explicit human
  * approval; the colocated spec asserts this table stays complete and frozen.
  */
@@ -25,6 +31,7 @@ export const CONTENT_STATUS_TRANSITIONS: Readonly<
 > = Object.freeze({
   [ContentStatus.DRAFT]: Object.freeze([
     ContentStatus.IN_REVIEW,
+    ContentStatus.AWAITING_MANAGER_APPROVAL,
     ContentStatus.ARCHIVED,
   ]),
   [ContentStatus.IN_REVIEW]: Object.freeze([
@@ -36,6 +43,16 @@ export const CONTENT_STATUS_TRANSITIONS: Readonly<
   ]),
   [ContentStatus.APPROVED]: Object.freeze([ContentStatus.ARCHIVED]),
   [ContentStatus.ARCHIVED]: Object.freeze([] as ContentStatus[]),
+  // Phase 2 workflow states
+  [ContentStatus.AWAITING_MANAGER_APPROVAL]: Object.freeze([
+    ContentStatus.UNDER_CLIENT_REVIEW,
+    ContentStatus.DRAFT,
+  ]),
+  [ContentStatus.UNDER_CLIENT_REVIEW]: Object.freeze([
+    ContentStatus.FINAL_CONFIRMED,
+    ContentStatus.AWAITING_MANAGER_APPROVAL,
+  ]),
+  [ContentStatus.FINAL_CONFIRMED]: Object.freeze([ContentStatus.ARCHIVED]),
 });
 
 /**
@@ -63,19 +80,43 @@ export const CONTENT_TRANSITION_AUTHORITY: Readonly<
     'AGENCY_ADMIN',
     'CLIENT_OWNER',
   ] as const),
+  // Phase 2 workflow transitions
+  'DRAFT->AWAITING_MANAGER_APPROVAL': Object.freeze(['AGENCY_ADMIN'] as const),
+  'AWAITING_MANAGER_APPROVAL->UNDER_CLIENT_REVIEW': Object.freeze([
+    'AGENCY_ADMIN',
+  ] as const),
+  'AWAITING_MANAGER_APPROVAL->DRAFT': Object.freeze(['AGENCY_ADMIN'] as const),
+  'UNDER_CLIENT_REVIEW->FINAL_CONFIRMED': Object.freeze([
+    'CLIENT_OWNER',
+  ] as const),
+  'UNDER_CLIENT_REVIEW->AWAITING_MANAGER_APPROVAL': Object.freeze([
+    'CLIENT_OWNER',
+  ] as const),
+  'FINAL_CONFIRMED->ARCHIVED': Object.freeze([
+    'AGENCY_ADMIN',
+    'CLIENT_OWNER',
+  ] as const),
 });
 
 /** The edit-after-approval revert (approved rule D7). */
 export const EDIT_REVERT_FROM: ContentStatus = ContentStatus.APPROVED;
 export const EDIT_REVERT_TO: ContentStatus = ContentStatus.DRAFT;
 
-/** The approved V1 Content status values (spec-asserted against the Prisma enum). */
+/**
+ * The approved Content status values (spec-asserted against the Prisma enum).
+ * Phase 2 (Unified Content & AI Foundation) added the three workflow states
+ * below; the set must stay equal to the Prisma `ContentStatus` enum.
+ */
 export const CONTENT_STATUSES = Object.freeze([
   'DRAFT',
   'IN_REVIEW',
   'CHANGES_REQUESTED',
   'APPROVED',
   'ARCHIVED',
+  // Phase 2 workflow states
+  'AWAITING_MANAGER_APPROVAL',
+  'UNDER_CLIENT_REVIEW',
+  'FINAL_CONFIRMED',
 ] as const);
 
 export function transitionKey(
@@ -83,6 +124,47 @@ export function transitionKey(
   to: ContentStatus,
 ): string {
   return `${from}->${to}`;
+}
+
+/**
+ * Statuses in which a Content item is STRICTLY IMMUTABLE (Phase 2 final
+ * confirmation gate). In these states the item refuses new revisions, edits,
+ * change requests, and AI tasks.
+ *
+ * APPROVED is deliberately NOT listed: the approved rule D7 lets an edit revert
+ * an APPROVED item back to DRAFT with a fresh revision.
+ */
+export const IMMUTABLE_CONTENT_STATUSES = Object.freeze([
+  ContentStatus.FINAL_CONFIRMED,
+  ContentStatus.ARCHIVED,
+] as const);
+
+/** Whether the item is locked against every mutation but archiving. */
+export function isContentImmutable(status: ContentStatus): boolean {
+  return (IMMUTABLE_CONTENT_STATUSES as readonly ContentStatus[]).includes(
+    status,
+  );
+}
+
+/**
+ * Statuses that refuse a NEW change request.
+ *
+ *   - APPROVED / FINAL_CONFIRMED: the Client already gave Final Confirmation and
+ *     the machine allows only ARCHIVED from here, so a change request could
+ *     never be acted upon - accepting one would be a silent dead end.
+ *   - ARCHIVED: the item is retired.
+ */
+export const CHANGE_REQUEST_LOCKED_STATUSES = Object.freeze([
+  ContentStatus.APPROVED,
+  ContentStatus.FINAL_CONFIRMED,
+  ContentStatus.ARCHIVED,
+] as const);
+
+/** Whether new change requests are refused in this status. */
+export function isChangeRequestLocked(status: ContentStatus): boolean {
+  return (CHANGE_REQUEST_LOCKED_STATUSES as readonly ContentStatus[]).includes(
+    status,
+  );
 }
 
 /** Whether the status machine permits this edge at all (actor aside). */

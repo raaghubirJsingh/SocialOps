@@ -33,8 +33,15 @@ import { RequireMinimumRole } from '../rbac/decorators/require-roles.decorator.j
 import { RoleGuard } from '../rbac/guards/role.guard.js';
 import { ContentStatusService } from './content-status.service.js';
 import { ContentService } from './content.service.js';
+import { AIAgentService } from './ai-agent.service.js';
+import { ChangeRequestService } from './change-request.service.js';
 import { createContentSchema } from './dto/create-content.dto.js';
 import type { CreateContentDto } from './dto/create-content.dto.js';
+import { createInternalNoteSchema } from './dto/create-internal-note.dto.js';
+import type { CreateInternalNoteDto } from './dto/create-internal-note.dto.js';
+import { processAiTaskSchema } from './dto/process-ai-task.dto.js';
+import type { ProcessAiTaskDto } from './dto/process-ai-task.dto.js';
+import { InternalNoteService } from './internal-note.service.js';
 import {
   listContentQuerySchema,
   normaliseListContentQuery,
@@ -68,6 +75,9 @@ export class ContentController {
     private readonly clientsService: ClientsService,
     private readonly contentService: ContentService,
     private readonly statusService: ContentStatusService,
+    private readonly changeRequestService: ChangeRequestService,
+    private readonly internalNoteService: InternalNoteService,
+    private readonly aiAgentService: AIAgentService,
   ) {}
 
   @Get()
@@ -102,11 +112,14 @@ export class ContentController {
     @Body(new ZodValidationPipe(createContentSchema)) dto: unknown,
   ) {
     await this.requireClientInScope(clientId, organization.id);
-    return this.contentService.create(
+    return this.contentService.create({
       clientId,
-      user.sub,
-      dto as CreateContentDto,
-    );
+      actorUserId: user.sub,
+      // Server-verified managing Agency: the organization context was proven by
+      // the global OrganizationMembershipGuard, never supplied by the client.
+      agencyId: organization.id,
+      dto: dto as CreateContentDto,
+    });
   }
 
   @Get(':contentId/revisions')
@@ -199,6 +212,134 @@ export class ContentController {
       actorUserId: user.sub,
       to: body.to,
       note: body.note,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Internal Notes (Phase 2) - AGENCY ONLY, never returned to a Client
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Read the Agency's internal discussion thread for one Content item.
+   *
+   * The route lives on the AGENCY controller only: there is deliberately no
+   * Client counterpart, and InternalNoteService filters by the verified
+   * `agencyId` so one Agency can never read another Agency's notes. Notes for a
+   * Content item the Client has moved to a different Agency remain invisible to
+   * the new Agency as well.
+   */
+  @Get(':contentId/internal-notes')
+  @ApiOperation({ summary: 'List internal notes (Agency only).' })
+  @ApiOkResponse({ description: 'Internal notes, newest first.' })
+  @ApiNotFoundResponse({ description: 'Content not found for this Client.' })
+  async listInternalNotes(
+    @CurrentOrganization() organization: RequestOrganizationContext,
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Param('contentId', ParseUUIDPipe) contentId: string,
+  ) {
+    await this.requireClientInScope(clientId, organization.id);
+    return this.internalNoteService.listForContent(
+      clientId,
+      contentId,
+      organization.id,
+    );
+  }
+
+  /**
+   * Write an internal note. Allows MEMBER (not just ADMIN) because an internal
+   * note is non-destructive, agency-internal commentary - it never changes the
+   * Client-visible artifact. AI Employees write notes this way under the
+   * ordinary MEMBER role; the authorId is always the authenticated subject.
+   */
+  @Post(':contentId/internal-notes')
+  @HttpCode(201)
+  @UseGuards(RoleGuard)
+  @RequireMinimumRole('MEMBER')
+  @ApiOperation({ summary: 'Create an internal note (Agency only).' })
+  @ApiCreatedResponse({ description: 'The created InternalNote row.' })
+  @ApiForbiddenResponse({ description: 'Requires MEMBER or above.' })
+  @ApiNotFoundResponse({ description: 'Content not found for this Client.' })
+  async createInternalNote(
+    @CurrentUser() user: JwtAccessPayload,
+    @CurrentOrganization() organization: RequestOrganizationContext,
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Param('contentId', ParseUUIDPipe) contentId: string,
+    @Body(new ZodValidationPipe(createInternalNoteSchema)) dto: unknown,
+  ) {
+    await this.requireClientInScope(clientId, organization.id);
+    return this.internalNoteService.create({
+      contentId,
+      clientId,
+      // The Agency scoping key is the VERIFIED organization id, never input.
+      agencyId: organization.id,
+      // Audit trail: the authenticated user (human Manager or AI bot) is the
+      // author; an authorId is never accepted from the body.
+      authorId: user.sub,
+      body: (dto as CreateInternalNoteDto).body,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Change Requests (Phase 2) - raised by the Client, reviewed by the Agency
+  // ---------------------------------------------------------------------------
+
+  @Get(':contentId/change-requests')
+  @ApiOperation({
+    summary: 'List change requests for one item (Agency view).',
+  })
+  @ApiOkResponse({ description: 'Change requests, newest first.' })
+  @ApiNotFoundResponse({ description: 'Content not found for this Client.' })
+  async listChangeRequests(
+    @CurrentOrganization() organization: RequestOrganizationContext,
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Param('contentId', ParseUUIDPipe) contentId: string,
+  ) {
+    await this.requireClientInScope(clientId, organization.id);
+    return this.changeRequestService.listForContent(clientId, contentId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // AI Employee Fleet (Phase 2) - mocked LLM output, real audit trail
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Dispatch a task to an AI Employee.
+   *
+   * `/ai-tasks` returns 202-style semantic ("accepted") but the work is
+   * synchronous for now: the LLM call is mocked, so the row is already written
+   * when the response is returned. The Agency (OWNER/ADMIN) dispatches; the AI
+   * Employee must itself hold the MEMBER role of this Organization, verified
+   * again inside AIAgentService (AGENTS.md §7 - `isBot` is never authority).
+   */
+  @Post(':contentId/ai-tasks')
+  @HttpCode(201)
+  @UseGuards(RoleGuard)
+  @RequireMinimumRole('ADMIN')
+  @ApiOperation({
+    summary: 'Process a mocked AI task and store it under the AI User id.',
+    description:
+      'Dispatches a task to a User with isBot = true that holds the MEMBER role in this Organization. The mocked output is stored as an insert-only ContentRevision or InternalNote authored by that AI User.',
+  })
+  @ApiCreatedResponse({ description: 'The stored revision or note.' })
+  @ApiForbiddenResponse({
+    description: 'Requires OWNER/ADMIN, or the AI User is not a MEMBER.',
+  })
+  @ApiNotFoundResponse({ description: 'Content not found for this Client.' })
+  async processAiTask(
+    @CurrentOrganization() organization: RequestOrganizationContext,
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Param('contentId', ParseUUIDPipe) contentId: string,
+    @Body(new ZodValidationPipe(processAiTaskSchema)) dto: unknown,
+  ) {
+    await this.requireClientInScope(clientId, organization.id);
+    const body = dto as ProcessAiTaskDto;
+    return this.aiAgentService.processAiTask({
+      contentId,
+      clientId,
+      aiUserId: body.aiUserId,
+      agencyId: organization.id,
+      prompt: body.prompt,
+      outputType: body.outputType,
     });
   }
 

@@ -11,6 +11,37 @@ export const CONTENT_SELECT = {
   title: true,
   body: true,
   status: true,
+  // Phase 2: scenario and agency tracking
+  scenarioType: true,
+  agencyId: true,
+  finalConfirmedAt: true,
+  finalConfirmedByUserId: true,
+  finalConfirmedRevisionId: true,
+  archivedAt: true,
+  createdByUserId: true,
+  updatedByUserId: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+/**
+ * Client-safe Content SELECT: NEVER includes an agency-internal column.
+ *
+ * Excluded by construction (Phase 2 strict data boundary):
+ *   - `internalNotes` - the Agency-only discussion / AI commentary thread;
+ *   - `agencyId` - the managing Agency's Organization id.
+ *
+ * The interceptor layer (ClientBoundaryInterceptor) strips the same keys again
+ * if they ever arrive from a nested relation, so a single SELECT mistake cannot
+ * leak agency internals to a Client.
+ */
+export const CLIENT_CONTENT_SELECT = {
+  id: true,
+  clientId: true,
+  title: true,
+  body: true,
+  status: true,
+  scenarioType: true,
   finalConfirmedAt: true,
   finalConfirmedByUserId: true,
   finalConfirmedRevisionId: true,
@@ -58,5 +89,30 @@ export const RAW_DATA_SELECT = {
   byteSize: true,
   capturedAt: true,
   capturedByUserId: true,
+  createdAt: true,
+} as const;
+
+/**
+ * InternalNote SELECT - AGENCY ONLY. These rows must NEVER be returned to a
+ * Client. The InternalNoteService enforces this at the query level
+ * (agencyId filter), and the ClientBoundaryInterceptor strips any leaked data.
+ */
+export const INTERNAL_NOTE_SELECT = {
+  id: true,
+  contentId: true,
+  agencyId: true,
+  authorId: true,
+  body: true,
+  createdAt: true,
+} as const;
+
+/**
+ * ChangeRequest SELECT - visible to both Agency and the requesting Client.
+ */
+export const CHANGE_REQUEST_SELECT = {
+  id: true,
+  contentId: true,
+  requestedById: true,
+  requestDetails: true,
   createdAt: true,
 } as const;

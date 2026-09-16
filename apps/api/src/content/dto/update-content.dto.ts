@@ -13,6 +13,11 @@ import { createContentSchema } from './create-content.dto.js';
  * stale editor cannot silently overwrite newer text.
  */
 export const updateContentSchema = createContentSchema
+  // `scenarioType` classifies the pipeline a Content item was CREATED for and is
+  // immutable afterwards: reclassification would retroactively change which
+  // business rules (e.g. the SCENARIO_1 change-request cap) apply. It is
+  // therefore stripped from the edit contract entirely.
+  .omit({ scenarioType: true })
   .partial()
   .extend({
     expectedRevision: z.number().int().positive().optional(),

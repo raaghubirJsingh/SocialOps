@@ -9,6 +9,7 @@ import {
   Post,
   Query,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import type { Client } from '@prisma/client';
 import {
@@ -25,10 +26,14 @@ import { CurrentClient } from '../clients/decorators/current-client.decorator.js
 import { ClientAccessGuard } from '../clients/guards/client-access.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { Public } from '../rbac/decorators/public.decorator.js';
+import { ChangeRequestService } from './change-request.service.js';
+import { ClientBoundaryInterceptor } from './client-boundary.interceptor.js';
 import { ContentStatusService } from './content-status.service.js';
 import { ContentService } from './content.service.js';
 import { confirmFinalContentSchema } from './dto/confirm-final.dto.js';
 import type { ConfirmFinalContentDto } from './dto/confirm-final.dto.js';
+import { createChangeRequestSchema } from './dto/create-change-request.dto.js';
+import type { CreateChangeRequestDto } from './dto/create-change-request.dto.js';
 import { createContentSchema } from './dto/create-content.dto.js';
 import type { CreateContentDto } from './dto/create-content.dto.js';
 import {
@@ -57,10 +62,12 @@ import type { UpdateContentDto } from './dto/update-content.dto.js';
 @ApiTags('content')
 @ApiBearerAuth()
 @Controller('client/me/content')
+@UseInterceptors(ClientBoundaryInterceptor)
 export class ContentMeController {
   constructor(
     private readonly contentService: ContentService,
     private readonly statusService: ContentStatusService,
+    private readonly changeRequestService: ChangeRequestService,
   ) {}
 
   @Get()
@@ -73,7 +80,9 @@ export class ContentMeController {
     @CurrentClient() client: Client,
     @Query(new ZodValidationPipe(listContentQuerySchema)) query: unknown,
   ) {
-    return this.contentService.listForClient(
+    // Client-safe projection: agencyId and internalNotes never leave the API
+    // boundary (Phase 2 strict data boundary).
+    return this.contentService.listForOwningClient(
       client.id,
       normaliseListContentQuery(query as ListContentQueryDto),
     );
@@ -89,11 +98,13 @@ export class ContentMeController {
     @CurrentClient() client: Client,
     @Body(new ZodValidationPipe(createContentSchema)) dto: unknown,
   ) {
-    return this.contentService.create(
-      client.id,
-      client.ownerUserId as string,
-      dto as CreateContentDto,
-    );
+    // No agencyId argument: a Client has no organization context, so the
+    // service resolves the managing Agency from the ACTIVE relationship.
+    return this.contentService.create({
+      clientId: client.id,
+      actorUserId: client.ownerUserId as string,
+      dto: dto as CreateContentDto,
+    });
   }
 
   @Get(':contentId/revisions')
@@ -130,7 +141,8 @@ export class ContentMeController {
     @CurrentClient() client: Client,
     @Param('contentId', ParseUUIDPipe) contentId: string,
   ) {
-    return this.contentService.findOneForClient(client.id, contentId);
+    // Client-safe projection: no agencyId, no internalNotes.
+    return this.contentService.findOneForOwningClient(client.id, contentId);
   }
 
   @Patch(':contentId')
@@ -207,5 +219,84 @@ export class ContentMeController {
       actorUserId: client.ownerUserId as string,
       note: (dto as ConfirmFinalContentDto).note,
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Final Confirmed Lock (Phase 2) - the Client owner's lock, UNDER_CLIENT_REVIEW
+  // -> FINAL_CONFIRMED. Reachable ONLY here, exactly like APPROVED is reachable
+  // only through final-confirmation above.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Lock the item at FINAL_CONFIRMED.
+   *
+   * After this call the content is strictly immutable: no edits, no further
+   * revisions, and no new change requests. The status machine allows only
+   * ARCHIVED from here, and the frozen revision hash written in the same
+   * transaction is what a future Publishing step must verify.
+   */
+  @Post(':contentId/final-confirmed-lock')
+  @Public()
+  @UseGuards(ClientAccessGuard)
+  @ApiOperation({
+    summary: 'Lock content at FINAL_CONFIRMED (immutable afterwards).',
+    description:
+      'The Client owner finalises the UNDER_CLIENT_REVIEW item. Writes the immutable revision snapshot and the confirmation triple atomically; the item refuses every later edit, revision and change request.',
+  })
+  @ApiOkResponse({ description: 'The FINAL_CONFIRMED Content row.' })
+  @ApiNotFoundResponse({ description: 'Not found for this Client.' })
+  confirmFinalLocked(
+    @CurrentClient() client: Client,
+    @Param('contentId', ParseUUIDPipe) contentId: string,
+    @Body(new ZodValidationPipe(confirmFinalContentSchema)) dto: unknown,
+  ) {
+    return this.statusService.confirmFinalLocked({
+      clientId: client.id,
+      contentId,
+      actorUserId: client.ownerUserId as string,
+      note: (dto as ConfirmFinalContentDto).note,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Change Requests (Phase 2)
+  // ---------------------------------------------------------------------------
+
+  @Post(':contentId/change-requests')
+  @HttpCode(201)
+  @Public()
+  @UseGuards(ClientAccessGuard)
+  @ApiOperation({
+    summary: 'Create a change request for a Content item.',
+    description:
+      'The Client owner submits a change request. SCENARIO_1 content is limited to a maximum of 2 change requests (enforced server-side).',
+  })
+  @ApiCreatedResponse({ description: 'The created ChangeRequest row.' })
+  @ApiNotFoundResponse({ description: 'Not found for this Client.' })
+  createChangeRequest(
+    @CurrentClient() client: Client,
+    @Param('contentId', ParseUUIDPipe) contentId: string,
+    @Body(new ZodValidationPipe(createChangeRequestSchema)) dto: unknown,
+  ) {
+    const body = dto as CreateChangeRequestDto;
+    return this.changeRequestService.create({
+      contentId,
+      clientId: client.id,
+      requestedById: client.ownerUserId as string,
+      requestDetails: body.requestDetails,
+    });
+  }
+
+  @Get(':contentId/change-requests')
+  @Public()
+  @UseGuards(ClientAccessGuard)
+  @ApiOperation({ summary: 'List change requests for a Content item.' })
+  @ApiOkResponse({ description: 'Change requests, newest first.' })
+  @ApiNotFoundResponse({ description: 'Not found for this Client.' })
+  listChangeRequests(
+    @CurrentClient() client: Client,
+    @Param('contentId', ParseUUIDPipe) contentId: string,
+  ) {
+    return this.changeRequestService.listForContent(client.id, contentId);
   }
 }

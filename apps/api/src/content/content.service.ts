@@ -3,10 +3,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ContentStatus } from '@prisma/client';
+import { AgencyRelationshipStatus, ContentStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service.js';
-import { CONTENT_SELECT } from './content.select.js';
+import { CLIENT_CONTENT_SELECT, CONTENT_SELECT } from './content.select.js';
+import { isContentImmutable } from './constants/content-transitions.js';
 import { contentHashOf } from './content-hash.js';
 import type { CreateContentDto } from './dto/create-content.dto.js';
 import type { ListContentQuery } from './dto/list-content.dto.js';
@@ -27,6 +28,11 @@ import type { UpdateContentDto } from './dto/update-content.dto.js';
  * Defaults applied here: an edit while IN_REVIEW is rejected (D4), an edit of
  * ARCHIVED content is rejected, and `expectedRevision` gives optional
  * optimistic concurrency (D5).
+ *
+ * Phase 2 (Unified Content & AI Foundation) adds one more gate: an edit of
+ * FINAL_CONFIRMED (locked) content is rejected with 409 CONTENT_LOCKED, so the
+ * frozen revision a Client confirmed can never be rewritten. `scenarioType` is
+ * never editable - it is classification metadata fixed at creation.
  */
 @Injectable()
 export class ContentService {
@@ -44,6 +50,39 @@ export class ContentService {
     });
   }
 
+  /**
+   * Client-safe list (Phase 2 strict data boundary).
+   *
+   * Identical tenant scoping to `listForClient`, but every row is projected
+   * through CLIENT_CONTENT_SELECT so `agencyId` and `internalNotes` never leave
+   * PostgreSQL in the first place. This is the query-level half of the Client
+   * isolation guarantee; ClientBoundaryInterceptor is the second half.
+   */
+  listForOwningClient(clientId: string, filters: ListContentQuery) {
+    return this.prisma.content.findMany({
+      where: {
+        clientId,
+        ...(filters.status ? { status: filters.status } : {}),
+      },
+      select: CLIENT_CONTENT_SELECT,
+      orderBy: { createdAt: 'desc' },
+      take: filters.take,
+    });
+  }
+
+  /**
+   * Client-safe single read (Phase 2 strict data boundary): a miss - including a
+   * miss caused by another Client's contentId - is a uniform 404.
+   */
+  async findOneForOwningClient(clientId: string, contentId: string) {
+    const content = await this.prisma.content.findFirst({
+      where: { id: contentId, clientId },
+      select: CLIENT_CONTENT_SELECT,
+    });
+    if (!content) throw new NotFoundException('Content not found');
+    return content;
+  }
+
   /** Tenant-scoped single read: a miss is a uniform 404. */
   async findOneForClient(clientId: string, contentId: string) {
     const content = await this.prisma.content.findFirst({
@@ -57,19 +96,46 @@ export class ContentService {
   /**
    * Create a DRAFT with its initial immutable revision. `status` is never taken
    * from the request, so nothing can be born APPROVED.
+   *
+   * `agencyId` is the VERIFIED organization id resolved server-side by the
+   * agency controller - never a client-supplied value - and is snapshotted so
+   * the managing Agency at creation time stays auditable even if the Client
+   * later moves to a different Agency. When the caller is the Client itself
+   * (no organization context), the ACTIVE ClientAgencyRelationship is read
+   * inside the same transaction instead; a Client with no active Agency simply
+   * records NULL. `scenarioType` is optional classification for the
+   * 3-scenario pipeline.
    */
-  async create(
-    clientId: string,
-    actorUserId: string,
-    dto: CreateContentDto,
-  ) {
+  async create(params: {
+    clientId: string;
+    actorUserId: string;
+    agencyId?: string;
+    dto: CreateContentDto;
+  }) {
+    const { clientId, actorUserId, dto } = params;
+
     return this.prisma.$transaction(async (tx) => {
+      // The managing Agency is always resolved server-side. A caller-supplied
+      // value is used only after the agency controller has proven it is the
+      // verified organization context AND the Client is in its scope.
+      const agencyId =
+        params.agencyId ??
+        (
+          await tx.clientAgencyRelationship.findFirst({
+            where: { clientId, status: AgencyRelationshipStatus.ACTIVE },
+            select: { organizationId: true },
+          })
+        )?.organizationId ??
+        null;
+
       const content = await tx.content.create({
         data: {
           clientId,
           title: dto.title,
           body: dto.body,
           status: ContentStatus.DRAFT,
+          scenarioType: dto.scenarioType ?? null,
+          agencyId,
           createdByUserId: actorUserId,
           updatedByUserId: actorUserId,
         },
@@ -119,6 +185,15 @@ export class ContentService {
         throw new ConflictException({
           code: 'CONTENT_ARCHIVED',
           message: 'Archived content cannot be edited',
+        });
+      }
+      // Phase 2 final-confirmation gate: FINAL_CONFIRMED text is FROZEN. Unlike
+      // the APPROVED revert (rule D7) there is no edit path out of it - the
+      // confirmation triple is never cleared, so no further revision may exist.
+      if (isContentImmutable(current.status)) {
+        throw new ConflictException({
+          code: 'CONTENT_LOCKED',
+          message: `Content is locked at ${current.status} and cannot be edited`,
         });
       }
 

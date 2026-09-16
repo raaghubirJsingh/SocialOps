@@ -15,6 +15,7 @@ import {
 import { contentHashOf } from './content-hash.js';
 import {
   canTransition,
+  isContentImmutable,
   mayActorPerform,
   type ContentTransitionActor,
 } from './constants/content-transitions.js';
@@ -90,6 +91,13 @@ export class ContentStatusService {
           code: 'CONFIRMATION_REQUIRED',
           message:
             'APPROVED is reachable only through the final-confirmation endpoint',
+        });
+      }
+      if (to === ContentStatus.FINAL_CONFIRMED) {
+        throw new ConflictException({
+          code: 'FINAL_LOCK_REQUIRED',
+          message:
+            'FINAL_CONFIRMED is reachable only through the final-confirmed-lock endpoint',
         });
       }
       if (!canTransition(current.status, to)) {
@@ -206,6 +214,99 @@ export class ContentStatusService {
           clientId,
           fromStatus: ContentStatus.IN_REVIEW,
           toStatus: ContentStatus.APPROVED,
+          actorUserId,
+          actorRole: 'CLIENT_OWNER',
+          note: note ?? null,
+        },
+      });
+
+      return updated;
+    });
+  }
+
+  /**
+   * FINAL CONFIRMATION LOCK - the single door to FINAL_CONFIRMED (client owner).
+   *
+   * Where confirmFinal() is the Client Operations V1 door to APPROVED, this is
+   * the Phase 2 door to the locked FINAL_CONFIRMED state of the 3-scenario
+   * pipeline. It performs the same four atomic writes:
+   *   1. append the immutable ContentRevision snapshot of the exact text;
+   *   2. record its SHA-256 via `contentHashOf(title, body)`;
+   *   3. write the confirmation triple (at / by / revision id) on Content;
+   *   4. append the UNDER_CLIENT_REVIEW -> FINAL_CONFIRMED audit event.
+   *
+   * The triple is what makes the lock verifiable rather than merely asserted:
+   * `isContentImmutable()` refuses further edits and revisions downstream, the
+   * status machine allows only ARCHIVED from FINAL_CONFIRMED, and a future
+   * Publishing step can trust the frozen revision hash.
+   *
+   * FINAL_CONFIRMED is reachable ONLY here: the generic transition route refuses
+   * it as a target (see ContentStatusService.transition), exactly like APPROVED.
+   */
+  async confirmFinalLocked(params: {
+    clientId: string;
+    contentId: string;
+    actorUserId: string;
+    note?: string;
+  }) {
+    const { clientId, contentId, actorUserId, note } = params;
+
+    return this.prisma.$transaction(async (tx) => {
+      const content = await tx.content.findFirst({
+        where: { id: contentId, clientId },
+      });
+      if (!content) throw new NotFoundException('Content not found');
+
+      // Idempotency / double-lock guard: an item that is already locked can
+      // never be locked again (and never silently re-snapshotted).
+      if (isContentImmutable(content.status)) {
+        throw new ConflictException({
+          code: 'CONTENT_LOCKED',
+          message: `Content is locked at ${content.status} and cannot be changed`,
+        });
+      }
+      if (content.status !== ContentStatus.UNDER_CLIENT_REVIEW) {
+        throw new ConflictException({
+          code: 'INVALID_CONTENT_STATUS',
+          message: 'Final confirmation lock requires status UNDER_CLIENT_REVIEW',
+        });
+      }
+
+      const latest = await tx.contentRevision.aggregate({
+        where: { contentId },
+        _max: { revision: true },
+      });
+
+      const snapshot = await tx.contentRevision.create({
+        data: {
+          contentId,
+          clientId,
+          revision: (latest._max.revision ?? 0) + 1,
+          title: content.title,
+          body: content.body,
+          contentHash: contentHashOf(content.title, content.body),
+          createdByUserId: actorUserId,
+        },
+      });
+
+      const updated = await tx.content.update({
+        where: { id: contentId },
+        data: {
+          status: ContentStatus.FINAL_CONFIRMED,
+          finalConfirmedAt: new Date(),
+          finalConfirmedByUserId: actorUserId,
+          finalConfirmedRevisionId: snapshot.id,
+          updatedByUserId: actorUserId,
+        },
+        select: CONTENT_SELECT,
+      });
+
+      await tx.contentStatusEvent.create({
+        data: {
+          contentId,
+          clientId,
+          fromStatus: ContentStatus.UNDER_CLIENT_REVIEW,
+          toStatus: ContentStatus.FINAL_CONFIRMED,
           actorUserId,
           actorRole: 'CLIENT_OWNER',
           note: note ?? null,

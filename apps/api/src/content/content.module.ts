@@ -2,10 +2,13 @@ import { Module } from '@nestjs/common';
 
 import { ClientsModule } from '../clients/clients.module.js';
 import { PrismaModule } from '../prisma/prisma.module.js';
+import { AIAgentService } from './ai-agent.service.js';
+import { ChangeRequestService } from './change-request.service.js';
 import { ContentMeController } from './content-me.controller.js';
 import { ContentStatusService } from './content-status.service.js';
 import { ContentController } from './content.controller.js';
 import { ContentService } from './content.service.js';
+import { InternalNoteService } from './internal-note.service.js';
 import { RawDataMeController } from './raw-data-me.controller.js';
 import { RawDataController } from './raw-data.controller.js';
 import { RawDataService } from './raw-data.service.js';
@@ -19,6 +22,16 @@ import { RawDataService } from './raw-data.service.js';
  * implement publishing, distribution, analytics, per-platform variants, OAuth,
  * or S3/object storage - those remain deferred (AGENTS.md section 13). APPROVED
  * is the terminal status: no PUBLISHED value exists.
+ *
+ * Phase 2 (Unified Content & AI Foundation) adds, on top of the above:
+ *   - the 3-scenario pipeline tag and the SCENARIO_1 max-2 change-request cap
+ *     (ChangeRequestService);
+ *   - the FINAL_CONFIRMED lock (ContentStatusService.confirmFinalLocked);
+ *   - the Agency-only InternalNote boundary (InternalNoteService) and the
+ *     ClientBoundaryInterceptor that strips agency internals from Client
+ *     responses as defense-in-depth;
+ *   - the AI Employee fleet foundation (AIAgentService), whose mocked LLM
+ *     output is stored under the AI User's own id for a clean audit trail.
  *
  * Authorization is inherited exactly like the social-accounts module: the two
  * agency controllers rely on the global guards plus per-route RoleGuard and
@@ -34,7 +47,21 @@ import { RawDataService } from './raw-data.service.js';
     RawDataController,
     RawDataMeController,
   ],
-  providers: [ContentService, ContentStatusService, RawDataService],
-  exports: [ContentService, ContentStatusService, RawDataService],
+  providers: [
+    ContentService,
+    ContentStatusService,
+    RawDataService,
+    ChangeRequestService,
+    InternalNoteService,
+    AIAgentService,
+  ],
+  exports: [
+    ContentService,
+    ContentStatusService,
+    RawDataService,
+    ChangeRequestService,
+    InternalNoteService,
+    AIAgentService,
+  ],
 })
 export class ContentModule {}

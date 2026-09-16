@@ -266,4 +266,135 @@ describe('ContentStatusService.confirmFinal', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(tx.contentRevision.create).not.toHaveBeenCalled();
   });
+describe('ContentStatusService.confirmFinalLocked - FINAL_CONFIRMED lock', () => {
+  it('writes the snapshot, the confirmation triple, and the audit event', async () => {
+    const tx = makeTxMock();
+    asMock(tx.content.findFirst).mockResolvedValue({
+      id: CONTENT_ID,
+      status: ContentStatus.UNDER_CLIENT_REVIEW,
+      finalConfirmedAt: null,
+      title: 'Locked title',
+      body: 'Locked body',
+    });
+    asMock(tx.contentRevision.aggregate).mockResolvedValue({
+      _max: { revision: 2 },
+    });
+    asMock(tx.contentRevision.create).mockResolvedValue({ id: 'rev-3' });
+    asMock(tx.content.update).mockResolvedValue({
+      id: CONTENT_ID,
+      status: ContentStatus.FINAL_CONFIRMED,
+    });
+    const { service } = makeService(tx);
+
+    await service.confirmFinalLocked({
+      clientId: CLIENT_ID,
+      contentId: CONTENT_ID,
+      actorUserId: USER_ID,
+      note: 'client locked it',
+    });
+
+    expect(tx.contentRevision.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          revision: 3,
+          title: 'Locked title',
+          body: 'Locked body',
+          contentHash: contentHashOf('Locked title', 'Locked body'),
+          createdByUserId: USER_ID,
+        }),
+      }),
+    );
+
+    const updateArgs = asMock(tx.content.update).mock.calls[0][0] as {
+      data: Record<string, unknown>;
+    };
+    expect(updateArgs.data.status).toBe(ContentStatus.FINAL_CONFIRMED);
+    expect(updateArgs.data.finalConfirmedAt).toBeInstanceOf(Date);
+    expect(updateArgs.data.finalConfirmedByUserId).toBe(USER_ID);
+    expect(updateArgs.data.finalConfirmedRevisionId).toBe('rev-3');
+
+    expect(tx.contentStatusEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          fromStatus: ContentStatus.UNDER_CLIENT_REVIEW,
+          toStatus: ContentStatus.FINAL_CONFIRMED,
+          actorRole: 'CLIENT_OWNER',
+        }),
+      }),
+    );
+  });
+
+  it('requires status UNDER_CLIENT_REVIEW', async () => {
+    const tx = makeTxMock();
+    asMock(tx.content.findFirst).mockResolvedValue({
+      id: CONTENT_ID,
+      status: ContentStatus.DRAFT,
+      finalConfirmedAt: null,
+    });
+    const { service } = makeService(tx);
+
+    await expect(
+      service.confirmFinalLocked({
+        clientId: CLIENT_ID,
+        contentId: CONTENT_ID,
+        actorUserId: USER_ID,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(tx.content.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses to re-lock already FINAL_CONFIRMED content', async () => {
+    const tx = makeTxMock();
+    asMock(tx.content.findFirst).mockResolvedValue({
+      id: CONTENT_ID,
+      status: ContentStatus.FINAL_CONFIRMED,
+      finalConfirmedAt: new Date(),
+    });
+    const { service } = makeService(tx);
+
+    await expect(
+      service.confirmFinalLocked({
+        clientId: CLIENT_ID,
+        contentId: CONTENT_ID,
+        actorUserId: USER_ID,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(tx.contentRevision.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses to lock APPROVED content (V1 door already confirmed it)', async () => {
+    const tx = makeTxMock();
+    asMock(tx.content.findFirst).mockResolvedValue({
+      id: CONTENT_ID,
+      status: ContentStatus.APPROVED,
+      finalConfirmedAt: new Date(),
+    });
+    const { service } = makeService(tx);
+
+    await expect(
+      service.confirmFinalLocked({
+        clientId: CLIENT_ID,
+        contentId: CONTENT_ID,
+        actorUserId: USER_ID,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('fails closed for another Client (uniform 404)', async () => {
+    const tx = makeTxMock();
+    asMock(tx.content.findFirst).mockResolvedValue(null);
+    const { service } = makeService(tx);
+
+    await expect(
+      service.confirmFinalLocked({
+        clientId: OTHER_CLIENT_ID,
+        contentId: CONTENT_ID,
+        actorUserId: USER_ID,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(tx.contentRevision.create).not.toHaveBeenCalled();
+  });
+});
+
+
 });

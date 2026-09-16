@@ -1,11 +1,15 @@
 import { ContentStatus } from '@prisma/client';
 
 import {
+  CHANGE_REQUEST_LOCKED_STATUSES,
   CONTENT_STATUSES,
   CONTENT_STATUS_TRANSITIONS,
   CONTENT_TRANSITION_AUTHORITY,
+  IMMUTABLE_CONTENT_STATUSES,
   allowedTransitionsFor,
   canTransition,
+  isChangeRequestLocked,
+  isContentImmutable,
   isEditOnlyTransition,
   mayActorPerform,
 } from './content-transitions.js';
@@ -30,10 +34,16 @@ describe('Client Operations V1 Content status machine (LOCKED)', () => {
   });
 
   it('permits exactly the approved transitions', () => {
-    expect([...allowedTransitionsFor(ContentStatus.DRAFT)]).toEqual([
-      ContentStatus.IN_REVIEW,
-      ContentStatus.ARCHIVED,
-    ]);
+    // Phase 2 amendment: DRAFT additionally reaches AWAITING_MANAGER_APPROVAL,
+    // the AI-draft-handover state of the approved 3-scenario pipeline. The V1
+    // edges are unchanged.
+    expect([...allowedTransitionsFor(ContentStatus.DRAFT)].sort()).toEqual(
+      [
+        ContentStatus.IN_REVIEW,
+        ContentStatus.AWAITING_MANAGER_APPROVAL,
+        ContentStatus.ARCHIVED,
+      ].sort(),
+    );
     expect([...allowedTransitionsFor(ContentStatus.IN_REVIEW)]).toEqual([
       ContentStatus.CHANGES_REQUESTED,
     ]);
@@ -132,5 +142,128 @@ describe('Client Operations V1 Content status machine (LOCKED)', () => {
     expect(Object.isFrozen(CONTENT_STATUS_TRANSITIONS)).toBe(true);
     expect(Object.isFrozen(CONTENT_TRANSITION_AUTHORITY)).toBe(true);
     expect(Object.isFrozen(CONTENT_STATUSES)).toBe(true);
+  });
+});
+
+describe('Phase 2 Unified Content & AI Foundation workflow (3 scenarios)', () => {
+  it('walks the AI pipeline DRAFT -> AWAITING_MANAGER_APPROVAL -> UNDER_CLIENT_REVIEW -> FINAL_CONFIRMED', () => {
+    expect(
+      canTransition(
+        ContentStatus.DRAFT,
+        ContentStatus.AWAITING_MANAGER_APPROVAL,
+      ),
+    ).toBe(true);
+    expect(
+      canTransition(
+        ContentStatus.AWAITING_MANAGER_APPROVAL,
+        ContentStatus.UNDER_CLIENT_REVIEW,
+      ),
+    ).toBe(true);
+    expect(
+      canTransition(
+        ContentStatus.UNDER_CLIENT_REVIEW,
+        ContentStatus.FINAL_CONFIRMED,
+      ),
+    ).toBe(true);
+  });
+
+  it('lets only the client owner send the item back for revision', () => {
+    expect(
+      mayActorPerform(
+        'CLIENT_OWNER',
+        ContentStatus.UNDER_CLIENT_REVIEW,
+        ContentStatus.AWAITING_MANAGER_APPROVAL,
+      ),
+    ).toBe(true);
+    expect(
+      mayActorPerform(
+        'AGENCY_ADMIN',
+        ContentStatus.UNDER_CLIENT_REVIEW,
+        ContentStatus.AWAITING_MANAGER_APPROVAL,
+      ),
+    ).toBe(false);
+    // The Agency may not self-approve into the client-review state either:
+    // AWAITING_MANAGER_APPROVAL -> UNDER_CLIENT_REVIEW IS the manager approval.
+    expect(
+      mayActorPerform(
+        'CLIENT_OWNER',
+        ContentStatus.AWAITING_MANAGER_APPROVAL,
+        ContentStatus.UNDER_CLIENT_REVIEW,
+      ),
+    ).toBe(false);
+  });
+
+  it('keeps the Phase 2 pipeline out of APPROVED', () => {
+    // APPROVED is the Client Operations V1 confirmation state; the Phase 2
+    // pipeline terminates at FINAL_CONFIRMED instead. Neither Phase 2 status may
+    // transition into APPROVED, and no authority entry may declare it.
+    expect(
+      allowedTransitionsFor(ContentStatus.AWAITING_MANAGER_APPROVAL),
+    ).not.toContain(ContentStatus.APPROVED);
+    expect(
+      allowedTransitionsFor(ContentStatus.UNDER_CLIENT_REVIEW),
+    ).not.toContain(ContentStatus.APPROVED);
+    expect(
+      allowedTransitionsFor(ContentStatus.FINAL_CONFIRMED),
+    ).not.toContain(ContentStatus.APPROVED);
+    expect(
+      CONTENT_TRANSITION_AUTHORITY['UNDER_CLIENT_REVIEW->APPROVED'],
+    ).toBeUndefined();
+    expect(
+      CONTENT_TRANSITION_AUTHORITY['AWAITING_MANAGER_APPROVAL->APPROVED'],
+    ).toBeUndefined();
+  });
+
+  it('locks FINAL_CONFIRMED against every mutation but archiving', () => {
+    expect(isContentImmutable(ContentStatus.FINAL_CONFIRMED)).toBe(true);
+    expect(isContentImmutable(ContentStatus.ARCHIVED)).toBe(true);
+    expect(isContentImmutable(ContentStatus.DRAFT)).toBe(false);
+    expect(isContentImmutable(ContentStatus.UNDER_CLIENT_REVIEW)).toBe(false);
+    // APPROVED is deliberately NOT immutable: rule D7 allows the edit revert.
+    expect(isContentImmutable(ContentStatus.APPROVED)).toBe(false);
+    // The only exit from the lock is archiving.
+    expect([...allowedTransitionsFor(ContentStatus.FINAL_CONFIRMED)]).toEqual([
+      ContentStatus.ARCHIVED,
+    ]);
+  });
+
+  it('refuses change requests once the client has confirmed', () => {
+    expect(isChangeRequestLocked(ContentStatus.FINAL_CONFIRMED)).toBe(true);
+    expect(isChangeRequestLocked(ContentStatus.APPROVED)).toBe(true);
+    expect(isChangeRequestLocked(ContentStatus.ARCHIVED)).toBe(true);
+    expect(isChangeRequestLocked(ContentStatus.UNDER_CLIENT_REVIEW)).toBe(
+      false,
+    );
+    expect(isChangeRequestLocked(ContentStatus.DRAFT)).toBe(false);
+  });
+
+  it('publishes the exact locked-status sets and freezes them', () => {
+    // Both sets are exactly as approved - no extra status may be locked, and a
+    // live-editable status may never be locked by accident.
+    expect(new Set(IMMUTABLE_CONTENT_STATUSES)).toEqual(
+      new Set([ContentStatus.FINAL_CONFIRMED, ContentStatus.ARCHIVED]),
+    );
+    expect(new Set(CHANGE_REQUEST_LOCKED_STATUSES)).toEqual(
+      new Set([
+        ContentStatus.APPROVED,
+        ContentStatus.FINAL_CONFIRMED,
+        ContentStatus.ARCHIVED,
+      ]),
+    );
+
+    // The two sets agree everywhere except APPROVED, which still allows the
+    // rule-D7 edit revert but accepts no new change requests.
+    for (const status of Object.values(ContentStatus)) {
+      if (isContentImmutable(status)) {
+        expect(isChangeRequestLocked(status)).toBe(true);
+      }
+    }
+    expect(IMMUTABLE_CONTENT_STATUSES).not.toContain(ContentStatus.APPROVED);
+    expect(CHANGE_REQUEST_LOCKED_STATUSES).toContain(ContentStatus.APPROVED);
+  });
+
+  it('freezes the Phase 2 lock sets (no runtime mutation)', () => {
+    expect(Object.isFrozen(IMMUTABLE_CONTENT_STATUSES)).toBe(true);
+    expect(Object.isFrozen(CHANGE_REQUEST_LOCKED_STATUSES)).toBe(true);
   });
 });
