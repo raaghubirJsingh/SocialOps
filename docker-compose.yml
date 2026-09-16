@@ -6,7 +6,11 @@ services:
     container_name: socialops_postgres
     environment:
       POSTGRES_USER: socialops
-      POSTGRES_PASSWORD: SocialOps_DB_2026!
+      # No credential literal is committed (AGENTS.md section 8). The password
+      # is read from the environment: set POSTGRES_PASSWORD in the ignored root
+      # .env file (see .env.example). `docker compose up` fails with a clear
+      # message while it is unset, rather than falling back to a known value.
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env and set it for local development}"
       POSTGRES_DB: socialops
     ports:
       - '5432:5432'
