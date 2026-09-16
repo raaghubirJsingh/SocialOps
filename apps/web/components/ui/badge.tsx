@@ -9,7 +9,7 @@ const badgeVariants = cva(
     variants: {
       variant: {
         neutral: 'border-white/10 bg-white/[0.06] text-slate-200',
-        muted: 'border-slate-800 bg-slate-900 text-slate-500',
+        muted: 'border-white/[0.06] bg-white/[0.02] text-slate-400',
         info: 'border-blue-900/60 bg-blue-950/40 text-blue-300',
         warning: 'border-amber-900/60 bg-amber-950/40 text-amber-300',
         danger: 'border-rose-900/60 bg-rose-950/40 text-rose-300',

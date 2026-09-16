@@ -63,7 +63,7 @@ export function EmployeeProfileCard() {
         {isError && (
           <p className="mt-2 text-sm text-red-400">
             Unable to load profile.{' '}
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-slate-400">
               ({(error as Error)?.message ?? 'unknown error'})
             </span>
           </p>

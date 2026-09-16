@@ -236,7 +236,7 @@ export function CreateClientForm({ onCreated, onCancel }: CreateClientFormProps)
 
           <div className="grid gap-2">
             <Label htmlFor="client-description" className="text-sm font-medium text-slate-300">
-              Description <span className="text-slate-500">(optional)</span>
+              Description <span className="text-slate-400">(optional)</span>
             </Label>
             <Input
               id="client-description"
@@ -251,7 +251,7 @@ export function CreateClientForm({ onCreated, onCancel }: CreateClientFormProps)
 
           <div className="grid gap-2">
             <Label htmlFor="client-website" className="text-sm font-medium text-slate-300">
-              Website <span className="text-slate-500">(optional)</span>
+              Website <span className="text-slate-400">(optional)</span>
             </Label>
             <Input
               id="client-website"
