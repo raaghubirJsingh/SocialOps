@@ -19,7 +19,9 @@ export const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-50 min-w-[10rem] overflow-hidden rounded-md border border-slate-800 bg-slate-900 p-1 text-slate-100 shadow-md',
+        // Floating overlay: glass is acceptable here because at most one
+        // overlay is visible at a time (see the APP-SIDE BLUR BUDGET).
+        'surface-glass z-50 min-w-[10rem] overflow-hidden rounded-md p-1 text-slate-100',
         className,
       )}
       {...props}
@@ -37,7 +39,7 @@ export const DropdownMenuItem = React.forwardRef<
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-slate-800 focus:text-slate-100 data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-white/[0.06] focus:text-white data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       inset ? 'pl-8' : '',
       className,
     )}
@@ -70,7 +72,7 @@ export const DropdownMenuSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DropdownMenuPrimitive.Separator
     ref={ref}
-    className={cn('-mx-1 my-1 h-px bg-slate-800', className)}
+    className={cn('-mx-1 my-1 h-px bg-white/[0.08]', className)}
     {...props}
   />
 ));

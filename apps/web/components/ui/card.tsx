@@ -2,19 +2,38 @@ import * as React from 'react';
 
 import { cn } from '@/lib/cn';
 
-export const Card = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn(
-      'rounded-xl border border-slate-800 bg-slate-900 text-slate-100 shadow-sm',
-      className,
-    )}
-    {...props}
-  />
-));
+export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+  /**
+   * Surface treatment. Exactly one is applied, never both.
+   *
+   * - `panel` (default): no backdrop blur - the surface for every data grid,
+   *   list, table and form card.
+   * - `glass`: adds `backdrop-filter`. Reserved for the budgeted exceptions
+   *   documented in globals.css (the auth card, the /dashboard API-status
+   *   card). Before using it, check the APP-SIDE BLUR BUDGET note.
+   *
+   * This is a prop rather than a `className` addition on purpose: the two
+   * surface utilities conflict on border-color/background-color and Tailwind's
+   * emit order for custom @utility rules is not author-controlled, so stacking
+   * them would fail silently.
+   */
+  surface?: 'panel' | 'glass';
+}
+
+const CARD_SURFACES = {
+  panel: 'surface-panel',
+  glass: 'surface-glass',
+} as const;
+
+export const Card = React.forwardRef<HTMLDivElement, CardProps>(
+  ({ className, surface = 'panel', ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn(CARD_SURFACES[surface], 'rounded-xl text-slate-100', className)}
+      {...props}
+    />
+  ),
+);
 Card.displayName = 'Card';
 
 export const CardHeader = React.forwardRef<

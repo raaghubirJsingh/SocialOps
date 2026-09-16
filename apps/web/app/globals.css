@@ -72,7 +72,39 @@ html {
  * `surface-panel`, which has no backdrop-filter: blur is expensive on low-end
  * devices and is only visually meaningful where a colourful backdrop (the hero
  * glow + grid) sits behind the element.
+ *
+ * APP-SIDE BLUR BUDGET (authenticated surfaces): the same rule extends into the
+ * app. `backdrop-filter` is never applied to a grid, a table, a status list or
+ * a form row - those use `surface-panel`. `surface-glass` is reserved for:
+ *   - the one auth card per auth screen (login / register / verify-email);
+ *   - the sticky application topbar - the ONLY persistent app-wide blur;
+ *   - at most ONE highlighted element per dashboard screen (the /dashboard
+ *     API-status card, which mirrors the landing hero-stat treatment);
+ *   - transient overlays (Dialog, DropdownMenu), of which at most one is
+ *     visible at a time.
+ * Everything else in the shell stays blur-free, including the sidebar: it is a
+ * full-height surface, which is the worst case for backdrop-filter cost.
  * ------------------------------------------------------------------------- */
+
+/*
+ * These two utilities must NOT be stacked on the same element.
+ *
+ * Tailwind emits custom @utility rules in its own deterministic sort order
+ * (observed: `surface-glass` before `surface-panel`), which is author-
+ * independent and not something this project should rely on. Stacking both -
+ * e.g. adding `surface-glass` to a Card whose base is `surface-panel` - would
+ * therefore be a silent hazard: the element could degrade to a flat panel with
+ * no error. The Card primitive selects exactly ONE surface through its
+ * `surface` prop for that reason; do not add a second surface class via
+ * `className`.
+ */
+@utility surface-panel {
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgb(255 255 255 / 0.06);
+  background-color: rgb(148 163 184 / 0.03);
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.04);
+}
 
 @utility surface-glass {
   border-width: 1px;
@@ -84,14 +116,6 @@ html {
   box-shadow:
     inset 0 1px 0 0 rgb(255 255 255 / 0.05),
     0 10px 30px -12px rgb(2 6 23 / 0.8);
-}
-
-@utility surface-panel {
-  border-width: 1px;
-  border-style: solid;
-  border-color: rgb(255 255 255 / 0.06);
-  background-color: rgb(148 163 184 / 0.03);
-  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.04);
 }
 
 @utility bg-grid-faint {

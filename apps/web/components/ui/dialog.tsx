@@ -48,7 +48,7 @@ export function Dialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
       role="presentation"
       onClick={onClose}
     >
@@ -56,7 +56,7 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-lg rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-xl"
+        className="surface-glass w-full max-w-lg rounded-2xl p-6"
         onClick={(event) => event.stopPropagation()}
       >
         <h3 className="text-lg font-semibold text-slate-100">{title}</h3>
