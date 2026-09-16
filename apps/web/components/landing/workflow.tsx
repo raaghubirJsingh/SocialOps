@@ -40,6 +40,11 @@ export function WorkflowSection() {
         <p className="mx-auto mt-8 max-w-2xl rounded-xl border border-slate-800 bg-slate-900/60 px-5 py-4 text-center text-xs leading-relaxed text-slate-400">
           USER + PERMISSION + CLIENT SCOPE + AUDIT — present at every
           stage, enforced server-side, never trusted from client input.
+          {' '}
+          <span className="text-slate-500">
+            Stages after approval (publish, distribute, analytics, report) ship
+            only in later approved phases — see the live-vs-next list above.
+          </span>
         </p>
       </div>
     </section>

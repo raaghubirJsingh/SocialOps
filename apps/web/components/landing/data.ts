@@ -5,8 +5,9 @@
  *  - No fake user counts, no fake metrics.
  *  - Platform scope matches AGENTS.md §2 (Instagram / Facebook / YouTube
  *    in V1; X / WhatsApp explicitly out of scope).
- *  - Reviews are explicitly labelled illustrative samples (AGENTS.md §14
- *    forbids inventing business data — real testimonials arrive later).
+ *  - The capabilities section states what the product ENFORCES today, and the
+ *    live-vs-next strip names every deferred module explicitly (AGENTS.md §14
+ *    forbids inventing business data — real testimonials arrive post-launch).
  */
 
 export interface NavTab {
