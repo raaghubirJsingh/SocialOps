@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 
+import { ClientSectionNav } from '@/components/clients/client-section-nav';
 import {
   Card,
   CardContent,
@@ -115,6 +116,8 @@ export default function ClientDetailPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
+      <ClientSectionNav clientId={clientId} active="overview" />
+
       <header className="space-y-1">
         <Link href="/clients" className="text-sm text-blue-400 hover:underline">
           ← Back to clients
