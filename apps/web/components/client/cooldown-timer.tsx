@@ -3,29 +3,30 @@
 import { useEffect, useState } from 'react';
 
 interface CooldownTimerProps {
-  retryAt: string; // ISO datetime
-  onExpire?: () => void;
+  field: string;
+  expiresAt: string; // ISO datetime
+  onCooldownExpired?: () => void;
 }
 
 /**
  * Countdown timer for active field-change cooldowns.
  * Disables the associated field input during cooldown.
  */
-export function CooldownTimer({ retryAt, onExpire }: CooldownTimerProps) {
+export function CooldownTimer({ expiresAt, onCooldownExpired }: CooldownTimerProps) {
   const calculateRemaining = () => {
-    const retryTime = new Date(retryAt).getTime();
+    const retryTime = new Date(expiresAt).getTime();
     const now = Date.now();
     return Math.max(0, Math.ceil((retryTime - now) / 1000));
   };
 
   const [remaining, setRemaining] = useState<number>(calculateRemaining);
 
-    useEffect(() => {
+  useEffect(() => {
     const updateRemaining = () => {
       const diff = calculateRemaining();
       setRemaining(diff);
       if (diff === 0) {
-        onExpire?.();
+        onCooldownExpired?.();
       }
     };
 
@@ -34,8 +35,8 @@ export function CooldownTimer({ retryAt, onExpire }: CooldownTimerProps) {
     const interval = setInterval(updateRemaining, 1000);
 
     return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [retryAt, onExpire]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expiresAt, onCooldownExpired]);
 
   if (remaining <= 0) return null;
 
