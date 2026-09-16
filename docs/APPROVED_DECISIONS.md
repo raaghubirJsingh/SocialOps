@@ -250,6 +250,91 @@ any database; applying it requires separate, explicit approval.
 Status: FINAL
 Approved: 2026-09-16
 
+## Decision 009 — Client Operations V1 Backend (Social Accounts & Content Workflows)
+
+Decision 008 approved the Client Operations V1 SCHEMA. This entry records the
+approval of the corresponding backend implementation and, critically, the
+business rules that implementation enforces — recorded here so the authority
+matrix and the approved defaults live in the governance log, not only in code.
+
+Approval: granted explicitly by the human, satisfying the AGENTS.md Section 15
+gates for "Beginning any module explicitly listed as deferred" (Section 13,
+"Content module") and the Section 14 rule against unapproved scope expansion.
+
+Modules implemented:
+
+- `apps/api/src/social-accounts/` — METADATA-ONLY social accounts. No OAuth, no
+  token storage, no platform API call, no credential column. The only creation
+  contract accepts platform/handle/displayName/profileUrl/platformAccountId/
+  isActive and rejects any credential-shaped key.
+- `apps/api/src/content/` — Content CRUD, the locked status machine, Final
+  Confirmation, and insert-only RawData intake.
+
+No database migration was required or created by this phase: the schema applied
+under Decision 008 is unchanged.
+
+### Content transition authority matrix (APPROVED)
+
+| Transition | AGENCY ADMIN | CLIENT OWNER |
+|---|---|---|
+| DRAFT -> IN_REVIEW (submit) | yes | yes (D1a) |
+| IN_REVIEW -> CHANGES_REQUESTED (review) | NO | yes |
+| IN_REVIEW -> APPROVED (Final Confirmation) | NO — never | yes — only |
+| CHANGES_REQUESTED -> IN_REVIEW (resubmit) | yes | yes (D1a) |
+| DRAFT -> ARCHIVED | yes | yes |
+| CHANGES_REQUESTED -> ARCHIVED | yes | yes |
+| APPROVED -> ARCHIVED | yes | yes |
+| APPROVED -> DRAFT (edit-after-approval revert) | yes | yes |
+
+"AGENCY ADMIN" means an OWNER/ADMIN member of the Organization that holds an
+ACTIVE ClientAgencyRelationship with the Client.
+
+### Approved defaults recorded
+
+- D2: `IN_REVIEW -> ARCHIVED` is NOT permitted (withdraw from review first).
+- D3: both actors may archive an APPROVED item.
+- D4: editing while IN_REVIEW is rejected (`409 CONTENT_UNDER_REVIEW`), so text
+  under review can never change silently.
+- D5: optional optimistic concurrency via `expectedRevision`; a stale value is
+  `409 CONTENT_REVISION_CONFLICT`.
+- D6: body DTOs are `.strict()`, so a token-shaped or server-owned key is
+  rejected with `400` rather than silently stripped. Query DTOs are not strict,
+  because query strings routinely carry unrelated parameters.
+- D7: editing an APPROVED item appends a new immutable revision, returns the
+  item to DRAFT, and clears the confirmation triple — all in one transaction,
+  with an `APPROVED -> DRAFT` audit event.
+- D8: list pagination is `take` 1..100 with a default of 50, no cursor in V1.
+- D9: the Final Confirmation payload is `{ note? }` only.
+- D10: `platform` is immutable after creation (create a new record instead).
+
+### Structural guarantees added by this phase
+
+- APPROVED has exactly ONE door: `POST /api/client/me/content/:contentId/
+  final-confirmation`, callable by the CLIENT OWNER only. The generic status
+  route cannot target APPROVED, no agency route exists that can approve, and
+  the authority table contains no `*->APPROVED` entry.
+- `confirmFinal()` writes the confirmation triple, the immutable revision
+  snapshot, and the audit event in ONE transaction; the DB CHECK constraint
+  `Content_approved_requires_final_confirmation` is the second line of defence.
+- ContentRevision and ContentStatusEvent are insert-only, and RawData intake is
+  insert-only by construction (no update/delete service method and no PATCH or
+  DELETE route anywhere).
+- Integrity hashes are always SERVER-computed — `sha256(title\nbody)` for a
+  confirmation, `sha256(extractedText | metadata JSON)` for RawData — and a
+  caller-supplied hash is never accepted.
+- Every new table remains keyed by a non-nullable `clientId` derived from a
+  verified guard context (the ClientAccessGuard binding or the ACTIVE Agency
+  relationship), never from request input.
+
+Still deferred and unchanged by this decision: OAuth, OAuth token storage and
+encryption (the Section 5.7 mechanism remains an OPEN decision),
+Instagram/Facebook/YouTube API integration, S3-compatible storage, the
+Publishing and Distribution engines, the Analytics engine, per-platform Content
+variants, and any employee-scoped content feature.
+
+Status: FINAL
+Approved: 2026-09-16
+
 ## Decision Management Rule
 
 Do not change a FINAL decision without explicit user approval. When a new
