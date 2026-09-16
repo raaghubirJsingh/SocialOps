@@ -1,14 +1,23 @@
 import Link from 'next/link';
 
 import { NAV_TABS } from './data';
+import {
+  LANDING_HEADER_CTA,
+  LANDING_HEADER_CTA_COMPACT,
+  LANDING_HEADER_SIGN_IN,
+} from './shared';
 
 /**
  * Sticky public navbar for the landing page.
  *
- * Anchor tabs (About / Platforms / Workflow / Reviews / FAQ / Contact)
- * smooth-scroll to sections on the SAME "/" page — no new routes, so the
- * approved routing matrix is untouched. `scroll-mt` on each section keeps
+ * Anchor tabs (Features / About / Platforms / Workflow / Standards / FAQ /
+ * Contact) smooth-scroll to sections on the SAME "/" page — no new routes, so
+ * the approved routing matrix is untouched. `scroll-mt` on each section keeps
  * headings clear of this sticky bar.
+ *
+ * Below the `sm` breakpoint the full actions are hidden (they would crowd the
+ * anchors), so a compact primary CTA is shown instead — previously a phone
+ * visitor had NO header entry point at all.
  */
 export function LandingNavbar() {
   return (
@@ -36,17 +45,18 @@ export function LandingNavbar() {
           ))}
         </nav>
 
+        <Link
+          href="/register"
+          className={`${LANDING_HEADER_CTA_COMPACT} shrink-0 sm:hidden`}
+        >
+          Start free
+        </Link>
+
         <div className="hidden shrink-0 items-center gap-2 sm:flex">
-          <Link
-            href="/login"
-            className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-300 transition-colors hover:text-white"
-          >
+          <Link href="/login" className={LANDING_HEADER_SIGN_IN}>
             Sign in
           </Link>
-          <Link
-            href="/register"
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-600/25 transition-colors hover:bg-blue-500"
-          >
+          <Link href="/register" className={LANDING_HEADER_CTA}>
             Get started
           </Link>
         </div>

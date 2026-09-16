@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowRight, ShieldCheck, Sparkles } from 'lucide-react';
 
 import { HERO_STATS } from './data';
+import { LANDING_BUTTON_PRIMARY, LANDING_BUTTON_SECONDARY } from './shared';
 
 /**
  * Hero — the "stop and stare" first viewport.
@@ -58,21 +59,15 @@ export function Hero() {
         </p>
 
         <div className="mt-10 flex flex-wrap items-center gap-4">
-          <Link
-            href="/register"
-            className="group inline-flex items-center gap-2 rounded-xl bg-blue-600 px-7 py-3.5 text-sm font-semibold text-white shadow-xl shadow-blue-600/30 transition-all hover:bg-blue-500 hover:shadow-blue-500/40"
-          >
+          <Link href="/register" className={`group ${LANDING_BUTTON_PRIMARY}`}>
             Start free today
             <ArrowRight
               className="h-4 w-4 transition-transform group-hover:translate-x-1"
               aria-hidden="true"
             />
           </Link>
-          <a
-            href="#about"
-            className="rounded-xl border border-slate-700 bg-slate-900/60 px-7 py-3.5 text-sm font-semibold text-slate-200 transition-colors hover:border-slate-500 hover:text-white"
-          >
-            See how it works
+          <a href="#features" className={LANDING_BUTTON_SECONDARY}>
+            See what we enforce
           </a>
         </div>
 

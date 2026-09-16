@@ -1,7 +1,7 @@
 import { ArrowRight, AtSign, Building2 } from 'lucide-react';
 import Link from 'next/link';
 
-import { LandingCard, SectionHeading } from './shared';
+import { LandingCard, LANDING_BUTTON_PRIMARY, SectionHeading } from './shared';
 
 /**
  * Audience section: the two AGENTS.md §17.1 account types.
@@ -45,10 +45,7 @@ export function AudienceSection() {
           </LandingCard>
         </div>
         <div className="mt-10 text-center">
-          <Link
-            href="/register"
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-7 py-3.5 text-sm font-semibold text-white shadow-xl shadow-blue-600/30 transition-colors hover:bg-blue-500"
-          >
+          <Link href="/register" className={LANDING_BUTTON_PRIMARY}>
             Choose your path — register free
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Link>

@@ -1,6 +1,8 @@
 import { CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 
+import { LANDING_BUTTON_PRIMARY, LANDING_BUTTON_SECONDARY } from './shared';
+
 const TRUST_POINTS = [
   'Organization-level tenancy',
   'Role-based access, enforced server-side',
@@ -33,16 +35,10 @@ export function FinalCta() {
           ))}
         </ul>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-          <Link
-            href="/register"
-            className="rounded-xl bg-blue-600 px-7 py-3.5 text-sm font-semibold text-white shadow-xl shadow-blue-600/30 transition-colors hover:bg-blue-500"
-          >
+          <Link href="/register" className={LANDING_BUTTON_PRIMARY}>
             Register
           </Link>
-          <Link
-            href="/login"
-            className="rounded-xl border border-slate-700 bg-slate-900/60 px-7 py-3.5 text-sm font-semibold text-slate-200 transition-colors hover:border-slate-500 hover:text-white"
-          >
+          <Link href="/login" className={LANDING_BUTTON_SECONDARY}>
             Sign in
           </Link>
         </div>
