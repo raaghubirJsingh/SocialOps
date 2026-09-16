@@ -63,11 +63,14 @@ verified against.
 
 A `docker-compose.yml` exists at the repository root and was committed
 during the B6 stage (Stage B6 Authentication Foundation, commit
-`20c4b18`). It predates this B9 stage. It defines a single
-`postgres:17-alpine` service for environments that prefer a
-containerized local database. It does not include a Redis-compatible
-service, an `api` service, or a `web` service, and it is not a complete
-B9 deliverable on its own. It is preserved as-is. Authoring a fuller
+`20c4b18`). It predates this B9 stage. It defines a
+`postgres:17-alpine` service and a `redis:7-alpine` service for
+environments that prefer containerized local services. The PostgreSQL
+password is supplied by the environment (`${POSTGRES_PASSWORD}`, set in
+the ignored root `.env` file), so no credential literal is stored in the
+file. It does not include an `api` service or a `web` service, and it is
+not a complete B9 deliverable on its own. It is otherwise preserved
+as-is, apart from that credential interpolation. Authoring a fuller
 local-Docker development environment (per-service Dockerfiles,
 `.dockerignore` files, and a more complete compose stack) is recorded
 as remaining work for a future, explicitly approved stage; it is out

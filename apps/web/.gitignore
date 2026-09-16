@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...but the placeholder-only template is intentionally tracked, for parity
+# with the root and apps/api templates (AGENTS.md section 8).
+!.env.example
+
 
 # vercel
 .vercel
