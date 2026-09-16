@@ -119,7 +119,7 @@ export function FeaturesSection() {
         </div>
 
         {/* Live vs next — keeps the page honest about deferred modules. */}
-        <div className="surface-glass mt-10 grid gap-6 rounded-2xl p-6 md:grid-cols-2">
+        <div className="surface-panel mt-10 grid gap-6 rounded-2xl p-6 md:grid-cols-2">
           <div>
             <Badge variant="success">Live today</Badge>
             <ul className="mt-4 space-y-2">

@@ -36,7 +36,7 @@ const resolver: Resolver<Values> = async (raw) => {
 /** Left info card beside the contact form. */
 export function ContactInfoCard() {
   return (
-    <div className="surface-glass group rounded-2xl bg-linear-to-b from-blue-950/50 to-slate-900/60 p-6 md:col-span-2">
+    <div className="surface-panel group rounded-2xl bg-linear-to-b from-blue-950/50 to-slate-900/60 p-6 md:col-span-2">
       <Mail
         className="h-8 w-8 text-blue-400 transition-transform duration-300 group-hover:scale-105"
         aria-hidden="true"
@@ -167,7 +167,7 @@ export function ContactSection() {
         />
         <div className="mx-auto mt-12 grid max-w-4xl gap-6 md:grid-cols-5">
           <ContactInfoCard />
-          <div className="surface-glass rounded-2xl p-6 md:col-span-3">
+          <div className="surface-panel rounded-2xl p-6 md:col-span-3">
             <ContactForm />
           </div>
         </div>

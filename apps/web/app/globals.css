@@ -66,10 +66,12 @@ html {
  * across the landing components, and so the vendor-prefixed grid mask lives in
  * an audited place rather than an inline style object.
  *
- * BLUR BUDGET: `surface-glass` is allowed only on the navbar and a few large
- * panels. Repeating grids (the 11 workflow cards, the 6 FAQ rows) use
- * `surface-panel`, which has no backdrop-filter - blur is expensive on
- * low-end devices.
+ * BLUR BUDGET (approved decision D2): `surface-glass` is used by exactly five
+ * elements on the landing page - the sticky navbar (via `backdrop-blur-xl`) and
+ * the four hero stat cards. Everything else, including every card grid, uses
+ * `surface-panel`, which has no backdrop-filter: blur is expensive on low-end
+ * devices and is only visually meaningful where a colourful backdrop (the hero
+ * glow + grid) sits behind the element.
  * ------------------------------------------------------------------------- */
 
 @utility surface-glass {

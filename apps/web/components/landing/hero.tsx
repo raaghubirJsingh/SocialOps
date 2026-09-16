@@ -24,7 +24,7 @@ export function Hero() {
       </div>
 
       <div className="relative mx-auto w-full max-w-6xl px-6 pb-16 pt-20 sm:pt-28">
-        <p className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-blue-300 shadow-lg shadow-blue-600/10 backdrop-blur-sm">
+        <p className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-blue-300 shadow-lg shadow-blue-600/10">
           <span
             aria-hidden="true"
             className="h-1.5 w-1.5 rounded-full bg-blue-400 motion-safe:animate-pulse"
