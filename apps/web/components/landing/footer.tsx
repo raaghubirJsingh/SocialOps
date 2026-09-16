@@ -5,7 +5,7 @@ import { NAV_TABS } from './data';
 /** Footer: anchor links + honest foundation note. */
 export function LandingFooter() {
   return (
-    <footer className="border-t border-slate-800">
+    <footer className="border-t border-white/[0.06]">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-6 py-8 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xl font-bold tracking-tight text-slate-100">
           Social<span className="text-blue-400">Ops</span>
@@ -34,7 +34,7 @@ export function LandingFooter() {
           </Link>
         </nav>
       </div>
-      <div className="border-t border-slate-800/60">
+      <div className="border-t border-white/[0.06] bg-white/[0.02]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs leading-relaxed text-slate-600">
             SocialOps V1 — live today: accounts &amp; roles, client onboarding,

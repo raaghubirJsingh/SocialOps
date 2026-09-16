@@ -64,9 +64,13 @@ export function FeaturesSection() {
   return (
     <section
       id="features"
-      className="scroll-mt-20 border-y border-slate-800/80 bg-slate-900/30"
+      className="relative isolate scroll-mt-20 overflow-hidden border-y border-white/[0.06] bg-white/[0.02]"
     >
-      <div className="mx-auto w-full max-w-6xl px-6 py-20">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_at_top_right,rgb(37_99_235/0.10),transparent_55%)]" />
+      </div>
+
+      <div className="relative mx-auto w-full max-w-6xl px-6 py-20">
         <SectionHeading
           eyebrow="What we enforce"
           title="Approvals you can prove. Isolation you can trust."
@@ -77,14 +81,14 @@ export function FeaturesSection() {
           {PRIMARY_CAPABILITIES.map((capability) => (
             <LandingCard
               key={capability.title}
-              className="relative overflow-hidden border-blue-500/20"
+              className="group relative overflow-hidden border-blue-500/20 hover:border-blue-500/40"
             >
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-blue-600/15 blur-2xl"
+                className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-blue-600/10 blur-2xl"
               />
               <capability.icon
-                className="h-9 w-9 text-blue-400"
+                className="h-9 w-9 text-blue-400 transition-transform duration-300 group-hover:scale-105"
                 aria-hidden="true"
               />
               <h3 className="mt-4 text-lg font-semibold text-slate-100">
@@ -99,9 +103,9 @@ export function FeaturesSection() {
 
         <div className="mt-6 grid gap-6 md:grid-cols-3">
           {SUPPORTING_CAPABILITIES.map((capability) => (
-            <LandingCard key={capability.title}>
+            <LandingCard key={capability.title} className="group">
               <capability.icon
-                className="h-7 w-7 text-cyan-300"
+                className="h-7 w-7 text-cyan-300 transition-transform duration-300 group-hover:scale-105"
                 aria-hidden="true"
               />
               <h3 className="mt-3 font-semibold text-slate-100">
@@ -115,7 +119,7 @@ export function FeaturesSection() {
         </div>
 
         {/* Live vs next — keeps the page honest about deferred modules. */}
-        <div className="mt-10 grid gap-6 rounded-2xl border border-slate-800 bg-slate-950/60 p-6 md:grid-cols-2">
+        <div className="surface-glass mt-10 grid gap-6 rounded-2xl p-6 md:grid-cols-2">
           <div>
             <Badge variant="success">Live today</Badge>
             <ul className="mt-4 space-y-2">

@@ -17,10 +17,10 @@ export function WorkflowSection() {
           {WORKFLOW_STEPS.map((step, index) => (
             <li
               key={step.name}
-              className="group relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 p-5 transition-colors hover:border-blue-500/40"
+              className="group surface-panel relative overflow-hidden rounded-2xl p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-500/40"
             >
               <div className="flex items-center gap-4">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-fuchsia-600 text-sm font-bold text-white shadow-lg shadow-blue-600/25">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-blue-600 to-fuchsia-600 text-sm font-bold text-white shadow-lg shadow-blue-600/20 ring-1 ring-white/10">
                   {index + 1}
                 </span>
                 <div>
@@ -37,7 +37,7 @@ export function WorkflowSection() {
             </li>
           ))}
         </ol>
-        <p className="mx-auto mt-8 max-w-2xl rounded-xl border border-slate-800 bg-slate-900/60 px-5 py-4 text-center text-xs leading-relaxed text-slate-400">
+        <p className="surface-panel mx-auto mt-8 max-w-2xl rounded-xl px-5 py-4 text-center text-xs leading-relaxed text-slate-400">
           USER + PERMISSION + CLIENT SCOPE + AUDIT — present at every
           stage, enforced server-side, never trusted from client input.
           {' '}

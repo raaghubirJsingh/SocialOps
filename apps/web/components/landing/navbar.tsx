@@ -21,11 +21,11 @@ import {
  */
 export function LandingNavbar() {
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-slate-950/85 backdrop-blur-md">
+    <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-slate-950/60 shadow-[0_1px_0_0_rgb(255_255_255/0.04),0_8px_24px_-16px_rgb(2_6_23/0.8)] backdrop-blur-xl supports-[backdrop-filter]:bg-slate-950/50">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-4 px-6">
         <Link
           href="#top"
-          className="shrink-0 text-xl font-bold tracking-tight text-slate-100"
+          className="shrink-0 text-xl font-bold tracking-tight text-slate-100 transition-opacity duration-200 hover:opacity-90"
         >
           Social<span className="text-blue-400">Ops</span>
         </Link>
@@ -38,7 +38,7 @@ export function LandingNavbar() {
             <a
               key={tab.href}
               href={tab.href}
-              className="whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-slate-800/70 hover:text-slate-100"
+              className="whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium text-slate-400 transition-colors duration-200 hover:bg-white/[0.06] hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
             >
               {tab.label}
             </a>

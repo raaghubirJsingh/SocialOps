@@ -38,9 +38,13 @@ export function PlatformsSection() {
   return (
     <section
       id="platforms"
-      className="scroll-mt-20 border-y border-slate-800/80 bg-slate-900/30"
+      className="relative isolate scroll-mt-20 overflow-hidden border-y border-white/[0.06] bg-white/[0.02]"
     >
-      <div className="mx-auto w-full max-w-6xl px-6 py-20">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-x-0 bottom-0 h-80 bg-[radial-gradient(ellipse_at_bottom_left,rgb(217_70_239/0.08),transparent_55%)]" />
+      </div>
+
+      <div className="relative mx-auto w-full max-w-6xl px-6 py-20">
         <SectionHeading
           eyebrow="Platforms"
           title="Built for Instagram, Facebook & YouTube"
@@ -50,14 +54,14 @@ export function PlatformsSection() {
           {PLATFORM_CARDS.map((platform) => (
             <LandingCard
               key={platform.name}
-              className="relative overflow-hidden"
+              className="group relative overflow-hidden"
             >
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-blue-600/15 blur-2xl"
+                className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-blue-600/10 blur-2xl transition-opacity duration-300 group-hover:opacity-80"
               />
               <platform.icon
-                className="h-9 w-9 text-fuchsia-400"
+                className="h-9 w-9 text-fuchsia-400 transition-transform duration-300 group-hover:scale-105"
                 aria-hidden="true"
               />
               <h3 className="mt-4 flex items-center gap-2 text-lg font-semibold text-slate-100">

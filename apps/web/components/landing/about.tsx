@@ -23,8 +23,12 @@ const ABOUT_CARDS = [
 /** About section (`#about`): what SocialOps is and what it provides. */
 export function AboutSection() {
   return (
-    <section id="about" className="scroll-mt-20">
-      <div className="mx-auto w-full max-w-6xl px-6 py-20">
+    <section id="about" className="relative isolate scroll-mt-20 overflow-hidden">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-x-0 top-1/3 h-72 bg-[radial-gradient(ellipse_at_center,rgb(37_99_235/0.07),transparent_60%)]" />
+      </div>
+
+      <div className="relative mx-auto w-full max-w-6xl px-6 py-20">
         <SectionHeading
           eyebrow="About SocialOps"
           title="Operations, not just posting"
@@ -32,9 +36,9 @@ export function AboutSection() {
         />
         <div className="mt-12 grid gap-6 md:grid-cols-3">
           {ABOUT_CARDS.map((card) => (
-            <LandingCard key={card.title}>
+            <LandingCard key={card.title} className="group">
               <card.icon
-                className="h-8 w-8 text-blue-400"
+                className="h-8 w-8 text-blue-400 transition-transform duration-300 group-hover:scale-105"
                 aria-hidden="true"
               />
               <h3 className="mt-4 text-lg font-semibold text-slate-100">

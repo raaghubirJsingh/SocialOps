@@ -36,15 +36,18 @@ const resolver: Resolver<Values> = async (raw) => {
 /** Left info card beside the contact form. */
 export function ContactInfoCard() {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-gradient-to-b from-blue-950/50 to-slate-900/60 p-6 md:col-span-2">
-      <Mail className="h-8 w-8 text-blue-400" aria-hidden="true" />
+    <div className="surface-glass group rounded-2xl bg-linear-to-b from-blue-950/50 to-slate-900/60 p-6 md:col-span-2">
+      <Mail
+        className="h-8 w-8 text-blue-400 transition-transform duration-300 group-hover:scale-105"
+        aria-hidden="true"
+      />
       <h3 className="mt-4 text-lg font-semibold text-slate-100">
         Prefer email?
       </h3>
       <p className="mt-2 text-sm leading-relaxed text-slate-400">
         Reach us directly and we will reply within two business days.
       </p>
-      <p className="mt-4 rounded-lg border border-slate-800 bg-slate-950/60 px-4 py-3 text-sm font-medium text-blue-300">
+      <p className="surface-panel mt-4 rounded-lg px-4 py-3 text-sm font-medium text-blue-300">
         hello@socialops.example
       </p>
       <p className="mt-4 text-xs leading-relaxed text-slate-500">
@@ -164,7 +167,7 @@ export function ContactSection() {
         />
         <div className="mx-auto mt-12 grid max-w-4xl gap-6 md:grid-cols-5">
           <ContactInfoCard />
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 md:col-span-3">
+          <div className="surface-glass rounded-2xl p-6 md:col-span-3">
             <ContactForm />
           </div>
         </div>

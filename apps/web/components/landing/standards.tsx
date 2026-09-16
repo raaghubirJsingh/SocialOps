@@ -15,8 +15,15 @@ import { LandingCard, SectionHeading } from './shared';
  */
 export function StandardsSection() {
   return (
-    <section id="standards" className="scroll-mt-20">
-      <div className="mx-auto w-full max-w-6xl px-6 py-20">
+    <section
+      id="standards"
+      className="relative isolate scroll-mt-20 overflow-hidden border-y border-white/[0.06] bg-white/[0.02]"
+    >
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-x-0 top-0 h-80 bg-[radial-gradient(ellipse_at_top_left,rgb(37_99_235/0.09),transparent_55%)]" />
+      </div>
+
+      <div className="relative mx-auto w-full max-w-6xl px-6 py-20">
         <SectionHeading
           eyebrow="Standards"
           title="Built to be trusted, not just demoed"
@@ -36,7 +43,7 @@ export function StandardsSection() {
           ))}
         </div>
 
-        <p className="mx-auto mt-10 w-fit rounded-full border border-slate-800 bg-slate-900/60 px-4 py-1 text-[11px] text-slate-500">
+        <p className="surface-panel mx-auto mt-10 w-fit rounded-full px-4 py-1 text-[11px] text-slate-400">
           Every claim above is enforced in code and covered by tests — not
           marketing copy.
         </p>

@@ -21,7 +21,7 @@ export function FaqSection() {
           {FAQS.map((faq) => (
             <details
               key={faq.q}
-              className="group rounded-2xl border border-slate-800 bg-slate-950/60 px-5 py-4 transition-colors open:border-blue-500/40 hover:border-slate-700"
+              className="group surface-panel rounded-2xl px-5 py-4 transition-all duration-200 open:border-blue-500/40 open:bg-white/[0.05] hover:border-slate-600"
             >
               <summary className="cursor-pointer list-none text-sm font-semibold text-slate-100 marker:hidden [&::-webkit-details-marker]:hidden">
                 <span className="flex items-center justify-between gap-4">
