@@ -138,8 +138,16 @@ export function VerifyEmailClient() {
   const justSent = status === 'sent' && !token;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-slate-100">
-      <div className="w-full max-w-sm">
+    <div className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 p-6 text-slate-100">
+      {/* Ambient backdrop - the same layered-glow recipe as the landing hero,
+          so the single glass auth card below has something colourful to blur
+          (see the APP-SIDE BLUR BUDGET in globals.css). Decorative only. */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-x-0 top-0 h-[28rem] bg-[radial-gradient(ellipse_at_top,rgb(37_99_235/0.16),transparent_60%)]" />
+        <div className="absolute -top-24 left-1/2 h-72 w-[42rem] -translate-x-1/2 rounded-full bg-blue-600/15 blur-3xl" />
+      </div>
+
+      <div className="relative w-full max-w-sm">
         <div className="mb-8 text-center">
           <Link
             href="/"
@@ -150,70 +158,70 @@ export function VerifyEmailClient() {
           <p className="mt-2 text-sm text-slate-400">Email verification</p>
         </div>
 
-        {state?.phase === 'verifying' && (
-          <p className="text-center text-sm text-slate-400">
-            Verifying your email…
-          </p>
-        )}
-
-        {state?.phase === 'verified' && (
-          <div className="space-y-4 text-center">
-            <h2 className="text-xl font-semibold">Email verified</h2>
-            <p className="text-sm text-slate-400">
-              Your email address has been verified. You can now sign in
-              to SocialOps.
-            </p>
-            <Link
-              href="/login"
-              className="block w-full rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
-            >
-              Sign in
-            </Link>
-          </div>
-        )}
-
-        {state?.phase === 'invalid' && (
-          <div className="space-y-4">
-            <div
-              role="alert"
-              className="rounded-md border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-200"
-            >
-              This verification link is invalid or has expired. Request a
-              new verification email below.
-            </div>
-            <ResendForm
-              register={register}
-              errors={errors}
-              isSubmitting={isSubmitting}
-              onSubmit={onResend}
-              queued={resendQueued}
-              resendError={resendError}
-            />
-          </div>
-        )}
-
-        {showResendForm && !state && (
-          <div className="space-y-4">
-            <h2 className="text-center text-xl font-semibold">
-              {justSent ? 'Check your inbox' : 'Verify your email'}
-            </h2>
+        {/* The single glass surface for this screen (APP-SIDE BLUR BUDGET). */}
+        <div className="surface-glass space-y-4 rounded-2xl p-6">
+          {state?.phase === 'verifying' && (
             <p className="text-center text-sm text-slate-400">
-              {justSent
-                ? 'A verification email is on its way. Use the link in the email to verify your address. Did not receive it? You can request a new one below.'
-                : 'Enter the email address you registered with. If the account exists and is unverified, a new verification email will be queued.'}
+              Verifying your email…
             </p>
-            <ResendForm
-              register={register}
-              errors={errors}
-              isSubmitting={isSubmitting}
-              onSubmit={onResend}
-              queued={resendQueued}
-              resendError={resendError}
-            />
-          </div>
-        )}
+          )}
 
-        <p className="mt-6 text-center text-xs text-slate-500">
+          {state?.phase === 'verified' && (
+            <div className="space-y-4 text-center">
+              <h2 className="text-xl font-semibold">Email verified</h2>
+              <p className="text-sm text-slate-400">
+                Your email address has been verified. You can now sign in
+                to SocialOps.
+              </p>
+              <Button asChild className="w-full">
+                <Link href="/login">Sign in</Link>
+              </Button>
+            </div>
+          )}
+
+          {state?.phase === 'invalid' && (
+            <div className="space-y-4">
+              <div
+                role="alert"
+                className="rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-200"
+              >
+                This verification link is invalid or has expired. Request a
+                new verification email below.
+              </div>
+              <ResendForm
+                register={register}
+                errors={errors}
+                isSubmitting={isSubmitting}
+                onSubmit={onResend}
+                queued={resendQueued}
+                resendError={resendError}
+              />
+            </div>
+          )}
+
+          {showResendForm && !state && (
+            <div className="space-y-4">
+              <h2 className="text-center text-xl font-semibold">
+                {justSent ? 'Check your inbox' : 'Verify your email'}
+              </h2>
+              <p className="text-center text-sm text-slate-400">
+                {justSent
+                  ? 'A verification email is on its way. Use the link in the email to verify your address. Did not receive it? You can request a new one below.'
+                  : 'Enter the email address you registered with. If the account exists and is unverified, a new verification email will be queued.'}
+              </p>
+              <ResendForm
+                register={register}
+                errors={errors}
+                isSubmitting={isSubmitting}
+                onSubmit={onResend}
+                queued={resendQueued}
+                resendError={resendError}
+              />
+            </div>
+          )}
+        </div>
+
+        <p className="mt-6 text-center text-xs text-slate-400">
           Verification links are single-use and expire after 24 hours.
         </p>
       </div>
@@ -264,7 +272,7 @@ function ResendForm({
       {resendError && (
         <div
           role="alert"
-          className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
         >
           {resendError}
         </div>
@@ -272,7 +280,7 @@ function ResendForm({
       {queued && !resendError && (
         <div
           role="status"
-          className="rounded-md border border-emerald-900/50 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-200"
+          className="rounded-lg border border-emerald-900/50 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-200"
         >
           If the address is registered and not yet verified, a new
           verification email has been queued.

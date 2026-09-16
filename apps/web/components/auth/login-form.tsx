@@ -133,7 +133,7 @@ export function LoginForm() {
         <div
           id="login-error"
           role="alert"
-          className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
         >
           {errorMessage}
         </div>

@@ -20,8 +20,14 @@ export default function VerifyEmailPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-slate-100">
-          <p className="text-sm text-slate-400">Loading…</p>
+        <div className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 p-6 text-slate-100">
+          {/* Matches the loaded page's ambient layer so there is no flash
+              between the fallback and the hydrated client component. */}
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+            <div className="absolute inset-x-0 top-0 h-[28rem] bg-[radial-gradient(ellipse_at_top,rgb(37_99_235/0.16),transparent_60%)]" />
+            <div className="absolute -top-24 left-1/2 h-72 w-[42rem] -translate-x-1/2 rounded-full bg-blue-600/15 blur-3xl" />
+          </div>
+          <p className="relative text-sm text-slate-400">Loading…</p>
         </div>
       }
     >

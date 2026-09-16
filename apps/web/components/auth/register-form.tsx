@@ -199,17 +199,17 @@ export function RegisterForm() {
           <label
             htmlFor="accountType-service-provider"
             className={
-              'flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors ' +
+              'flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-400/60 ' +
               (selectedAccountType === 'SERVICE_PROVIDER'
-                ? 'border-blue-500/60 bg-blue-500/5'
-                : 'border-slate-700 bg-slate-900/40 hover:border-slate-500')
+                ? 'border-blue-500/60 bg-blue-500/[0.08]'
+                : 'border-white/[0.08] bg-white/[0.03] hover:border-slate-600 hover:bg-white/[0.06]')
             }
           >
             <input
               id="accountType-service-provider"
               type="radio"
               value="SERVICE_PROVIDER"
-              className="mt-1 h-4 w-4 cursor-pointer accent-blue-500"
+              className="mt-1 h-4 w-4 cursor-pointer accent-blue-500 focus-visible:outline-none"
               disabled={isLoading}
               {...register('accountType')}
             />
@@ -227,17 +227,17 @@ export function RegisterForm() {
           <label
             htmlFor="accountType-individual-business"
             className={
-              'flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors ' +
+              'flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-400/60 ' +
               (selectedAccountType === 'INDIVIDUAL_BUSINESS'
-                ? 'border-blue-500/60 bg-blue-500/5'
-                : 'border-slate-700 bg-slate-900/40 hover:border-slate-500')
+                ? 'border-blue-500/60 bg-blue-500/[0.08]'
+                : 'border-white/[0.08] bg-white/[0.03] hover:border-slate-600 hover:bg-white/[0.06]')
             }
           >
             <input
               id="accountType-individual-business"
               type="radio"
               value="INDIVIDUAL_BUSINESS"
-              className="mt-1 h-4 w-4 cursor-pointer accent-blue-500"
+              className="mt-1 h-4 w-4 cursor-pointer accent-blue-500 focus-visible:outline-none"
               disabled={isLoading}
               {...register('accountType')}
             />
@@ -299,7 +299,7 @@ export function RegisterForm() {
       <div className="space-y-2">
         <Label htmlFor="phone">
           Phone
-          <span className="ml-1 text-xs font-normal text-slate-500">
+          <span className="ml-1 text-xs font-normal text-slate-400">
             (optional)
           </span>
         </Label>
@@ -359,7 +359,7 @@ export function RegisterForm() {
             {errors.confirmPassword.message}
           </p>
         )}
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-400">
           Re-enter the password to confirm. This field is for your
           protection; it is never sent to our servers.
         </p>
@@ -369,7 +369,7 @@ export function RegisterForm() {
         <div
           id="register-error"
           role="alert"
-          className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
         >
           {submitError}
         </div>

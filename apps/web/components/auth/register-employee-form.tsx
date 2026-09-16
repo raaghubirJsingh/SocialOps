@@ -199,7 +199,7 @@ export function RegisterEmployeeForm() {
       <div className="space-y-2">
         <Label htmlFor="phone">
           Phone
-          <span className="ml-1 text-xs font-normal text-slate-500">
+          <span className="ml-1 text-xs font-normal text-slate-400">
             (optional)
           </span>
         </Label>
@@ -259,7 +259,7 @@ export function RegisterEmployeeForm() {
             {errors.confirmPassword.message}
           </p>
         )}
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-400">
           Re-enter the password to confirm. This field is for your
           protection; it is never sent to our servers.
         </p>
@@ -269,7 +269,7 @@ export function RegisterEmployeeForm() {
         <div
           id="register-employee-error"
           role="alert"
-          className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
         >
           {submitError}
         </div>
