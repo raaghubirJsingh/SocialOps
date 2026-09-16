@@ -44,3 +44,25 @@ Thumbs.db
 .runtime-*
 test-results/
 prisma-*-output.sql
+
+# ---------------------------------------------------------------------------
+# Local-only agent tooling and scratch runners.
+# Mirrors the existing .vscode/ and .idea/ exclusions: local configuration and
+# throwaway runners must never enter history (AGENTS.md section 8 - no
+# credentials in Git, in any form).
+#
+# `.clinerules/`        - local Cline agent rules (AGENTS.md is the binding
+#                         governance contract, so a second rule source is not
+#                         committed).
+# `tools/supervisor/`   - observe-only Supervisor WIP tooling. The Supervisor
+#                         stage is NOT an approved module yet; promoting this
+#                         tooling is a separate, explicitly approved step
+#                         (see docs/AI-WORKFLOW.md).
+# `*itest*.ps1`         - local integration-runner scratch scripts, which
+#                         previously embedded database credentials. Use
+#                         `npm run test:integration --workspace=apps/api`
+#                         instead; prefer ignored *.env files for values.
+# ---------------------------------------------------------------------------
+.clinerules/
+tools/supervisor/
+*itest*.ps1
