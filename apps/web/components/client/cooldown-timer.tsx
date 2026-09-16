@@ -46,7 +46,7 @@ export function CooldownTimer({ retryAt, onExpire }: CooldownTimerProps) {
   const formatTime = (n: number) => n.toString().padStart(2, '0');
 
   return (
-    <p className="text-xs text-amber-400">
+    <p className="text-xs tabular-nums text-amber-300">
       Cooldown active. Try again in {formatTime(hours)}:{formatTime(minutes)}:
       {formatTime(seconds)}
     </p>

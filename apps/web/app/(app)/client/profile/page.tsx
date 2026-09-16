@@ -9,6 +9,7 @@ import { FieldChangeModal } from '@/components/client/field-change-modal';
 import { CooldownTimer } from '@/components/client/cooldown-timer';
 import { ClientStatusBanner } from '@/components/client/client-status-banner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import type { ClientField, ClientDto } from '@/types/client';
 import { ApiError } from '@/lib/api';
 
@@ -139,7 +140,7 @@ export default function ClientProfilePage() {
       {error && (
         <div
           role="alert"
-          className="rounded-md border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
         >
           {error}
         </div>
@@ -150,20 +151,20 @@ export default function ClientProfilePage() {
       )}
 
       {pendingChangeId && (
-        <div className="rounded-md border border-amber-900/50 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
+        <div className="rounded-lg border border-amber-900/60 bg-amber-950/40 px-4 py-3 text-sm text-amber-200">
           <p className="font-medium">Verification required</p>
-          <p className="mt-1 text-amber-300/80">
+          <p className="mt-1 text-amber-200/80">
             A verification token has been sent. Enter it below to complete the change.
           </p>
           <div className="mt-3">
-            <label htmlFor="verify-token" className="text-xs text-amber-300">
+            <label htmlFor="verify-token" className="text-xs text-amber-200">
               Verification Token
             </label>
             <div className="mt-1 flex gap-2">
-              <input
+              <Input
                 id="verify-token"
                 type="text"
-                className="flex-1 rounded border border-amber-800 bg-amber-950 px-3 py-1 text-sm text-amber-100"
+                className="flex-1 border-amber-800 bg-amber-950 text-amber-100 placeholder:text-amber-300/60"
                 placeholder="Enter token"
               />
               <Button
@@ -181,11 +182,11 @@ export default function ClientProfilePage() {
         </div>
       )}
 
-      <div className="rounded-lg border border-slate-800 bg-slate-900">
+      <div className="surface-panel rounded-lg">
         {CLIENT_FIELDS.map((fieldConfig) => (
           <div
             key={fieldConfig.field}
-            className="flex items-center justify-between border-b border-slate-800 px-6 py-4 last:border-b-0"
+            className="flex items-center justify-between border-b border-white/[0.06] px-6 py-4 last:border-b-0"
           >
             <div>
               <p className="text-sm font-medium text-slate-300">{fieldConfig.label}</p>

@@ -71,7 +71,10 @@ export default function ClientSocialAccountsPage() {
           No client context in this session. Open your client dashboard and start
           from there.
         </p>
-        <Link href="/client" className="text-sm text-blue-400 hover:underline">
+        <Link
+          href="/client"
+          className="rounded text-sm text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
+        >
           ← Back to client dashboard
         </Link>
       </div>
@@ -122,7 +125,9 @@ export default function ClientSocialAccountsPage() {
     <div className="mx-auto max-w-5xl space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-2xl font-semibold text-slate-100">Social accounts</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-100">
+            Social accounts
+          </h2>
           <p className="text-sm text-slate-400">
             The platforms you operate, recorded as reference for content work.
           </p>
@@ -165,7 +170,7 @@ export default function ClientSocialAccountsPage() {
       {accountsQuery.isError ? (
         <div
           role="alert"
-          className="rounded-md border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
         >
           {describeApiError(
             accountsQuery.error,

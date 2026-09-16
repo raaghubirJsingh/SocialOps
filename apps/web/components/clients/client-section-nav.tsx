@@ -36,10 +36,10 @@ export function ClientSectionNav({
             href={`/clients/${clientId}${section.href}`}
             aria-current={isActive ? 'page' : undefined}
             className={cn(
-              'rounded-lg px-3 py-1.5 text-sm transition-colors',
+              'rounded-full border px-3 py-1.5 text-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60',
               isActive
-                ? 'bg-blue-500/10 font-medium text-blue-300'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-slate-100',
+                ? 'border-blue-500/30 bg-blue-500/10 font-medium text-blue-200'
+                : 'border-white/[0.06] text-slate-300 hover:border-slate-600 hover:bg-white/[0.06] hover:text-slate-100',
             )}
           >
             {section.label}

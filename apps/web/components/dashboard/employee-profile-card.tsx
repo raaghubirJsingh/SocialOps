@@ -71,23 +71,23 @@ export function EmployeeProfileCard() {
 
         {profile && (
           <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
-            <dt className="text-slate-500">Employee ID</dt>
-            <dd className="text-slate-100 font-mono">{profile.id}</dd>
+            <dt className="text-slate-400">Employee ID</dt>
+            <dd className="font-mono text-slate-100">{profile.id}</dd>
 
-            <dt className="text-slate-500">Full name</dt>
+            <dt className="text-slate-400">Full name</dt>
             <dd className="text-slate-100">
               {profile.user.fullName ?? '—'}
             </dd>
 
-            <dt className="text-slate-500">Email</dt>
+            <dt className="text-slate-400">Email</dt>
             <dd className="text-slate-100">{profile.user.email}</dd>
 
-            <dt className="text-slate-500">Profile created</dt>
+            <dt className="text-slate-400">Profile created</dt>
             <dd className="text-slate-100">
               {new Date(profile.createdAt).toLocaleDateString()}
             </dd>
 
-            <dt className="text-slate-500">Last updated</dt>
+            <dt className="text-slate-400">Last updated</dt>
             <dd className="text-slate-100">
               {new Date(profile.updatedAt).toLocaleDateString()}
             </dd>

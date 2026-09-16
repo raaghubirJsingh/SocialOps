@@ -64,7 +64,7 @@ export default function ClientPage() {
 
   if (sessionLoading || shouldShowLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-slate-100">
+      <div className="flex min-h-[60vh] items-center justify-center p-6 text-slate-100">
         <p className="text-sm text-slate-400">Loading...</p>
       </div>
     );
@@ -79,7 +79,7 @@ export default function ClientPage() {
       <div className="mx-auto max-w-5xl p-6">
         <div
           role="alert"
-          className="rounded-md border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
         >
           {error}
         </div>
@@ -91,13 +91,13 @@ export default function ClientPage() {
     return (
       <div className="mx-auto max-w-5xl p-6 space-y-4">
         <OnboardingPendingBanner />
-        <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
+        <div className="surface-panel rounded-lg p-6">
           <p className="text-sm text-slate-400">
             No client found. Start onboarding to create your client profile.
           </p>
           <Link
             href="/client/onboarding"
-            className="mt-4 inline-block text-blue-400 hover:underline"
+            className="mt-4 inline-block rounded text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
           >
             Start onboarding
           </Link>

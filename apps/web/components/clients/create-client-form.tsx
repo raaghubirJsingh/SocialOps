@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SELECT_CLASSES, Textarea } from '@/components/ui/textarea';
 import { ApiError } from '@/lib/api';
 import { clientApi } from '@/lib/client-api';
 import type { CreateClientRequest } from '@/types/client';
@@ -90,9 +91,6 @@ const formResolver: Resolver<CreateClientFormValues> = async (values) => {
   }
   return { values: {}, errors };
 };
-
-const SELECT_CLASSES =
-  'flex h-10 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-50';
 
 interface CreateClientFormProps {
   /** Called after the backend accepted the creation (HTTP 201). */
@@ -266,12 +264,11 @@ export function CreateClientForm({ onCreated, onCancel }: CreateClientFormProps)
 
           <div className="grid gap-2">
             <Label htmlFor="client-notes" className="text-sm font-medium text-slate-300">
-              Internal notes <span className="text-slate-500">(optional)</span>
+              Internal notes <span className="text-slate-400">(optional)</span>
             </Label>
-            <textarea
+            <Textarea
               id="client-notes"
               rows={3}
-              className={`${SELECT_CLASSES} min-h-20 py-2`}
               aria-invalid={Boolean(errors.notes)}
               {...register('notes')}
             />
@@ -281,7 +278,7 @@ export function CreateClientForm({ onCreated, onCancel }: CreateClientFormProps)
           {serverError && (
             <div
               role="alert"
-              className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
+              className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
             >
               {serverError}
             </div>

@@ -8,6 +8,7 @@ import { OnboardingPendingBanner } from '@/components/client/onboarding-pending-
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SELECT_CLASSES } from '@/components/ui/textarea';
 import { clientApi } from '@/lib/client-api';
 import { useSession } from '@/hooks/use-session';
 import type { StartOnboardingResponse } from '@/types/client';
@@ -106,28 +107,31 @@ export default function ClientOnboardingPage() {
     }
   };
   return (
-    <div className="flex min-h-screen flex-col">
+    // This page renders INSIDE AppShell's <main>, so it must not claim the
+    // viewport height (that produced a double-height scroll) and must not open
+    // a second <main> landmark.
+    <div className="flex flex-col">
       <div className="flex flex-1 flex-col">
-        <main className="flex flex-1 flex-col gap-8 px-4 py-12">
+        <div className="flex flex-1 flex-col gap-8 px-4 py-12">
           <div className="mx-auto flex max-w-md flex-col gap-6 text-center">
             <OnboardingPendingBanner />
 
             {step === 'identify-required' && (
               <>
                 <div className="space-y-3">
-                  <h1 className="text-2xl font-semibold text-slate-100">Set up your client profile</h1>
+                  <h1 className="text-2xl font-semibold tracking-tight text-slate-100">Set up your client profile</h1>
                   <p className="text-center text-sm text-slate-400">Complete the two steps below to finish onboarding.</p>
                 </div>
 
                 <ol className="flex flex-col gap-4 text-left">
-                  <li className="flex items-start gap-3 rounded-lg bg-slate-800/40 p-3 text-left text-sm text-slate-200">
+                  <li className="surface-panel flex items-start gap-3 rounded-lg p-3 text-left text-sm text-slate-200">
                     <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">1</span>
                     <div>
                       <p className="font-medium text-slate-100">Confirm client details</p>
                       <p className="text-slate-400">Confirm or update the client name, direct email, and direct phone.</p>
                     </div>
                   </li>
-                  <li className="flex items-start gap-3 rounded-lg bg-slate-800/40 p-3 text-left text-sm text-slate-200">
+                  <li className="surface-panel flex items-start gap-3 rounded-lg p-3 text-left text-sm text-slate-200">
                     <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-700 text-xs font-semibold text-white">2</span>
                     <div>
                       <p className="font-medium text-slate-100">Verify mobile number</p>
@@ -137,7 +141,7 @@ export default function ClientOnboardingPage() {
                 </ol>
 
                 <div className="flex justify-center">
-                  <Button type="button" onClick={() => setStep('start')} disabled={loading} className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
+                  <Button type="button" onClick={() => setStep('start')} disabled={loading}>
                     Continue
                   </Button>
                 </div>
@@ -147,7 +151,7 @@ export default function ClientOnboardingPage() {
             {step === 'start' && (
               <>
                 <div className="space-y-3">
-                  <h1 className="text-2xl font-semibold text-slate-100">Confirm client details</h1>
+                  <h1 className="text-2xl font-semibold tracking-tight text-slate-100">Confirm client details</h1>
                   <p className="text-sm text-slate-400">These details will be used to create your client profile. Pre-filled values come from your account where available.</p>
                 </div>
 
@@ -156,7 +160,7 @@ export default function ClientOnboardingPage() {
                     <Label htmlFor="type" className="text-sm font-medium text-slate-300">Client type</Label>
                     <select
                       id="type"
-                      className="h-10 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
+                      className={SELECT_CLASSES}
                       value={startupForm.type}
                       onChange={(e) => setStartupForm((prev) => ({ ...prev, type: e.target.value as 'INDIVIDUAL' | 'BUSINESS' | '' }))}
                       autoComplete="off"
@@ -173,7 +177,6 @@ export default function ClientOnboardingPage() {
                     <Input
                       id="name"
                       type="text"
-                      className="h-10 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                       placeholder="e.g. Acme Inc or Jane Doe"
                       value={startupForm.name}
                       onChange={(e) => setStartupForm((prev) => ({ ...prev, name: e.target.value }))}
@@ -186,7 +189,6 @@ export default function ClientOnboardingPage() {
                     <Input
                       id="directEmail"
                       type="email"
-                      className="h-10 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                       placeholder="you@company.com"
                       value={startupForm.directEmail}
                       onChange={(e) => setStartupForm((prev) => ({ ...prev, directEmail: e.target.value }))}
@@ -200,7 +202,6 @@ export default function ClientOnboardingPage() {
                     <Input
                       id="directPhone"
                       type="tel"
-                      className="h-10 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                       placeholder="+1234567890"
                       value={startupForm.directPhone}
                       onChange={(e) => setStartupForm((prev) => ({ ...prev, directPhone: e.target.value }))}
@@ -210,17 +211,17 @@ export default function ClientOnboardingPage() {
                   </div>
 
                   {error && (
-                    <div role="alert" className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300">{error}</div>
+                    <div role="alert" className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300">{error}</div>
                   )}
 
                   <div className="flex justify-center">
                     <div className="flex w-full max-w-xs flex-col gap-3">
-                      <Button type="submit" disabled={loading || !startValid} className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
+                      <Button type="submit" disabled={loading || !startValid}>
                         {loading ? 'Creating profile…' : 'Continue to verification'}
                       </Button>
-                      <Link href="/client" className="rounded-lg border border-slate-700 bg-slate-800 px-5 py-2.5 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
-                        Back
-                      </Link>
+                      <Button asChild variant="secondary">
+                        <Link href="/client">Back</Link>
+                      </Button>
                     </div>
                   </div>
                 </form>
@@ -230,7 +231,7 @@ export default function ClientOnboardingPage() {
             {step === 'verify' && (
               <>
                 <div className="space-y-3">
-                  <h1 className="text-2xl font-semibold text-slate-100">Verify your mobile number</h1>
+                  <h1 className="text-2xl font-semibold tracking-tight text-slate-100">Verify your mobile number</h1>
                   <p className="text-sm text-slate-400">Enter the verification code sent to your direct mobile number.</p>
                 </div>
 
@@ -246,9 +247,9 @@ export default function ClientOnboardingPage() {
                   <p className="text-sm text-slate-400">Direct phone</p>
                   <p className="font-medium text-slate-200">{startupForm.directPhone.trim() || '—'}</p>
                 </div>
-                <p className="text-xs text-slate-500">Step 2 of 2</p>
+                <p className="text-xs text-slate-400">Step 2 of 2</p>
                 {startedClient?.mobileVerificationExpiresAt && (
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-400">
                     Code expires {new Date(startedClient.mobileVerificationExpiresAt).toLocaleTimeString()}.
                   </p>
                 )}
@@ -256,7 +257,7 @@ export default function ClientOnboardingPage() {
                 <p className="text-left text-sm text-slate-300">
                   Verification codes are delivered through a controlled channel. If you are expecting a code, check your account communications.
                 </p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-400">
                   <strong className="text-slate-300">Development note:</strong> The verification code is logged to the server console when{' '}
                   <code className="text-slate-300">BOOT_ARTIFACTS_ALLOWED=true</code>. In production, it will be sent via SMS (deferred).
                 </p>
@@ -267,7 +268,6 @@ export default function ClientOnboardingPage() {
                     <Input
                       id="token"
                       type="text"
-                      className="h-10 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                       placeholder="e.g. 123456"
                       value={verifyToken}
                       onChange={(e) => {
@@ -282,24 +282,24 @@ export default function ClientOnboardingPage() {
                   </div>
 
                   {error && (
-                    <div role="alert" className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300">{error}</div>
+                    <div role="alert" className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300">{error}</div>
                   )}
 
                   <div className="flex justify-center">
                     <div className="flex w-full max-w-xs flex-col gap-3">
-                      <Button type="submit" disabled={loading || !verifyToken.trim()} className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
+                      <Button type="submit" disabled={loading || !verifyToken.trim()}>
                         {loading ? 'Verifying…' : 'Verify & complete setup'}
                       </Button>
-                      <Link href="/client" className="rounded-lg border border-slate-700 bg-slate-800 px-5 py-2.5 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
-                        Back
-                      </Link>
+                      <Button asChild variant="secondary">
+                        <Link href="/client">Back</Link>
+                      </Button>
                     </div>
                   </div>
                 </form>
               </>
             )}
           </div>
-        </main>
+        </div>
       </div>
     </div>
   );

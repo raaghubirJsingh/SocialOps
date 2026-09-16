@@ -34,8 +34,10 @@ export function ClientDashboardShell({ client }: ClientDashboardShellProps) {
       )}
 
       {/* Profile Summary */}
-      <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-        <h2 className="text-xl font-semibold text-slate-100">Profile</h2>
+      <div className="surface-panel rounded-lg p-6">
+        <h2 className="text-xl font-semibold tracking-tight text-slate-100">
+          Profile
+        </h2>
         <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <dt className="text-sm text-slate-400">Name</dt>
@@ -74,9 +76,9 @@ export function ClientDashboardShell({ client }: ClientDashboardShellProps) {
       <div className="grid gap-4 sm:grid-cols-2">
         <Link
           href={`/client/content?clientId=${client.id}`}
-          className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+          className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
         >
-          <Card className="h-full transition-colors hover:border-slate-600">
+          <Card className="h-full transition-all duration-300 motion-safe:hover:-translate-y-1 hover:border-blue-500/30 hover:bg-white/[0.06]">
             <CardHeader>
               <CardTitle>Content</CardTitle>
               <CardDescription>
@@ -87,9 +89,9 @@ export function ClientDashboardShell({ client }: ClientDashboardShellProps) {
         </Link>
         <Link
           href={`/client/social-accounts?clientId=${client.id}`}
-          className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+          className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
         >
-          <Card className="h-full transition-colors hover:border-slate-600">
+          <Card className="h-full transition-all duration-300 motion-safe:hover:-translate-y-1 hover:border-blue-500/30 hover:bg-white/[0.06]">
             <CardHeader>
               <CardTitle>Social accounts</CardTitle>
               <CardDescription>
@@ -100,9 +102,9 @@ export function ClientDashboardShell({ client }: ClientDashboardShellProps) {
         </Link>
         <Link
           href={`/client/raw-data?clientId=${client.id}`}
-          className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+          className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
         >
-          <Card className="h-full transition-colors hover:border-slate-600">
+          <Card className="h-full transition-all duration-300 motion-safe:hover:-translate-y-1 hover:border-blue-500/30 hover:bg-white/[0.06]">
             <CardHeader>
               <CardTitle>Raw data</CardTitle>
               <CardDescription>
@@ -114,8 +116,8 @@ export function ClientDashboardShell({ client }: ClientDashboardShellProps) {
       </div>
 
       {/* Placeholder sections */}
-      <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-        <h2 className="text-xl font-semibold text-slate-100">
+      <div className="surface-panel rounded-lg p-6">
+        <h2 className="text-xl font-semibold tracking-tight text-slate-100">
           Agency Relationships
         </h2>
         <p className="mt-2 text-sm text-slate-400">
@@ -123,8 +125,10 @@ export function ClientDashboardShell({ client }: ClientDashboardShellProps) {
         </p>
       </div>
 
-      <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
-        <h2 className="text-xl font-semibold text-slate-100">Invitations</h2>
+      <div className="surface-panel rounded-lg p-6">
+        <h2 className="text-xl font-semibold tracking-tight text-slate-100">
+          Invitations
+        </h2>
         <p className="mt-2 text-sm text-slate-400">
           Pending invitations will appear here.
         </p>

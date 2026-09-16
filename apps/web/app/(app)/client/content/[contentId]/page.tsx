@@ -133,11 +133,14 @@ export default function ClientContentDetailPage() {
       <div className="mx-auto max-w-3xl space-y-4">
         <div
           role="alert"
-          className="rounded-md border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
         >
           {describeApiError(detailQuery.error, 'Unable to load this content item.')}
         </div>
-        <Link href={backHref} className="text-sm text-blue-400 hover:underline">
+        <Link
+          href={backHref}
+          className="rounded text-sm text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
+        >
           ← Back to content
         </Link>
       </div>
@@ -163,10 +166,15 @@ export default function ClientContentDetailPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div className="space-y-1">
-        <Link href={backHref} className="text-sm text-blue-400 hover:underline">
+        <Link
+          href={backHref}
+          className="rounded text-sm text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
+        >
           ← Back to content
         </Link>
-        <h2 className="text-2xl font-semibold text-slate-100">{content.title}</h2>
+        <h2 className="text-2xl font-semibold tracking-tight text-slate-100">
+          {content.title}
+        </h2>
       </div>
 
       <Card>

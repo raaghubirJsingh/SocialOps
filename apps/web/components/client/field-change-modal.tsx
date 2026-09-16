@@ -4,6 +4,7 @@ import { useForm, type Resolver } from 'react-hook-form';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { ClientField } from '@/types/client';
@@ -43,6 +44,17 @@ const fieldChangeResolver: Resolver<FieldChangeFormValues> = async (raw) => {
 /**
  * Modal for field changes requiring re-authentication.
  * Used for security-controlled fields (NAME, DIRECT_EMAIL, DIRECT_MOBILE).
+ *
+ * Rendered through the shared `Dialog` primitive (components/ui/dialog.tsx)
+ * instead of a second hand-rolled overlay: that gives the dialog
+ * `role="dialog"`, `aria-modal`, a labelled title, Escape-to-close and
+ * backdrop-click-to-close - none of which this component had before - plus the
+ * single glass overlay treatment. The public props are unchanged, so the call
+ * site in /client/profile is untouched.
+ *
+ * The action buttons live in the dialog footer and submit the form by id
+ * (`form="field-change-form"`), which keeps the form markup and its
+ * react-hook-form wiring exactly as they were.
  */
 export function FieldChangeModal({
   field,
@@ -70,73 +82,76 @@ export function FieldChangeModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-md rounded-lg bg-slate-900 p-6 shadow-xl">
-        <h3 className="text-lg font-semibold text-slate-100">
-          Change {field}
-        </h3>
-        <p className="mt-1 text-sm text-slate-400">
-          {requirePassword
-            ? 'Re-enter your password to confirm this change.'
-            : 'Enter the new value.'}
-        </p>
+    <Dialog
+      open
+      title={`Change ${field}`}
+      description={
+        requirePassword
+          ? 'Re-enter your password to confirm this change.'
+          : 'Enter the new value.'
+      }
+      onClose={onCancel}
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onCancel}
+            disabled={isLoading}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" form="field-change-form" disabled={isLoading}>
+            {isLoading ? 'Saving...' : 'Save'}
+          </Button>
+        </>
+      }
+    >
+      <form
+        id="field-change-form"
+        onSubmit={onFormSubmit}
+        className="space-y-4"
+      >
+        <div className="space-y-2">
+          <Label htmlFor="field-value">New value</Label>
+          <Input
+            id="field-value"
+            defaultValue={currentValue ?? ''}
+            disabled={isLoading}
+            {...register('value')}
+          />
+          {errors.value && (
+            <p className="text-xs text-red-400">{errors.value.message}</p>
+          )}
+        </div>
 
-        <form onSubmit={onFormSubmit} className="mt-4 space-y-4">
+        {requirePassword && (
           <div className="space-y-2">
-            <Label htmlFor="field-value">New value</Label>
+            <Label htmlFor="current-password">Current password</Label>
             <Input
-              id="field-value"
-              defaultValue={currentValue ?? ''}
+              id="current-password"
+              type="password"
+              autoComplete="current-password"
               disabled={isLoading}
-              {...register('value')}
+              {...register('currentPassword')}
             />
-            {errors.value && (
-              <p className="text-xs text-red-400">{errors.value.message}</p>
+            {errors.currentPassword && (
+              <p className="text-xs text-red-400">
+                {errors.currentPassword.message}
+              </p>
             )}
           </div>
+        )}
 
-          {requirePassword && (
-            <div className="space-y-2">
-              <Label htmlFor="current-password">Current password</Label>
-              <Input
-                id="current-password"
-                type="password"
-                autoComplete="current-password"
-                disabled={isLoading}
-                {...register('currentPassword')}
-              />
-              {errors.currentPassword && (
-                <p className="text-xs text-red-400">
-                  {errors.currentPassword.message}
-                </p>
-              )}
-            </div>
-          )}
-
-          {error && (
-            <div
-              role="alert"
-              className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
-            >
-              {error}
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={onCancel}
-              disabled={isLoading}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? 'Saving...' : 'Save'}
-            </Button>
+        {error && (
+          <div
+            role="alert"
+            className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
+          >
+            {error}
           </div>
-        </form>
-      </div>
-    </div>
+        )}
+      </form>
+    </Dialog>
   );
 }
