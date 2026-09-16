@@ -50,25 +50,25 @@ export function Sidebar() {
 
   return (
     <aside
-      className="hidden w-64 shrink-0 border-r border-slate-800 bg-slate-900 md:flex md:flex-col"
+      className="hidden w-64 shrink-0 border-r border-white/[0.06] bg-slate-900/40 md:flex md:flex-col"
       aria-label="Primary navigation"
     >
-      <div className="border-b border-slate-800 px-6 py-5">
+      <div className="border-b border-white/[0.06] px-6 py-5">
         {/* Brand target is /dashboard: "/" is the public home page in the
             approved routing matrix, so the in-app brand link stays inside
             the protected area. */}
         <Link
           href="/dashboard"
-          className="text-xl font-bold tracking-tight text-slate-100"
+          className="inline-block rounded text-xl font-bold tracking-tight text-slate-100 transition-opacity duration-200 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
         >
           Social<span className="text-blue-400">Ops</span>
         </Link>
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="mt-1 text-xs text-slate-400">
           Social media operations
         </p>
       </div>
       <nav className="flex-1 px-3 py-5">
-        <p className="px-3 pb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+        <p className="px-3 pb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
           Workspace
         </p>
         <ul className="space-y-1">
@@ -81,10 +81,10 @@ export function Sidebar() {
                   href={item.href}
                   aria-current={isActive ? 'page' : undefined}
                   className={cn(
-                    'block rounded-lg px-3 py-2 text-sm transition-colors',
+                    'block rounded-lg border-l-2 px-3 py-2 text-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60',
                     isActive
-                      ? 'bg-blue-500/10 font-medium text-blue-300'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-slate-100',
+                      ? 'border-blue-400/70 bg-blue-500/10 font-medium text-blue-300'
+                      : 'border-transparent text-slate-300 hover:bg-white/[0.06] hover:text-slate-100',
                   )}
                 >
                   {item.label}
@@ -93,17 +93,17 @@ export function Sidebar() {
             );
           })}
         </ul>
-        <p className="mt-8 px-3 pb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+        <p className="mt-8 px-3 pb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
           Foundation
         </p>
-        <p className="px-3 text-xs text-slate-500">
+        <p className="px-3 text-xs text-slate-400">
           Auth, RBAC, and dashboard foundations only. Later modules
           will be added after explicit approval.
         </p>
       </nav>
-      <div className="border-t border-slate-800 p-4">
+      <div className="border-t border-white/[0.06] p-4">
         <p className="text-xs font-medium text-slate-300">SocialOps V1</p>
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="mt-1 text-xs text-slate-400">
           Frontend foundation
         </p>
       </div>

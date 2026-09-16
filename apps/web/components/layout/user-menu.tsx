@@ -41,7 +41,7 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="inline-flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900 px-3 py-1.5 text-sm text-slate-200 transition-colors hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-sm text-slate-200 transition-all duration-200 hover:border-slate-600 hover:bg-white/[0.07] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 disabled:cursor-not-allowed disabled:opacity-60"
         aria-label="Open user menu"
         disabled={isLoading}
       >
@@ -54,7 +54,7 @@ export function UserMenu() {
           {fullName ?? '(unknown)'}
         </div>
         {email ? (
-          <div className="px-2 pb-2 text-xs text-slate-500 break-all">
+          <div className="px-2 pb-2 text-xs text-slate-400 break-all">
             {email}
           </div>
         ) : null}

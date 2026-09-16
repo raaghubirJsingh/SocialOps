@@ -18,7 +18,16 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Sidebar />
       <section className="flex min-w-0 flex-1 flex-col">
         <Topbar />
-        <main className="flex-1 overflow-y-auto bg-slate-950 p-6">
+        {/* `isolate` + a negative-z glow keeps the decorative layer behind the
+            content without an extra wrapper element, and gives the sticky glass
+            topbar something to blur. Deliberately a single soft radial and NOT
+            `bg-grid-faint`: this area is data-dense, and a texture behind
+            tables, lists and form rows measurably hurts readability. */}
+        <main className="relative isolate flex-1 overflow-y-auto bg-slate-950 p-6">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-64 bg-[radial-gradient(ellipse_at_top,rgb(37_99_235/0.08),transparent_65%)]"
+          />
           {children}
         </main>
       </section>
