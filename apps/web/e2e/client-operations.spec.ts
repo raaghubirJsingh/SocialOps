@@ -31,8 +31,10 @@ const GUARDED_ROUTES = [
   `/clients/${CLIENT_ID}/social-accounts`,
   `/clients/${CLIENT_ID}/content`,
   `/clients/${CLIENT_ID}/content/${CONTENT_ID}`,
+  `/clients/${CLIENT_ID}/raw-data`,
   `/client/content?clientId=${CLIENT_ID}`,
   `/client/social-accounts?clientId=${CLIENT_ID}`,
+  `/client/raw-data?clientId=${CLIENT_ID}`,
 ];
 
 test.describe('client operations routes are guarded', () => {

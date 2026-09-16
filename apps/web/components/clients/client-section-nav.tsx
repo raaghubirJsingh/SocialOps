@@ -15,6 +15,7 @@ const SECTIONS = [
   { href: '', label: 'Overview' },
   { href: '/social-accounts', label: 'Social accounts' },
   { href: '/content', label: 'Content' },
+  { href: '/raw-data', label: 'Raw data' },
 ] as const;
 
 export function ClientSectionNav({
@@ -22,7 +23,7 @@ export function ClientSectionNav({
   active,
 }: {
   clientId: string;
-  active: 'overview' | 'social-accounts' | 'content';
+  active: 'overview' | 'social-accounts' | 'content' | 'raw-data';
 }) {
   return (
     <nav aria-label="Client sections" className="flex flex-wrap gap-2">

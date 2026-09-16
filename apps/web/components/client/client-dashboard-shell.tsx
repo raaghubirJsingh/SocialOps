@@ -98,6 +98,19 @@ export function ClientDashboardShell({ client }: ClientDashboardShellProps) {
             </CardHeader>
           </Card>
         </Link>
+        <Link
+          href={`/client/raw-data?clientId=${client.id}`}
+          className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+        >
+          <Card className="h-full transition-colors hover:border-slate-600">
+            <CardHeader>
+              <CardTitle>Raw data</CardTitle>
+              <CardDescription>
+                Paste briefs or notes as immutable intake records.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
       </div>
 
       {/* Placeholder sections */}
