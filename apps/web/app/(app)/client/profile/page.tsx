@@ -133,6 +133,30 @@ export default function ClientProfilePage() {
     (fieldConfig) => !isFieldEmpty(client, fieldConfig.field) && fieldConfig.field !== 'DIRECT_EMAIL',
   );
 
+  /** True when the "Complete your profile" form has at least one field with a value. */
+  const isFillDirty =
+    emptyFillFields.some((f) => {
+      if (f === 'INDUSTRY') {
+        return (
+          (fillValues[f] !== undefined && fillValues[f] !== '' && fillValues[f] !== 'Other') ||
+          (fillValues['INDUSTRY_OTHER']?.trim() ?? '') !== ''
+        );
+      }
+      return (fillValues[f]?.trim() ?? '') !== '';
+    });
+
+  /** True when the edit form has any field changed from its original value. */
+  const isEditDirty = EDITABLE_PROFILE_FIELDS.some((fc) => {
+    if (fc.field === 'DIRECT_EMAIL') return false;
+    const current = editValues[fc.field];
+    const original = getFieldValue(client, fc.field);
+    if (current === undefined) return false; // untouched
+    return current !== (original ?? '');
+  }) || (
+    editValues['INDUSTRY'] === 'Other' &&
+    (editValues['INDUSTRY_OTHER']?.trim() ?? '') !== ''
+  );
+
   const activeFieldConfig = EDITABLE_PROFILE_FIELDS.find((f) => f.field === activeField);
   const activeFieldValue = activeField ? getFieldValue(client, activeField) : null;
 
@@ -193,6 +217,8 @@ export default function ClientProfilePage() {
     setError(null);
     try {
       for (const [field, value] of Object.entries(valuesToSave)) {
+        // Safety: never send empty strings to the backend.
+        if (typeof value !== 'string' || value === '') continue;
         await clientApi.updateField(clientId, {
           field: field as ClientField,
           value,
@@ -201,6 +227,9 @@ export default function ClientProfilePage() {
       const updated = await clientApi.getMyClient(clientId);
       saveBoundClientId(updated.id);
       setClient(updated);
+      // Clear the form so the dirty flag resets and fields that were just
+      // saved disappear from the inline form on the next render.
+      setFillValues({});
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save profile details.');
@@ -304,22 +333,26 @@ export default function ClientProfilePage() {
               e.preventDefault();
               if (isLoading) return;
 
+              // Build a sanitized payload: only fields with actual values.
+              const payload: Partial<Record<ClientField, string>> = {};
+              for (const [field, value] of Object.entries(editValues)) {
+                if (field === 'INDUSTRY_OTHER') continue;
+                if (typeof value !== 'string' || value === '') continue;
+                payload[field as ClientField] = value;
+              }
+
+              // Handle INDUSTRY "Other" case: use the custom text value instead.
+              if (editValues['INDUSTRY'] === 'Other' && editValues['INDUSTRY_OTHER']) {
+                payload.INDUSTRY = editValues['INDUSTRY_OTHER'];
+              }
+
               setIsLoading(true);
               setError(null);
               try {
-                for (const [field, value] of Object.entries(editValues)) {
-                  if (value !== undefined && value !== '') {
-                    if (field === 'INDUSTRY_OTHER') continue;
-                    await clientApi.updateField(clientId, {
-                      field: field as ClientField,
-                      value,
-                    });
-                  }
-                }
-                if (editValues['INDUSTRY'] === 'Other' && editValues['INDUSTRY_OTHER']) {
+                for (const [field, value] of Object.entries(payload)) {
                   await clientApi.updateField(clientId, {
-                    field: 'INDUSTRY',
-                    value: editValues['INDUSTRY_OTHER'],
+                    field: field as ClientField,
+                    value,
                   });
                 }
                 const updated = await clientApi.getMyClient(clientId);
@@ -372,7 +405,7 @@ export default function ClientProfilePage() {
               <Button type="button" variant="secondary" onClick={handleEditCancel} disabled={isLoading}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isLoading} className="min-w-[120px]">
+              <Button type="submit" disabled={isLoading || !isEditDirty} className="min-w-[120px]">
                 {isLoading ? (
                   <>
                     <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -460,14 +493,7 @@ export default function ClientProfilePage() {
           </div>
           <Button
             type="submit"
-            disabled={
-              isLoading ||
-              emptyFillFields.every(
-                (f) =>
-                  !fillValues[f]?.trim() &&
-                  !(f === 'INDUSTRY' && fillValues['INDUSTRY_OTHER']?.trim()),
-              )
-            }
+            disabled={isLoading || !isFillDirty}
           >
             {isLoading ? (
               <>
