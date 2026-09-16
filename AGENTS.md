@@ -1,7 +1,8 @@
 # AGENTS.md — SocialOps AI Agent Constitution
 
 Status: APPROVED — FINAL
-Version: 0.1.1 (Bootstrap + Client Module V1 - approval finalized)
+Version: 0.1.2 (Bootstrap + Client Module V1 + Employee Module V1 -
+approved amendment; see docs/APPROVED_DECISIONS.md Decision 007)
 Applies to: All current and future Cline / AI agent sessions on this repository
 
 This document is the binding governance contract for any AI agent (Cline or
@@ -516,6 +517,15 @@ management, field-change governance, Agency discovery, and SOCIALOPS_ADMIN-scope
 Client operations. It does NOT authorize Task, Content, Publishing, Distribution,
 Analytics, or any other module still listed as deferred above.
 
+Note on Employee Module V1: "Employee Module V1" (referred to in application
+code as "Phase 1/2/3," governed by docs/APPROVED_DECISIONS.md Decision 007) is
+an APPROVED MODULE defined in Section 17 of this document. It covers the 1:1
+EmployeeProfile identity model, employee registration, the employee
+self-profile read endpoint, and the read-only employee dashboard UI. It does
+NOT authorize Client<->Employee assignment, employee management or
+administration, employee roles/permissions, or Task, Content, Publishing,
+Distribution, Analytics, or any other module still listed as deferred above.
+
 These belong to later, explicitly approved development phases. Only after
 the bootstrap milestone is verified (Section 11) should Client/Task modules
 begin.
@@ -576,6 +586,136 @@ even if not explicitly reiterated at that moment in a session:
   milestone.
 - Any deviation from, addition to, or reinterpretation of this document
   itself.
+
+---
+
+## 17. Employee Module V1 (Approved)
+
+Status: APPROVED (docs/APPROVED_DECISIONS.md, Decision 007).
+
+Employee Module V1 is an approved, implemented module that defines how
+employee accounts exist in SocialOps. It is additive: it changes no existing
+authentication, RBAC, tenant-isolation, or Client Module V1 behavior.
+
+Numbering note: this section is numbered 17 because the implementation cites
+"AGENTS.md §17.1", "§17.2", and "§17.3" in code comments. Section 16 remains
+unassigned. Do not renumber Section 17, and do not create a Section 16,
+without explicit human approval.
+
+### 17.1 Employee Identity
+
+- An employee is NOT an AccountType. The AccountType enum remains exactly
+  SERVICE_PROVIDER | INDIVIDUAL_BUSINESS. There is no EMPLOYEE value, and
+  none may be added, without explicit human approval.
+- Employee identity is carried by an EmployeeProfile row: a 1:1 extension of
+  User whose `userId` is UNIQUE, so a user has at most one employee profile.
+- EmployeeProfile carries no role, no status, and no Organization or
+  Workspace linkage: no `organizationId`, and no Client<->Employee relation.
+  It is NOT an OrganizationMembership and must never be treated as one.
+- Employee registration creates the User with `accountType = NULL`. The
+  presence of the EmployeeProfile relation is the sole discriminator between
+  an employee account and a non-employee account.
+- The User and its EmployeeProfile are created in ONE interactive
+  transaction. There must never be an employee-intent User without its
+  profile, and never an orphan EmployeeProfile.
+- EmployeeProfile rows are created only by that registration transaction.
+  V1 exposes no employee mutation route, no employee administration route,
+  and no employee deletion route.
+
+### 17.2 Employee Registration and Authentication
+
+- Employee registration is a public, unauthenticated endpoint
+  (`POST /api/auth/register-employee`) that is separate from the standard
+  `POST /api/auth/register`.
+- Request contract: `fullName` (required), `email` (required), `phone`
+  (optional), `password` (required, minimum 8 characters). It accepts NO
+  `accountType` and no backend-controlled field (isActive, emailVerifiedAt,
+  role, organizationId, employeeProfile, or any equivalent).
+- Employee registration NEVER issues a JWT, access token, refresh token, or
+  any authenticated session. It returns the same status discriminator as
+  standard registration: `verification_required` (production) or
+  `registration_complete` (dev-only auto-verify bypass).
+- Employee accounts follow the SAME email-verification lifecycle as every
+  other account; an unverified account cannot obtain tokens at login.
+- Token issuance remains centralized at `POST /api/auth/login`, and the
+  access token is a normal JWT. The frontend must never receive a
+  server-side secret (Section 8).
+- The login response carries `isEmployee`, derived at read time from the
+  presence of the 1:1 EmployeeProfile relation. `isEmployee` is a UI routing
+  hint ONLY: it is never authorization state, is never trusted from a JWT or
+  any client-supplied claim, and must never be used to satisfy an
+  authorization check.
+- Organization/tenant provisioning is not performed for employee accounts.
+  Provisioning is scoped to SERVICE_PROVIDER users and is a no-op for every
+  other account type.
+
+### 17.3 Employee Authorization (Server-Side, Deny by Default)
+
+- Employees are NOT Organization members: they have no
+  OrganizationMembership and hold no role. An employee must never be added
+  to an Organization (or Workspace) to make a feature work.
+- Employee-scoped routes must: (a) require a valid access token; (b) exempt
+  the request from the `X-Organization-Id` requirement using the same
+  route-level `@Public()` pattern already used by `GET /memberships/me`,
+  because an employee has no organization context to send; and (c)
+  re-verify the employee's EmployeeProfile row against PostgreSQL on EVERY
+  request.
+- `@PublicAuth()` must NOT be used on an employee route: it disables JWT
+  verification. Route-level `@Public()` bypasses only the
+  organization-context requirement and never weakens authentication.
+- The verifying authority is EmployeeContextGuard. It runs after the global
+  JwtAuthGuard, fails closed with 401 when no authenticated subject is
+  present, answers a uniform 403 when no EmployeeProfile exists for that
+  subject, and attaches the verified profile to the request. A non-employee
+  and an unknown user must remain indistinguishable: no existence leak.
+- Employee data access is scoped to the authenticated subject alone
+  (`userId`). No employee route may accept a client-supplied employee id,
+  userId, or organization id as authorization input; client-supplied tenant
+  or identity context is never authoritative (Sections 6-7).
+- V1 contains exactly ONE employee route: `GET /api/employees/me/profile`.
+  It returns only the caller's own EmployeeProfile (id, userId, createdAt,
+  updatedAt) joined with non-secret identity fields (id, email, fullName).
+  It must never return a password hash, token, or verification state.
+- Every employee route not explicitly approved as above is denied by
+  default (Section 7).
+
+### 17.4 Employee Frontend Behavior
+
+- The employee UI is strictly read-only. V1 renders a presence-only profile
+  card and a dashboard branch that omits the Service Provider (Agency)
+  tenant panels. No editing, no analytics, no status management, and no
+  employee lists.
+- The frontend uses the session `isEmployee` hint for routing and navigation
+  visibility only, and must degrade safely: a session predating this field
+  is treated as `isEmployee = false`.
+- Hiding a route or a navigation item in the frontend is never a security
+  control (Section 7). Every employee endpoint independently enforces the
+  rules in Section 17.3 server-side.
+- The frontend must not make organization-scoped calls on the employee path.
+  An employee session has no active organization selection, and no
+  organization-scoped endpoint may be called on its behalf.
+
+### 17.5 Employee Module V1 Scope Boundary
+
+Authorized by this section:
+
+- the 1:1 EmployeeProfile identity model;
+- employee registration and its email-verification integration;
+- the login `isEmployee` derivation;
+- `GET /api/employees/me/profile` and EmployeeContextGuard;
+- the read-only employee dashboard and employee profile-card UI.
+
+NOT authorized by this section (still deferred, Section 13):
+
+- Client<->Employee assignment or association;
+- employee management, administration, listing, or deletion;
+- employee roles, permissions, or any employee RBAC model;
+- employee-scoped Task, Content, Publishing, Distribution, or Analytics
+  features;
+- any employee mutation endpoint.
+
+Do not expand Employee Module V1 beyond the authorized list without explicit
+human approval.
 
 ---
 

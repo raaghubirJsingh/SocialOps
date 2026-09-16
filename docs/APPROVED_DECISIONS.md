@@ -114,6 +114,70 @@ model without explicit human approval.
 
 Status: FINAL
 
+## Decision 007 — Employee Module V1 (§17 Amendment)
+
+Employee Module V1 was implemented and committed across three phases without a
+corresponding amendment to AGENTS.md, even though the implementation cites
+"AGENTS.md §17.1", "§17.2", and "§17.3" in code comments. Repository
+inspection confirmed that AGENTS.md contained no Employee section at all (zero
+occurrences of the word "Employee"), and that this decisions log contained no
+Employee Module V1 entry.
+
+Resolution: AGENTS.md is amended with a new Section 17 (Employee Module V1),
+covering employee identity (17.1), registration and authentication (17.2),
+server-side authorization (17.3), frontend behavior (17.4), and the module's
+scope boundary (17.5). Section 13 receives a matching "Note on Employee Module
+V1" carve-out note. The AGENTS.md version line is bumped from 0.1.1 to 0.1.2.
+
+Approval: granted explicitly by the human in the session that produced this
+entry. This satisfies the AGENTS.md Section 15 gates for "Any deviation from,
+addition to, or reinterpretation of this document itself" and for "Beginning
+any module explicitly listed as deferred," and the Section 14 requirement that
+scope additions be explicitly approved rather than inferred.
+
+Implemented scope recorded (as verified in the repository):
+
+- Phase 1 — schema: `EmployeeProfile` Prisma model, a 1:1 extension of `User`
+  (`userId` UNIQUE; no `organizationId`; no Client<->Employee relation),
+  migration `20260915115926_add_employee_profile_v1`
+  (apps/api/prisma/schema.prisma).
+- Phase 2 — API: employee registration
+  (`POST /api/auth/register-employee`, Zod contract without `accountType`),
+  atomic User + EmployeeProfile creation in one transaction, login
+  `isEmployee` derivation, `EmployeeContextGuard`, and the single read route
+  `GET /api/employees/me/profile` (apps/api/src/auth, apps/api/src/employees).
+- Phase 3 — web: public `/employees/register` route and form, employee
+  navigation filtering, and the read-only employee dashboard with the
+  `EmployeeProfileCard` (apps/web).
+
+Binding constraints recorded (see Section 17 for the authoritative rules):
+
+- There is no EMPLOYEE AccountType; the enum remains exactly
+  SERVICE_PROVIDER | INDIVIDUAL_BUSINESS. Employee accounts carry
+  `accountType = NULL`, and the EmployeeProfile relation is the only
+  discriminator.
+- Employees are NOT Organization members and hold no role. An employee is
+  never given an organization/tenant context, and must never be added to an
+  Organization or Workspace to make a feature work.
+- Employee endpoints re-verify the EmployeeProfile row against PostgreSQL on
+  every request. Non-employees receive a uniform 403, and the `isEmployee`
+  login flag is a UI routing hint only — never authorization state.
+- Employee registration issues no tokens; employee accounts reuse the existing
+  email-verification lifecycle.
+- V1 exposes exactly one employee route (`GET /api/employees/me/profile`) and
+  no employee mutation, administration, management, or deletion surface.
+- Employee Module V1 does NOT authorize Client<->Employee assignment,
+  employee roles/permissions, or Task, Content, Publishing, Distribution,
+  Analytics, or any other module deferred in Section 13.
+
+Numbering note: the new section is numbered 17 (not 16) because the
+implementation's code comments cite §17.1–§17.3. Section 16 remains
+unassigned. Do not renumber Section 17, and do not create a Section 16,
+without explicit human approval.
+
+Status: FINAL
+Approved: 2026-09-16
+
 ## Decision Management Rule
 
 Do not change a FINAL decision without explicit user approval. When a new
