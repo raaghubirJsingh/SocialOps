@@ -178,6 +178,78 @@ without explicit human approval.
 Status: FINAL
 Approved: 2026-09-16
 
+## Decision 008 — Client Operations V1 Schema (Metadata Only) + OAuth Descope
+
+The Client Operations V1 schema — social accounts and content workflows — was
+proposed, reviewed, and approved with OAuth explicitly descoped, so that this
+schema crosses no deferred security decision.
+
+Approval: granted explicitly by the human, satisfying the AGENTS.md Section 15
+gates for "Beginning any module explicitly listed as deferred" (Section 13,
+"Content module") and the Section 14 rule that scope must never be expanded
+without explicit approval.
+
+Scope recorded (as approved):
+
+- SocialAccount: METADATA ONLY. No access token, no refresh token, no password,
+  and no platform secret of any kind, and no platform API call. It deliberately
+  does not model an OAuth connection state: the lifecycle is a neutral
+  `isActive` boolean (Organization.isActive / Workspace.isActive precedent).
+  `platformAccountId` is nullable because without API access it is often
+  unknown, and a required value would force invented data. Field names are
+  neutral (`handle`, `displayName`, `profileUrl`) and there is NO `isVerified`
+  marker, because this data is DECLARED by the client/agency, not verified
+  against a platform.
+- Content: the canonical story per Client, with the approved status machine
+  DRAFT -> IN_REVIEW -> CHANGES_REQUESTED -> APPROVED -> ARCHIVED and the Final
+  Confirmation gate (`finalConfirmedAt`, `finalConfirmedByUserId`,
+  `finalConfirmedRevisionId`). PUBLISHED is deliberately NOT modeled: the
+  Publishing engine remains deferred (Section 13).
+- ContentRevision: insert-only immutable snapshots (title / body /
+  contentHash), consistent with the insert-only rule in Section 11. Editing an
+  APPROVED item appends a revision, returns the status to DRAFT, and clears the
+  confirmation triple in the same transaction, so an approval can never be
+  silently reused or silently invalidated.
+- ContentStatusEvent: append-only transition audit, mirroring the ClientEvent
+  pattern from Client Module V1.
+- RawData: insert-only intake provenance. Text and structured metadata only,
+  because S3-compatible storage remains deferred (Section 13); `storageRef` is
+  reserved for that later phase and must never hold a public URL.
+- Final Confirmation authority: the CLIENT OWNER (approved decision D4).
+- Creation authority: BOTH the Client side (ClientAccessGuard — owner binding
+  plus onboardingStatus = ACTIVE) and the Agency side (verified organization
+  membership plus RoleGuard / @RequireMinimumRole('ADMIN') plus an ACTIVE
+  ClientAgencyRelationship) may create these records (approved decision D10).
+- Isolation: every new model carries a non-nullable `clientId`, so a row can
+  never exist outside a Client. Client remains the isolation boundary, and the
+  Agency tenant reaches this data only through an ACTIVE relationship
+  (Sections 6-7).
+- Database-level guarantee: the Final Confirmation triple is additionally
+  enforced by the CHECK constraint
+  `Content_approved_requires_final_confirmation`, so an APPROVED-but-unconfirmed
+  row cannot exist even if application code is bypassed.
+
+Explicitly NOT authorized by this decision (still deferred, Section 13):
+
+- OAuth implementation, OAuth token storage, OAuth token encryption, and the
+  encryption / key-management mechanism (Section 5.7 remains an OPEN decision
+  and must not be pre-empted by this schema);
+- Instagram / Facebook / YouTube API integration (no connector or adapter layer
+  exists, and none may be added under this decision);
+- S3-compatible object storage;
+- the Publishing engine, Distribution engine, and Analytics engine;
+- per-platform Content variants;
+- any credential column of any kind. A future credential addition MUST be a
+  separate 1:1 table (e.g. SocialAccountCredential) rather than widening
+  SocialAccount, so the secret surface stays structurally separate.
+
+Migration: `client_operations_v1_metadata`. At the time of this entry the
+migration was generated create-only for human review and has NOT been applied to
+any database; applying it requires separate, explicit approval.
+
+Status: FINAL
+Approved: 2026-09-16
+
 ## Decision Management Rule
 
 Do not change a FINAL decision without explicit user approval. When a new

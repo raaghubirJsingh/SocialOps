@@ -154,6 +154,17 @@ model User {
   socialOpsAdminGrantedAt DateTime?
   socialOpsAdminGrantedById String? @db.Uuid
   socialOpsAdminRevokedAt DateTime?
+
+  // Client Operations V1 (metadata only): audit-only creator/actor links.
+  // None of these confer ownership or authorization - ownership lives on
+  // SocialAccount/Content/RawData via their non-nullable clientId.
+  socialAccountsCreated   SocialAccount[]      @relation("SocialAccountCreator")
+  contentsCreated         Content[]            @relation("ContentCreator")
+  contentsUpdated         Content[]            @relation("ContentUpdater")
+  contentsFinalConfirmed  Content[]            @relation("ContentFinalConfirmer")
+  contentRevisionsCreated ContentRevision[]    @relation("ContentRevisionCreator")
+  contentStatusActed      ContentStatusEvent[] @relation("ContentStatusActor")
+  rawDataCaptured         RawData[]            @relation("RawDataCapturer")
 }
 
 model Organization {
@@ -300,6 +311,14 @@ model Client {
   events        ClientEvent[]
   mobileVerificationTokens MobileVerificationToken[]
 
+  // Client Operations V1 (metadata only). Every child row is scoped by its
+  // non-nullable clientId; these relations exist for query/joins only.
+  socialAccounts       SocialAccount[]
+  contents             Content[]
+  contentRevisions     ContentRevision[]
+  contentStatusEvents  ContentStatusEvent[]
+  rawData              RawData[]
+
   @@index([ownerUserId])
   @@index([status])
   @@index([onboardingStatus])
@@ -429,6 +448,249 @@ model MobileVerificationToken {
   requestedBy User? @relation("MobileVerificationRequester", fields: [requestedByUserId], references: [id], onDelete: SetNull)
 
   @@index([clientId])
+}
+
+// ---------------------------------------------------------------------------
+// Client Operations V1 - METADATA ONLY (human-approved: see
+// docs/APPROVED_DECISIONS.md, Decision 008).
+//
+// Governance:
+//   - AGENTS.md §2   : V1 platforms are Instagram, Facebook, YouTube ONLY.
+//   - AGENTS.md §13  : the Content module is an approved carve-out for THIS
+//                      schema. APPROVED is the terminal Content state here;
+//                      the Publishing engine remains deferred.
+//   - AGENTS.md §8   : NO credential of any kind is stored by these models.
+//                      OAuth, token storage, token encryption, platform API
+//                      integration, and S3/object storage are explicitly OUT
+//                      OF SCOPE for this phase. SocialAccount is metadata
+//                      only: declared by the client/agency, never verified
+//                      against the platform.
+//   - AGENTS.md §6-§7: every model carries a non-nullable `clientId` and is
+//                      always scoped server-side through the verified Client
+//                      context. Client is the isolation boundary for this
+//                      data; Organization (the Agency tenant) reaches it only
+//                      through an ACTIVE ClientAgencyRelationship.
+//   - AGENTS.md §11  : ContentRevision and the event logs are INSERT-ONLY.
+// ---------------------------------------------------------------------------
+
+/// V1 social platforms only (AGENTS.md §2). X and WhatsApp are out of scope
+/// and must not be added without explicit human approval.
+enum SocialPlatform {
+  INSTAGRAM
+  FACEBOOK
+  YOUTUBE
+}
+
+/// Status machine for Content. Publishing is intentionally NOT reachable here
+/// until the deferred Publishing engine is separately approved; APPROVED is
+/// the terminal state for Client Operations V1. APPROVED is only reachable via
+/// the Final Confirmation triple on Content, additionally enforced by a CHECK
+/// constraint added in migration client_operations_v1_metadata.
+enum ContentStatus {
+  DRAFT
+  IN_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  ARCHIVED
+}
+
+/// Provenance of raw intake material.
+enum RawDataSource {
+  CLIENT_UPLOAD
+  CLIENT_FORM
+  AGENCY_UPLOAD
+  EXTERNAL_IMPORT
+}
+
+/// A social-media account recorded against exactly ONE Client.
+///
+/// SCOPE: METADATA ONLY. This model deliberately stores NO access token, NO
+/// refresh token, NO password, and NO platform secret of any kind, and it
+/// never calls a platform API. OAuth connection, token storage, token
+/// encryption, and connector logic are deferred to a dedicated, separately
+/// approved phase (AGENTS.md §13) that will also settle the encryption /
+/// key-management question (§5.7). A future credential addition must be a
+/// separate 1:1 table (e.g. SocialAccountCredential) rather than widening
+/// this row, so the secret surface stays structurally separate.
+///
+/// Because nothing here is platform-verified, the stored values are DECLARED
+/// BY THE CLIENT/AGENCY, NOT VERIFIED: field names are deliberately neutral
+/// (`handle`, `profileUrl`) and no `isVerified` marker exists.
+model SocialAccount {
+  id        String         @id @default(uuid()) @db.Uuid
+  /// Tenant key. Non-nullable: a SocialAccount can never exist outside a
+  /// Client (AGENTS.md §6-§7 isolation).
+  clientId  String         @db.Uuid
+  platform  SocialPlatform
+
+  /// Platform-side identifier (IG user id / FB page id / YT channel id).
+  /// NULLABLE: without OAuth/API access this is often unknown, and a required
+  /// value would force invented data. Postgres treats NULLs as distinct in a
+  /// unique index, so several not-yet-identified accounts of the same platform
+  /// may coexist; once an identifier is known it is unique per client.
+  platformAccountId String?
+  /// Non-secret presentation fields, client-supplied.
+  handle            String?
+  displayName       String?
+  /// Human-checkable public reference (e.g. the profile URL). Never fetched
+  /// or verified by the backend in this phase.
+  profileUrl        String?
+
+  /// Declarative enable/disable of the record (mirrors
+  /// Organization.isActive / Workspace.isActive). Carries no OAuth meaning.
+  isActive          Boolean  @default(true)
+
+  /// Audit only (AGENTS.md §8: important operations are auditable).
+  createdByUserId   String?  @db.Uuid
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  client        Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdByUser User?  @relation("SocialAccountCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([clientId, platform, platformAccountId])
+  @@index([clientId, platform])
+  @@index([clientId, isActive])
+}
+
+/// The canonical "one story" for a Client. Formatting it into per-platform
+/// variants belongs to the deferred Publishing/Distribution work (per-platform
+/// variants are deliberately NOT modeled in this phase).
+///
+/// FINAL CONFIRMATION GATE: `status = APPROVED` is reachable ONLY by writing
+/// finalConfirmedAt + finalConfirmedByUserId + finalConfirmedRevisionId
+/// together, in one transaction, by an authorized confirmer (approved rule:
+/// the CLIENT OWNER confirms). A future Publishing step must assert this
+/// triple AND match the confirmed revision's contentHash. The database
+/// additionally enforces the triple with a CHECK constraint
+/// (Content_approved_requires_final_confirmation).
+///
+/// Approved rule (D7): editing an APPROVED item appends a new revision,
+/// returns status to DRAFT, and CLEARS the confirmation triple in the same
+/// transaction - approval can never be silently reused or invalidated.
+model Content {
+  id        String        @id @default(uuid()) @db.Uuid
+  /// Tenant key. Non-nullable: Content can never exist outside a Client
+  /// (AGENTS.md §6-§7 isolation).
+  clientId  String        @db.Uuid
+  title     String
+  body      String
+  status    ContentStatus @default(DRAFT)
+
+  // --- Final Confirmation: the ONLY path to APPROVED ---------------------
+  finalConfirmedAt         DateTime?
+  finalConfirmedByUserId   String?   @db.Uuid
+  /// Points at the immutable snapshot the confirmer actually approved.
+  finalConfirmedRevisionId String?   @db.Uuid
+
+  archivedAt      DateTime?
+  /// Audit only (AGENTS.md §8).
+  createdByUserId String?   @db.Uuid
+  updatedByUserId String?   @db.Uuid
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  client               Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdByUser        User?                @relation("ContentCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedByUser        User?                @relation("ContentUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  finalConfirmedByUser User?                @relation("ContentFinalConfirmer", fields: [finalConfirmedByUserId], references: [id], onDelete: SetNull)
+  revisions            ContentRevision[]
+  statusEvents         ContentStatusEvent[]
+  rawData              RawData[]
+
+  @@index([clientId, status])
+  @@index([clientId, createdAt])
+  @@index([finalConfirmedByUserId])
+}
+
+/// INSERT-ONLY snapshot of a Content body. Rows are never updated or deleted
+/// (AGENTS.md §11 insert-only/immutable discipline; same pattern as the
+/// ClientEvent audit trail). Editing produces a NEW revision.
+///
+/// This is what makes "approved text can never silently change" enforceable:
+/// the Final Confirmation references a revision id, and the title/body/hash
+/// live in an immutable row.
+model ContentRevision {
+  id        String @id @default(uuid()) @db.Uuid
+  contentId String @db.Uuid
+  /// Denormalized tenant key so revision queries stay client-scoped.
+  clientId  String @db.Uuid
+  revision  Int
+  title     String
+  body      String
+  /// SHA-256 of (title + body): proves the confirmed text is unchanged.
+  contentHash     String
+  createdByUserId String?  @db.Uuid
+  createdAt       DateTime @default(now())
+
+  content       Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  client        Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdByUser User?   @relation("ContentRevisionCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([contentId, revision])
+  @@index([clientId, contentId])
+}
+
+/// APPEND-ONLY status-transition log (insert-only; rows are never updated or
+/// deleted). Mirrors the ClientEvent audit pattern used by Client Module V1.
+/// Every transition records who moved it, from/to, and why.
+model ContentStatusEvent {
+  id          String         @id @default(uuid()) @db.Uuid
+  contentId   String         @db.Uuid
+  /// Denormalized tenant key (tenant-scoped audit queries).
+  clientId    String         @db.Uuid
+  fromStatus  ContentStatus?
+  toStatus    ContentStatus
+  actorUserId String?        @db.Uuid
+  /// Audit context, e.g. CLIENT | AGENCY_ADMIN | SOCIALOPS_ADMIN.
+  actorRole   String?
+  note        String?
+  createdAt   DateTime       @default(now())
+
+  content   Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  client    Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  actorUser User?   @relation("ContentStatusActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, createdAt])
+  @@index([contentId, createdAt])
+}
+
+/// Provenance record for raw intake material (the "permanent knowledge base"
+/// seed). INSERT-ONLY in this phase: rows are never updated or deleted.
+///
+/// S3-compatible object storage is DEFERRED (AGENTS.md §13), so this phase
+/// stores extracted text and/or structured metadata only; `storageRef` is
+/// reserved for the later storage phase and must never hold a public URL.
+model RawData {
+  id               String        @id @default(uuid()) @db.Uuid
+  /// Tenant key. Non-nullable: RawData can never exist outside a Client
+  /// (AGENTS.md §6-§7 isolation).
+  clientId         String        @db.Uuid
+  source           RawDataSource
+  /// Optional provenance link to the Content item this material fed.
+  contentId        String?       @db.Uuid
+  mimeType         String?
+  originalFileName String?
+  /// Extracted text. NULL when the payload is not text (storage deferred).
+  extractedText    String?
+  metadata         Json?
+  /// SHA-256 of the captured payload (integrity + dedup).
+  contentHash      String
+  byteSize         Int?
+  /// Reserved for the future S3-compatible storage phase. Never a public URL.
+  storageRef       String?
+  capturedAt       DateTime      @default(now())
+  /// Audit only (AGENTS.md §8).
+  capturedByUserId String?       @db.Uuid
+  createdAt        DateTime      @default(now())
+
+  client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  content        Content? @relation(fields: [contentId], references: [id], onDelete: SetNull)
+  capturedByUser User?    @relation("RawDataCapturer", fields: [capturedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, capturedAt])
+  @@index([clientId, source])
+  @@index([contentId])
 }
 
 // ---------------------------------------------------------------------------
