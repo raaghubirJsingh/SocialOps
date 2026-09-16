@@ -24,10 +24,18 @@ export const NAV_TABS: NavTab[] = [
   { label: 'Contact', href: '#contact' },
 ];
 
+/**
+ * Hero stat strip.
+ *
+ * Deliberately mixed-label (approved rewrite A6): three of these describe the
+ * V1 DESIGN SCOPE rather than shipped integrations, so each label says which it
+ * is and the hero prints a footnote. No invented adoption numbers (AGENTS.md
+ * §14).
+ */
 export const HERO_STATS = [
-  { value: '3', label: 'V1 social platforms' },
-  { value: '11', label: 'Steps, commitment → report' },
-  { value: '4', label: 'Organization roles' },
+  { value: '3', label: 'V1 social platforms (scope lock)' },
+  { value: '11', label: 'Workflow stages (product scope)' },
+  { value: '4', label: 'Organization roles (live today)' },
   { value: '1', label: 'Story, everywhere it fits' },
 ] as const;
 
@@ -131,12 +139,12 @@ export const FAQS: Faq[] = [
     a: 'Instagram, Facebook and YouTube. X (Twitter) and WhatsApp Channels are explicitly out of V1 scope, so you will not see them promised anywhere on this page.',
   },
   {
-    q: 'Does SocialOps auto-publish without my approval?',
-    a: 'No. Human approval is a mandatory stage of the workflow. AI drafts and assists, but nothing is published or reported without an explicit human sign-off.',
+    q: 'Does SocialOps auto-publish without approval?',
+    a: 'No. Approval is a mandatory, recorded gate: only the client owner can grant final confirmation, and a database constraint refuses an approved record that is missing it. Publishing itself is not part of the current phase — when it ships, an approved item carrying a verifiable confirmation is its only valid input.',
   },
   {
     q: 'How do teams and permissions work?',
-    a: 'Organizations are the top-level tenant. Inside them you create workspaces for clients. People join via organization memberships with one of four roles: Owner, Admin, Member or Viewer. Every request is authorized server-side.',
+    a: 'Your organization is the tenant boundary. Each client is a first-class Client that you onboard, invite and link to your agency through an ACTIVE relationship. People join via organization memberships with one of four roles — Owner, Admin, Member or Viewer — and every protected request is authorized server-side. Workspaces, task assignment and reporting are future phases.',
   },
   {
     q: 'How do I get started?',

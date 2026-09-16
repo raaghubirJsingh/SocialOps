@@ -6,6 +6,7 @@ import { CheckCircle2, Mail, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { SectionHeading } from './shared';
 
 const contactSchema = z.object({
@@ -47,8 +48,9 @@ export function ContactInfoCard() {
         hello@socialops.example
       </p>
       <p className="mt-4 text-xs leading-relaxed text-slate-500">
-        The contact backend endpoint is deferred to a later approved phase
-        — the form validates and confirms your message in the browser.
+        Placeholder address — the production inbox is published at launch. The
+        contact backend endpoint is deferred to a later approved phase, so the
+        form validates and confirms your message in the browser.
       </p>
     </div>
   );
@@ -132,11 +134,10 @@ export function ContactForm() {
       </div>
       <div className="space-y-2">
         <Label htmlFor="contact-message">Message</Label>
-        <textarea
+        <Textarea
           id="contact-message"
           rows={5}
           placeholder="How can we help?"
-          className="flex min-h-[120px] w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
           {...register('message')}
         />
         {errors.message && (

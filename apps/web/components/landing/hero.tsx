@@ -48,9 +48,9 @@ export function Hero() {
         </h1>
 
         <p className="mt-6 max-w-2xl text-lg leading-relaxed text-slate-300">
-          SocialOps turns a single idea into reviewed, approved, published
-          content across Instagram, Facebook and YouTube — with humans in
-          control and AI doing the repetitive heavy lifting.
+          SocialOps turns a single idea into reviewed and approved content
+          prepared for Instagram, Facebook and YouTube — with human sign-off at
+          every gate and AI assistance arriving in later approved phases.
         </p>
 
         <p className="mt-6 max-w-2xl border-l-2 border-blue-500/60 pl-4 font-medium text-slate-200">
@@ -73,7 +73,8 @@ export function Hero() {
 
         <p className="mt-4 inline-flex items-center gap-2 text-xs text-slate-500">
           <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
-          Human approval required before anything is published — always.
+          Human approval is a mandatory, recorded gate — nothing can be marked
+          approved without it.
         </p>
 
         {/* Honest stats — foundation facts only */}
@@ -92,6 +93,12 @@ export function Hero() {
             </div>
           ))}
         </dl>
+
+        <p className="mt-4 text-xs leading-relaxed text-slate-500">
+          Scope of the V1 design — not shipped integrations. Live today:
+          accounts &amp; roles, client onboarding, content review &amp; final
+          approval.
+        </p>
       </div>
     </section>
   );

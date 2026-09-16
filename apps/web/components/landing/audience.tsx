@@ -27,9 +27,10 @@ export function AudienceSection() {
               Service Provider
             </h3>
             <p className="mt-2 text-sm leading-relaxed text-slate-400">
-              You handle social media for other people or businesses. Run
-              every client as a workspace, assign work to your team, and
-              send reports clients actually read.
+              You handle social media for other people or businesses. Onboard
+              each client, link them to your agency, and run every piece of
+              content through review and client-owner approval. Workspaces, task
+              assignment and reporting are future phases.
             </p>
           </LandingCard>
           <LandingCard>
@@ -38,9 +39,9 @@ export function AudienceSection() {
               Individual / Business
             </h3>
             <p className="mt-2 text-sm leading-relaxed text-slate-400">
-              You manage your own accounts. Plan once, publish
-              consistently, and keep a permanent knowledge base of
-              everything you created.
+              You manage your own accounts. Record the platforms you operate,
+              draft your content, and keep a permanent, auditable history of
+              what was approved and why.
             </p>
           </LandingCard>
         </div>

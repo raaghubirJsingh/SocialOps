@@ -35,11 +35,14 @@ export function LandingFooter() {
         </nav>
       </div>
       <div className="border-t border-slate-800/60">
-        <p className="mx-auto w-full max-w-6xl px-6 py-4 text-xs text-slate-600">
-          SocialOps V1 — social media operations foundation. Auth, RBAC
-          and dashboard are live; further modules ship only after
-          explicit approval.
-        </p>
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs leading-relaxed text-slate-600">
+            SocialOps V1 — live today: accounts &amp; roles, client onboarding,
+            agency↔client linking, content review &amp; final approval, intake
+            records. Further modules ship only after explicit approval.
+          </p>
+          <p className="text-xs text-slate-600">© 2026 SocialOps</p>
+        </div>
       </div>
     </footer>
   );

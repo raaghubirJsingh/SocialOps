@@ -11,7 +11,7 @@ const ABOUT_CARDS = [
   {
     icon: ClipboardCheck,
     title: 'Human control, AI assistance',
-    body: 'AI drafts, repurposes and reminds. Humans review, approve and decide. Nothing goes live without an explicit human sign-off.',
+    body: 'Human review and approval are built today and stay mandatory at every gate. AI is designed to draft, repurpose and remind — arriving only in an explicitly approved phase.',
   },
   {
     icon: Users,

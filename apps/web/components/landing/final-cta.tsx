@@ -43,7 +43,7 @@ export function FinalCta() {
           </Link>
         </div>
         <p className="mt-6 text-xs text-slate-500">
-          Free during the foundation phase — no credit card, no sales call.
+          Start free while SocialOps is in its foundation phase.
         </p>
       </div>
     </section>

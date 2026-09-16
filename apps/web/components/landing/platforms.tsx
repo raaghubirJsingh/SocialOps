@@ -1,24 +1,33 @@
 import { Facebook, Instagram, Youtube } from 'lucide-react';
 
+import { Badge } from '@/components/ui/badge';
+
 import { LandingCard, SectionHeading } from './shared';
 
+/**
+ * Platform cards.
+ *
+ * Copy aligned with what V1 actually does today: content is drafted, reviewed
+ * and approved per platform — platform CONNECTIONS and analytics are still
+ * deferred, so nothing here claims them (approved copy pass; AGENTS.md §14).
+ */
 const PLATFORM_CARDS = [
   {
     icon: Instagram,
     name: 'Instagram',
-    body: 'Reels, posts and stories flow through the same review pipeline — one approval covers every format.',
+    body: 'Reels, posts and stories flow through the same review and approval pipeline — one approval covers every format.',
   },
   {
     icon: Facebook,
     name: 'Facebook',
-    body: 'Pages and posts stay in sync with the same content record. No copy-paste between tools.',
+    body: 'Pages and posts stay tied to the same content record, so there is no copy-paste between tools while the work is in review.',
   },
   {
     icon: Youtube,
     name: 'YouTube',
-    body: 'Long-form and Shorts ride the same workflow from draft to analytics to client report.',
+    body: 'Long-form and Shorts ride the same workflow — from draft to an approved revision you can point at and verify.',
   },
-];
+] as const;
 
 /**
  * Platforms section (`#platforms`).
@@ -53,9 +62,7 @@ export function PlatformsSection() {
               />
               <h3 className="mt-4 flex items-center gap-2 text-lg font-semibold text-slate-100">
                 {platform.name}
-                <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-300">
-                  V1
-                </span>
+                <Badge variant="success">V1</Badge>
               </h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-400">
                 {platform.body}
