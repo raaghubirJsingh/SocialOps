@@ -91,7 +91,9 @@ export default function AgencyClientsPage() {
     return (
       <div className="mx-auto max-w-3xl space-y-6">
         <header className="space-y-1">
-          <h2 className="text-2xl font-semibold text-slate-100">Clients</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-100">
+            Clients
+          </h2>
           <p className="text-sm text-slate-400">
             Select the organization you want to manage clients for. Every API
             call is scoped server-side to this organization via the verified
@@ -113,7 +115,7 @@ export default function AgencyClientsPage() {
                 key={membership.organization.id}
                 type="button"
                 onClick={() => setActiveOrganizationId(membership.organization.id)}
-                className="flex w-full items-center justify-between rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-left text-sm text-slate-100 transition-colors hover:border-slate-600 hover:bg-slate-800"
+                className="flex w-full items-center justify-between rounded-lg border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-left text-sm text-slate-100 transition-all duration-200 hover:border-slate-600 hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
               >
                 <span className="font-medium">{membership.organization.name}</span>
                 <span className="text-xs uppercase tracking-wide text-slate-400">
@@ -146,7 +148,9 @@ export default function AgencyClientsPage() {
     <div className="mx-auto max-w-5xl space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-2xl font-semibold text-slate-100">Clients</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-100">
+            Clients
+          </h2>
           <p className="text-sm text-slate-400">
             {activeMembership
               ? `Managing clients as ${activeMembership.role} of ${activeMembership.organization.name}.`
@@ -167,7 +171,7 @@ export default function AgencyClientsPage() {
       {clientsQuery.isError ? (
         <div
           role="alert"
-          className="rounded-md border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
         >
           {describeClientsError(clientsQuery.error)}
         </div>
@@ -194,9 +198,9 @@ export default function AgencyClientsPage() {
             <Link
               key={client.id}
               href={`/clients/${client.id}`}
-              className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+              className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
             >
-              <Card className="h-full transition-colors hover:border-slate-600">
+              <Card className="h-full transition-all duration-300 motion-safe:hover:-translate-y-1 hover:border-blue-500/30 hover:bg-white/[0.06]">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">{client.name}</CardTitle>
                   <CardDescription>

@@ -84,7 +84,10 @@ export default function AgencyClientSocialAccountsPage() {
         <p className="text-sm text-slate-400">
           Select an organization first to manage client social accounts.
         </p>
-        <Link href="/clients" className="text-sm text-blue-400 hover:underline">
+        <Link
+          href="/clients"
+          className="rounded text-sm text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
+        >
           ← Back to clients
         </Link>
       </div>
@@ -137,7 +140,9 @@ export default function AgencyClientSocialAccountsPage() {
 
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-2xl font-semibold text-slate-100">Social accounts</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-100">
+            Social accounts
+          </h2>
           <p className="text-sm text-slate-400">
             Platforms this client operates. Metadata only — recorded from what the
             client or agency declares.
@@ -181,7 +186,7 @@ export default function AgencyClientSocialAccountsPage() {
       {accountsQuery.isError ? (
         <div
           role="alert"
-          className="rounded-md border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
         >
           {describeApiError(
             accountsQuery.error,

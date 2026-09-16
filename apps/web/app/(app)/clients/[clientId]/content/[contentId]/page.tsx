@@ -110,7 +110,7 @@ export default function AgencyContentDetailPage() {
         <ClientSectionNav clientId={clientId} active="content" />
         <div
           role="alert"
-          className="rounded-md border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
         >
           {describeApiError(
             detailQuery.error,
@@ -119,7 +119,7 @@ export default function AgencyContentDetailPage() {
         </div>
         <Link
           href={`/clients/${clientId}/content`}
-          className="text-sm text-blue-400 hover:underline"
+          className="rounded text-sm text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
         >
           ← Back to content
         </Link>
@@ -150,11 +150,13 @@ export default function AgencyContentDetailPage() {
       <div className="space-y-1">
         <Link
           href={`/clients/${clientId}/content`}
-          className="text-sm text-blue-400 hover:underline"
+          className="rounded text-sm text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
         >
           ← Back to content
         </Link>
-        <h2 className="text-2xl font-semibold text-slate-100">{content.title}</h2>
+        <h2 className="text-2xl font-semibold tracking-tight text-slate-100">
+          {content.title}
+        </h2>
       </div>
 
       <Card>
@@ -231,7 +233,7 @@ export default function AgencyContentDetailPage() {
               {serverError && (
                 <div
                   role="alert"
-                  className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
+                  className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300"
                 >
                   {serverError}
                 </div>

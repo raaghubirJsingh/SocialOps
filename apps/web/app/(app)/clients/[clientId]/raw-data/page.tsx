@@ -65,7 +65,10 @@ export default function AgencyClientRawDataPage() {
         <p className="text-sm text-slate-400">
           Select an organization first to manage client intake.
         </p>
-        <Link href="/clients" className="text-sm text-blue-400 hover:underline">
+        <Link
+          href="/clients"
+          className="rounded text-sm text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
+        >
           ← Back to clients
         </Link>
       </div>
@@ -90,7 +93,9 @@ export default function AgencyClientRawDataPage() {
 
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-2xl font-semibold text-slate-100">Raw data</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-100">
+            Raw data
+          </h2>
           <p className="text-sm text-slate-400">
             Immutable intake records for this client. Insert-only: rows can never
             be edited or deleted.
@@ -133,7 +138,7 @@ export default function AgencyClientRawDataPage() {
       {rawDataQuery.isError ? (
         <div
           role="alert"
-          className="rounded-md border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
         >
           {describeApiError(rawDataQuery.error, 'Unable to load intake records.')}
         </div>

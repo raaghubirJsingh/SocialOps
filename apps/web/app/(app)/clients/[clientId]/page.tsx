@@ -101,11 +101,14 @@ export default function ClientDetailPage() {
       <div className="mx-auto max-w-3xl space-y-4">
         <div
           role="alert"
-          className="rounded-md border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
         >
           {describeDetailError(clientQuery.error)}
         </div>
-        <Link href="/clients" className="text-sm text-blue-400 hover:underline">
+        <Link
+          href="/clients"
+          className="rounded text-sm text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
+        >
           ← Back to clients
         </Link>
       </div>
@@ -119,10 +122,15 @@ export default function ClientDetailPage() {
       <ClientSectionNav clientId={clientId} active="overview" />
 
       <header className="space-y-1">
-        <Link href="/clients" className="text-sm text-blue-400 hover:underline">
+        <Link
+          href="/clients"
+          className="rounded text-sm text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
+        >
           ← Back to clients
         </Link>
-        <h2 className="text-2xl font-semibold text-slate-100">{client?.name}</h2>
+        <h2 className="text-2xl font-semibold tracking-tight text-slate-100">
+          {client?.name}
+        </h2>
         <p className="text-sm text-slate-400">
           {client?.type === 'BUSINESS' ? 'Business' : 'Individual'} client · created{' '}
           {client ? new Date(client.createdAt).toLocaleDateString() : ''}
@@ -199,10 +207,12 @@ export default function ClientDetailPage() {
               {historyQuery.data.map((event) => (
                 <li
                   key={event.id}
-                  className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm"
+                  className="surface-panel rounded-lg px-4 py-3 text-sm"
                 >
                   <p className="font-medium text-slate-200">{event.action}</p>
-                  <p className="text-xs text-slate-500">{formatDateTime(event.createdAt)}</p>
+                  <p className="text-xs text-slate-400">
+                    {formatDateTime(event.createdAt)}
+                  </p>
                 </li>
               ))}
             </ul>

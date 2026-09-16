@@ -152,7 +152,7 @@ export default function DashboardPage() {
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
       <header className="space-y-1">
-        <h2 className="text-2xl font-semibold text-slate-100">
+        <h2 className="text-2xl font-semibold tracking-tight text-slate-100">
           Welcome, {greetingTarget}
         </h2>
         <p className="text-sm text-slate-400">
@@ -175,7 +175,10 @@ export default function DashboardPage() {
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Card>
+        {/* The single highlighted element on this screen carries the glass
+            surface (APP-SIDE BLUR BUDGET, globals.css); the Activity and
+            Workspaces panels stay on surface-panel. */}
+        <Card surface="glass">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-slate-200">
               API status
@@ -191,16 +194,16 @@ export default function DashboardPage() {
             ) : health.isError ? (
               <p className="text-sm text-red-400">
                 Unable to reach the API.{' '}
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-slate-400">
                   ({(health.error as Error)?.message ?? 'unknown error'})
                 </span>
               </p>
             ) : health.data ? (
               <>
-                <p className="text-2xl font-semibold text-slate-100">
+                <p className="text-2xl font-semibold tabular-nums text-slate-100">
                   {health.data.status.toUpperCase()}
                 </p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-slate-400">
                   Database: {health.data.database.status} · Redis:{' '}
                   {health.data.redis.status}
                 </p>
@@ -223,7 +226,7 @@ export default function DashboardPage() {
             <p className="text-sm text-slate-400">
               No activity yet.
             </p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-slate-400">
               Activity feeds appear here once the corresponding
               modules are implemented and approved.
             </p>
