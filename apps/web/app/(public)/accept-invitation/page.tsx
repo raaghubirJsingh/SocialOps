@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState, type ReactNode } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -8,6 +8,25 @@ import { Button } from '@/components/ui/button';
 import { clientApi } from '@/lib/client-api';
 import { useSession } from '@/hooks/use-session';
 import type { InvitationResolution } from '@/types/client';
+
+/**
+ * Shared shell for every state of this page - loading, error, ready and the
+ * Suspense fallback. It is defined once here rather than repeating the ambient
+ * backdrop in four branches, so each state renders on the identical background
+ * and there is no flash between them. Matches the login/register auth shell and
+ * the APP-SIDE BLUR BUDGET in globals.css (one glass surface per screen).
+ */
+function InvitationShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 p-6 text-slate-100">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-x-0 top-0 h-[28rem] bg-[radial-gradient(ellipse_at_top,rgb(37_99_235/0.16),transparent_60%)]" />
+        <div className="absolute -top-24 left-1/2 h-72 w-[42rem] -translate-x-1/2 rounded-full bg-blue-600/15 blur-3xl" />
+      </div>
+      {children}
+    </div>
+  );
+}
 
 /**
  * Public invitation acceptance page.
@@ -63,38 +82,47 @@ function AcceptInvitationContent() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-slate-100">
-        <p className="text-sm text-slate-400">Loading invitation...</p>
-      </div>
+      <InvitationShell>
+        <p className="relative text-sm text-slate-400">Loading invitation...</p>
+      </InvitationShell>
     );
   }
 
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-slate-100">
-        <div className="w-full max-w-sm text-center">
-          <p className="text-sm text-red-400">{error}</p>
-          <Link href="/" className="mt-4 inline-block text-blue-400 hover:underline">
+      <InvitationShell>
+        <div className="relative w-full max-w-sm space-y-4 text-center">
+          <div
+            role="alert"
+            className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
+          >
+            {error}
+          </div>
+          <Link
+            href="/"
+            className="inline-block rounded text-sm text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
+          >
             Return home
           </Link>
         </div>
-      </div>
+      </InvitationShell>
     );
   }
 
   if (!invitation) return null;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-slate-100">
-      <div className="w-full max-w-sm space-y-6">
+    <InvitationShell>
+      <div className="relative w-full max-w-sm space-y-6">
         <div className="text-center">
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-2xl font-bold tracking-tight">
             Social<span className="text-blue-400">Ops</span>
           </h1>
           <p className="mt-2 text-sm text-slate-400">Client Invitation</p>
         </div>
 
-        <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 space-y-4">
+        {/* The single glass surface for this page (APP-SIDE BLUR BUDGET). */}
+        <div className="surface-glass space-y-4 rounded-2xl p-6">
           <div>
             <p className="text-sm text-slate-400">Client</p>
             <p className="text-lg font-medium text-slate-100">
@@ -122,12 +150,19 @@ function AcceptInvitationContent() {
             </Button>
           ) : (
             <div className="space-y-2">
-              <Link href={`/login?returnTo=/accept-invitation?token=${token}`}>
-                <Button className="w-full">Sign in to Accept</Button>
-              </Link>
-              <p className="text-center text-xs text-slate-500">
+              <Button asChild className="w-full">
+                <Link
+                  href={`/login?returnTo=/accept-invitation?token=${token}`}
+                >
+                  Sign in to Accept
+                </Link>
+              </Button>
+              <p className="text-center text-xs text-slate-400">
                 Don&apos;t have an account?{' '}
-                <Link href="/register" className="text-blue-400 hover:underline">
+                <Link
+                  href="/register"
+                  className="rounded text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
+                >
                   Register
                 </Link>
               </p>
@@ -135,21 +170,25 @@ function AcceptInvitationContent() {
           )}
         </div>
 
-        <p className="text-center text-xs text-slate-500">
+        <p className="text-center text-xs text-slate-400">
           Invitation links are single-use and expire after the expiration time.
         </p>
       </div>
-    </div>
-    );
+    </InvitationShell>
+  );
 }
 
 export default function AcceptInvitationPage() {
   return (
-    <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-slate-100">
-        <p className="text-sm text-slate-400">Loading invitation...</p>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <InvitationShell>
+          <p className="relative text-sm text-slate-400">
+            Loading invitation...
+          </p>
+        </InvitationShell>
+      }
+    >
       <AcceptInvitationContent />
     </Suspense>
   );
