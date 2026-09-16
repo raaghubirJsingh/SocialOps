@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { EmployeeProfileCard } from '@/components/dashboard/employee-profile-card';
 import { apiFetch } from '@/lib/api';
 import { useSession } from '@/hooks/use-session';
 import type { AccountType } from '@/types/auth';
@@ -76,6 +77,11 @@ export default function DashboardPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading: sessionLoading, session } = useSession();
 
+  // Resolve employee flag from the session (AGENTS.md §6 / §17.3).
+  // This drives UI-level dashboard isolation; the backend
+  // EmployeeContextGuard remains authoritative for the API call.
+  const isEmployee = session?.user?.isEmployee === true;
+
   // Defense-in-depth page guard. The (app) layout AuthGuard already
   // redirects unauthenticated visitors to the public home page "/"
   // (approved routing matrix — NOT /login); this page-level effect
@@ -97,6 +103,38 @@ export default function DashboardPage() {
     // Render nothing while the guard redirects; avoids a flash of
     // authenticated UI.
     return null;
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // Employee Dashboard
+  // ─────────────────────────────────────────────────────────
+  // When the session identifies the user as an employee, render a
+  // strictly read-only employee dashboard. This branch never
+  // fetches Service Provider (Agency) tenant data — the Activity
+  // and Workspaces/Organizations cards from the standard dashboard
+  // are omitted entirely (AGENTS.md §6, §13).
+  if (isEmployee) {
+    return (
+      <div className="mx-auto flex max-w-5xl flex-col gap-6">
+        <header className="space-y-1">
+          <h2 className="text-2xl font-semibold text-slate-100">
+            Welcome, {session?.user.fullName ?? 'there'}
+          </h2>
+          <p className="text-sm text-slate-400">
+            Signed in as an{' '}
+            <span className="font-medium text-slate-200">Employee</span>
+          </p>
+        </header>
+
+        <EmployeeProfileCard />
+
+        {/*
+         * Intentionally empty: the Activity, Workspaces, and
+         * Organization panels from the Service Provider dashboard
+         * are not applicable to employees (AGENTS.md §13).
+         */}
+      </div>
+    );
   }
 
   // Identity display (AGENTS.md §17):
