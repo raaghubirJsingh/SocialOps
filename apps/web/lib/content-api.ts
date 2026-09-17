@@ -14,12 +14,16 @@
  */
 import { apiFetch } from './api';
 import type {
+  ChangeRequestDto,
   ConfirmFinalRequest,
   ContentDto,
   ContentRevisionDto,
   ContentStatus,
   ContentStatusEventDto,
+  CreateChangeRequestRequest,
   CreateContentRequest,
+  InternalNoteDto,
+  ProcessAiTaskRequest,
   TransitionContentRequest,
   UpdateContentRequest,
 } from '@/types/content';
@@ -83,6 +87,38 @@ export const contentApi = {
   ): Promise<ContentStatusEventDto[]> =>
     apiFetch<ContentStatusEventDto[]>(
       `/clients/${clientId}/content/${contentId}/status-events`,
+    ),
+
+  /**
+   * Phase 2: dispatch a task to an AI employee (agency only, OWNER/ADMIN).
+   * The AI User must hold MEMBER in this org; the backend re-verifies.
+   */
+  processAiTaskForClient: (
+    clientId: string,
+    contentId: string,
+    body: ProcessAiTaskRequest,
+  ): Promise<ContentRevisionDto | InternalNoteDto> =>
+    apiFetch<ContentRevisionDto | InternalNoteDto>(
+      `/clients/${clientId}/content/${contentId}/ai-tasks`,
+      { method: 'POST', body },
+    ),
+
+  /** Phase 2: agency view of change requests for one item. */
+  changeRequestsForClient: (
+    clientId: string,
+    contentId: string,
+  ): Promise<ChangeRequestDto[]> =>
+    apiFetch<ChangeRequestDto[]>(
+      `/clients/${clientId}/content/${contentId}/change-requests`,
+    ),
+
+  /** Phase 2: agency-only internal notes (never exposed to clients). */
+  internalNotesForClient: (
+    clientId: string,
+    contentId: string,
+  ): Promise<InternalNoteDto[]> =>
+    apiFetch<InternalNoteDto[]>(
+      `/clients/${clientId}/content/${contentId}/internal-notes`,
     ),
 
   // ---- client self-service scope ----
@@ -158,5 +194,40 @@ export const contentApi = {
     apiFetch<ContentDto>(
       `/client/me/content/${contentId}/final-confirmation`,
       { method: 'POST', body, headers: { 'X-Client-Id': clientId } },
+    ),
+
+  /**
+   * Phase 2 FINAL LOCK - the only door to FINAL_CONFIRMED (client owner).
+   * Immutable afterwards: no edits, revisions, or change requests.
+   */
+  confirmFinalLockMine: (
+    clientId: string,
+    contentId: string,
+    body: ConfirmFinalRequest,
+  ): Promise<ContentDto> =>
+    apiFetch<ContentDto>(
+      `/client/me/content/${contentId}/final-confirmed-lock`,
+      { method: 'POST', body, headers: { 'X-Client-Id': clientId } },
+    ),
+
+  /** Phase 2: client submits a change request (SCENARIO_1 max 2). */
+  createChangeRequestMine: (
+    clientId: string,
+    contentId: string,
+    body: CreateChangeRequestRequest,
+  ): Promise<ChangeRequestDto> =>
+    apiFetch<ChangeRequestDto>(
+      `/client/me/content/${contentId}/change-requests`,
+      { method: 'POST', body, headers: { 'X-Client-Id': clientId } },
+    ),
+
+  /** Phase 2: client view of change requests for one item. */
+  changeRequestsMine: (
+    clientId: string,
+    contentId: string,
+  ): Promise<ChangeRequestDto[]> =>
+    apiFetch<ChangeRequestDto[]>(
+      `/client/me/content/${contentId}/change-requests`,
+      { headers: { 'X-Client-Id': clientId } },
     ),
 };

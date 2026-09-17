@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 import { ClientReviewPortal } from '@/components/content/client-review-portal';
 import { ManagerWorkspace } from '@/components/content/manager-workspace';
@@ -15,14 +16,24 @@ const TABS: ReadonlyArray<{ id: PreviewTab; label: string }> = [
 ];
 
 /**
- * Temporary Phase 3 preview page (UI-first, mock data only).
+ * Temporary Phase 4 preview page (wired to the real Phase 2 API).
  *
- * Mounts the Agency workspace and the Client review portal in tabs so the
- * layout and the data-boundary split can be reviewed in the browser. Nothing
- * here calls the backend; backend wiring comes in a later phase.
+ * Mounts the Agency workspace and the Client review portal in tabs. Read the
+ * `clientId` and `contentId` query parameters (e.g.
+ * /content-ui-test?clientId=...&contentId=...) to preview a real item. Both
+ * components degrade gracefully to a "pass a clientId/contentId" notice when
+ * the parameters are absent.
+ *
+ * The AI employee list for the Smart Assignment dropdown is not yet surfaced
+ * by any frontend API, so `aiBots` is intentionally empty here; the mutation
+ * wiring (POST .../ai-tasks with the selected bot UUID) is complete and ready
+ * for a future org-members listing.
  */
 export default function ContentUiTestPage() {
   const [tab, setTab] = useState<PreviewTab>('agency');
+  const searchParams = useSearchParams();
+  const clientId = searchParams.get('clientId') ?? '';
+  const contentId = searchParams.get('contentId') ?? '';
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -31,12 +42,12 @@ export default function ContentUiTestPage() {
           <h2 className="text-2xl font-semibold tracking-tight text-slate-100">
             Content UI preview
           </h2>
-          <Badge variant="muted">Mock data — no backend wiring</Badge>
+          <Badge variant="info">Wired to Phase 2 API</Badge>
         </div>
         <p className="text-sm text-slate-400">
-          Temporary review page for the Phase 3 dummy components. The Agency
-          workspace keeps internal notes private; the Client portal never shows
-          them.
+          Pass <code className="text-slate-300">?clientId=…&amp;contentId=…</code> to
+          preview a real item. The Agency workspace keeps internal notes private;
+          the Client portal never shows them.
         </p>
       </header>
 
@@ -65,7 +76,11 @@ export default function ContentUiTestPage() {
       </div>
 
       <div role="tabpanel">
-        {tab === 'agency' ? <ManagerWorkspace /> : <ClientReviewPortal />}
+        {tab === 'agency' ? (
+          <ManagerWorkspace clientId={clientId} contentId={contentId} />
+        ) : (
+          <ClientReviewPortal clientId={clientId} contentId={contentId} />
+        )}
       </div>
     </div>
   );

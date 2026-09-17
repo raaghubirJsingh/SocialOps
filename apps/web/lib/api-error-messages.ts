@@ -25,6 +25,10 @@ const CODE_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
   CONTENT_UNDER_REVIEW:
     'Content under review cannot be edited. Withdraw it from review first.',
   CONTENT_ARCHIVED: 'Archived content cannot be edited.',
+  CONTENT_LOCKED:
+    'This content is locked and cannot be changed. It is strictly immutable.',
+  CONTENT_IMMUTABLE:
+    'Change requests are not allowed for locked content.',
   CONTENT_REVISION_CONFLICT:
     'This content changed since it was loaded. Reload and try again.',
   CONFIRMATION_REQUIRED:
@@ -32,6 +36,13 @@ const CODE_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
   INVALID_CONTENT_STATUS:
     'Final confirmation requires the item to be in review.',
   ALREADY_CONFIRMED: 'This item already carries a final confirmation.',
+  // Phase 2 change-request limit (Scenario 1 max 2, HTTP 400)
+  CHANGE_REQUEST_LIMIT_EXCEEDED:
+    'You have used all change requests on this content (maximum 2).',
+  // Phase 2 AI dispatch errors
+  AI_USER_REQUIRED: 'The selected assignee must be an AI employee.',
+  AI_EMPLOYEE_NOT_MEMBER:
+    'The selected AI employee is not a member of this organization.',
 });
 
 const STATUS_MESSAGES: Readonly<Record<number, string>> = Object.freeze({

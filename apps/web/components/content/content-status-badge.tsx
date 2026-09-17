@@ -9,6 +9,9 @@ const VARIANTS: Readonly<
   CHANGES_REQUESTED: 'danger',
   APPROVED: 'success',
   ARCHIVED: 'muted',
+  AWAITING_MANAGER_APPROVAL: 'info',
+  UNDER_CLIENT_REVIEW: 'warning',
+  FINAL_CONFIRMED: 'success',
 });
 
 /** Colour-coded Content status pill (DRAFT / IN_REVIEW / … / ARCHIVED). */

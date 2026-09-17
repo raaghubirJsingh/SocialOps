@@ -70,6 +70,23 @@ describe('Content DTOs keep state server-owned', () => {
     ).toBe(true);
   });
 
+  it('accepts the Phase 2 pipeline targets but keeps FINAL_CONFIRMED gated', () => {
+    // AWAITING_MANAGER_APPROVAL -> UNDER_CLIENT_REVIEW is the manager
+    // submit-for-review edge and must be expressible through the generic route.
+    expect(
+      transitionContentSchema.safeParse({ to: 'AWAITING_MANAGER_APPROVAL' })
+        .success,
+    ).toBe(true);
+    expect(
+      transitionContentSchema.safeParse({ to: 'UNDER_CLIENT_REVIEW' }).success,
+    ).toBe(true);
+    // FINAL_CONFIRMED remains a dedicated door (final-confirmed-lock), never a
+    // generic target, exactly like APPROVED.
+    expect(
+      transitionContentSchema.safeParse({ to: 'FINAL_CONFIRMED' }).success,
+    ).toBe(false);
+  });
+
   it('keeps the final-confirmation payload to an optional note', () => {
     expect(confirmFinalContentSchema.safeParse({}).success).toBe(true);
     expect(confirmFinalContentSchema.safeParse({ note: 'ok' }).success).toBe(

@@ -20,11 +20,20 @@ import { CONTENT_STATUS_LABELS } from '@/types/content';
 export const CONTENT_STATUS_TRANSITIONS: Readonly<
   Record<ContentStatus, readonly ContentStatus[]>
 > = Object.freeze({
-  DRAFT: Object.freeze(['IN_REVIEW', 'ARCHIVED'] as const),
+  DRAFT: Object.freeze(['IN_REVIEW', 'AWAITING_MANAGER_APPROVAL', 'ARCHIVED'] as const),
   IN_REVIEW: Object.freeze(['CHANGES_REQUESTED'] as const),
   CHANGES_REQUESTED: Object.freeze(['IN_REVIEW', 'ARCHIVED'] as const),
   APPROVED: Object.freeze(['ARCHIVED'] as const),
   ARCHIVED: Object.freeze([] as const),
+  AWAITING_MANAGER_APPROVAL: Object.freeze([
+    'UNDER_CLIENT_REVIEW',
+    'DRAFT',
+  ] as const),
+  UNDER_CLIENT_REVIEW: Object.freeze([
+    'FINAL_CONFIRMED',
+    'AWAITING_MANAGER_APPROVAL',
+  ] as const),
+  FINAL_CONFIRMED: Object.freeze(['ARCHIVED'] as const),
 });
 
 /**
@@ -50,6 +59,18 @@ const CONTENT_TRANSITION_AUTHORITY: Readonly<
     'AGENCY_ADMIN',
     'CLIENT_OWNER',
   ] as const),
+  // Phase 2 pipeline authority (mirrors the backend table)
+  'DRAFT->AWAITING_MANAGER_APPROVAL': Object.freeze(['AGENCY_ADMIN'] as const),
+  'AWAITING_MANAGER_APPROVAL->UNDER_CLIENT_REVIEW': Object.freeze([
+    'AGENCY_ADMIN',
+  ] as const),
+  'UNDER_CLIENT_REVIEW->AWAITING_MANAGER_APPROVAL': Object.freeze([
+    'CLIENT_OWNER',
+  ] as const),
+  'FINAL_CONFIRMED->ARCHIVED': Object.freeze([
+    'AGENCY_ADMIN',
+    'CLIENT_OWNER',
+  ] as const),
 });
 
 /** Human copy for each allowed transition, keyed the same way. */
@@ -60,6 +81,12 @@ const TRANSITION_LABELS: Readonly<Record<string, string>> = Object.freeze({
   'DRAFT->ARCHIVED': 'Archive',
   'CHANGES_REQUESTED->ARCHIVED': 'Archive',
   'APPROVED->ARCHIVED': 'Archive',
+  // Phase 2 pipeline labels
+  'DRAFT->AWAITING_MANAGER_APPROVAL': 'Send for manager approval',
+  'AWAITING_MANAGER_APPROVAL->UNDER_CLIENT_REVIEW': 'Submit for client review',
+  'UNDER_CLIENT_REVIEW->AWAITING_MANAGER_APPROVAL':
+    'Return to manager approval',
+  'FINAL_CONFIRMED->ARCHIVED': 'Archive',
 });
 
 export interface ContentTransitionOption {
@@ -132,10 +159,15 @@ export function timelineStepFor(status: ContentStatus): number {
       return 0;
     case 'IN_REVIEW':
     case 'CHANGES_REQUESTED':
+    case 'AWAITING_MANAGER_APPROVAL':
       return 1;
     case 'APPROVED':
+    case 'UNDER_CLIENT_REVIEW':
       return 2;
     case 'ARCHIVED':
+    case 'FINAL_CONFIRMED':
       return 3;
+    default:
+      return 0;
   }
 }
