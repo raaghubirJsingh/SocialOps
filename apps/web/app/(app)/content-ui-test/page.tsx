@@ -24,10 +24,9 @@ const TABS: ReadonlyArray<{ id: PreviewTab; label: string }> = [
  * components degrade gracefully to a "pass a clientId/contentId" notice when
  * the parameters are absent.
  *
- * The AI employee list for the Smart Assignment dropdown is not yet surfaced
- * by any frontend API, so `aiBots` is intentionally empty here; the mutation
- * wiring (POST .../ai-tasks with the selected bot UUID) is complete and ready
- * for a future org-members listing.
+ * The AI employee list for the Smart Assignment dropdown is fetched live by the
+ * ManagerWorkspace via GET /api/organizations/ai-members, so the dropdown is
+ * populated with the organization's real AI bots from the database.
  */
 export default function ContentUiTestPage() {
   const [tab, setTab] = useState<PreviewTab>('agency');

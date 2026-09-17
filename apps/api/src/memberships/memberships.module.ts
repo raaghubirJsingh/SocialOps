@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { AiMembersController } from './ai-members.controller.js';
 import { MembershipsController } from './memberships.controller.js';
 import { OrganizationProvisioningService } from './organization-provisioning.service.js';
 
@@ -29,7 +30,7 @@ import { OrganizationProvisioningService } from './organization-provisioning.ser
       signOptions: { expiresIn: Number(process.env.JWT_ACCESS_TTL ?? 900) },
     }),
   ],
-  controllers: [MembershipsController],
+  controllers: [MembershipsController, AiMembersController],
   providers: [OrganizationProvisioningService],
   exports: [OrganizationProvisioningService],
 })

@@ -28,15 +28,18 @@ import {
   useProcessAiTask,
   useTransitionAgencyContent,
 } from '@/hooks/use-content-operations';
+import { useAiEmployees } from '@/hooks/use-ai-employees';
 import { describeApiError } from '@/lib/api-error-messages';
 import type { ContentRevisionDto } from '@/types/content';
 
 /**
  * Phase 4 (Integration) — Agency workspace, now wired to the real Phase 2 API.
  *
- * - Smart Assignment dropdown dispatches POST .../ai-tasks with the selected
- *   AI bot's UUID (aiUserId). The backend requires isBot=true, so only AI
- *   bots are offered.
+ * - Smart Assignment dropdown fetches the organization's AI employees live from
+ *   GET /api/organizations/ai-members (Users with isBot = true, plus each
+ *   bot's skillSpecialization) and dispatches POST .../ai-tasks with the
+ *   selected bot's UUID (aiUserId). The backend requires isBot=true and a
+ *   MEMBER membership, re-verified on every dispatch.
  * - Submit for client review calls POST .../status with
  *   { to: 'UNDER_CLIENT_REVIEW' } (requires the TRANSITION_TARGETS backend
  *   fix in this same change).
@@ -46,12 +49,11 @@ import type { ContentRevisionDto } from '@/types/content';
 export interface ManagerWorkspaceProps {
   clientId: string;
   contentId: string;
-  /** AI employees available for dispatch (id MUST be the real AI User UUID). */
-  aiBots?: ReadonlyArray<{ id: string; name: string; skill: string }>;
 }
 
-export function ManagerWorkspace({ clientId, contentId, aiBots = [] }: ManagerWorkspaceProps) {
+export function ManagerWorkspace({ clientId, contentId }: ManagerWorkspaceProps) {
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
+  const aiEmployeesQuery = useAiEmployees();
   const contentQuery = useAgencyContent(clientId, contentId);
   const notesQuery = useAgencyInternalNotes(clientId, contentId);
   const revisionsQuery = useAgencyRevisions(clientId, contentId);
@@ -62,7 +64,12 @@ export function ManagerWorkspace({ clientId, contentId, aiBots = [] }: ManagerWo
   const content = contentQuery.data ?? null;
   const latestRevision: ContentRevisionDto | null =
     (revisionsQuery.data ?? []).slice().sort((a, b) => b.revision - a.revision)[0] ?? null;
-  const assignee = aiBots.find((a) => a.id === assigneeId) ?? null;
+  const aiEmployees = (aiEmployeesQuery.data ?? []).map((bot) => ({
+    id: bot.id,
+    name: bot.name,
+    skill: bot.skillSpecialization ?? 'General AI Assistant',
+  }));
+  const assignee = aiEmployees.find((a) => a.id === assigneeId) ?? null;
 
   const configured = Boolean(clientId) && Boolean(contentId);
 
@@ -150,22 +157,29 @@ export function ManagerWorkspace({ clientId, contentId, aiBots = [] }: ManagerWo
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-72">
               <DropdownMenuLabel>AI employees</DropdownMenuLabel>
-              {aiBots.length === 0 ? (
+              {aiEmployeesQuery.isLoading ? (
+                <DropdownMenuItem disabled>Loading AI employees…</DropdownMenuItem>
+              ) : null}
+              {aiEmployeesQuery.isError ? (
+                <DropdownMenuItem disabled>
+                  {describeApiError(aiEmployeesQuery.error, 'Could not load AI employees.')}
+                </DropdownMenuItem>
+              ) : null}
+              {!aiEmployeesQuery.isLoading && !aiEmployeesQuery.isError && aiEmployees.length === 0 ? (
                 <DropdownMenuItem disabled>No AI employees configured</DropdownMenuItem>
-              ) : (
-                aiBots.map((bot) => (
-                  <DropdownMenuItem
-                    key={bot.id}
-                    className="cursor-pointer"
-                    onSelect={() => void dispatchAiTask(bot.id)}
-                  >
-                    <span className="flex-1 truncate">
-                      {bot.name} - {bot.skill}
-                    </span>
-                    <Badge variant="info">AI bot</Badge>
-                  </DropdownMenuItem>
-                ))
-              )}
+              ) : null}
+              {aiEmployees.map((bot) => (
+                <DropdownMenuItem
+                  key={bot.id}
+                  className="cursor-pointer"
+                  onSelect={() => void dispatchAiTask(bot.id)}
+                >
+                  <span className="flex-1 truncate">
+                    {bot.name} - {bot.skill}
+                  </span>
+                  <Badge variant="info">AI bot</Badge>
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
           <p className="text-xs text-slate-400">

@@ -26,3 +26,14 @@ export interface MembershipsResponseDto {
   userId: string;
   memberships: MembershipDto[];
 }
+
+/**
+ * Mirrors an entry of GET /api/organizations/ai-members.
+ * The backend returns each organization AI employee (User with `isBot = true`)
+ * with its id, a display name, and its declared skill specialization.
+ */
+export interface AiEmployeeDto {
+  id: string;
+  name: string;
+  skillSpecialization: string | null;
+}
