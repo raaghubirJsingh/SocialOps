@@ -9,6 +9,7 @@ import { ContentStatusService } from './content-status.service.js';
 import { ContentController } from './content.controller.js';
 import { ContentService } from './content.service.js';
 import { InternalNoteService } from './internal-note.service.js';
+import { LlmService } from './ai/llm.service.js';
 import { RawDataMeController } from './raw-data-me.controller.js';
 import { RawDataController } from './raw-data.controller.js';
 import { RawDataService } from './raw-data.service.js';
@@ -53,6 +54,7 @@ import { RawDataService } from './raw-data.service.js';
     RawDataService,
     ChangeRequestService,
     InternalNoteService,
+    LlmService,
     AIAgentService,
   ],
   exports: [
@@ -61,6 +63,7 @@ import { RawDataService } from './raw-data.service.js';
     RawDataService,
     ChangeRequestService,
     InternalNoteService,
+    LlmService,
     AIAgentService,
   ],
 })

@@ -9,6 +9,7 @@ import { ContentStatus, OrganizationRole } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AIAgentService } from './ai-agent.service.js';
+import { LlmService } from './ai/llm.service.js';
 import { contentHashOf } from './content-hash.js';
 
 const CLIENT_ID = '11111111-1111-4111-8111-111111111111';
@@ -31,12 +32,19 @@ function makeTxMock() {
 
 function makeService(tx: ReturnType<typeof makeTxMock>) {
   const prisma = {
+    user: tx.user,
+    organizationMembership: tx.organizationMembership,
+    content: tx.content,
     $transaction: jest.fn(
-      async (callback: (client: unknown) => Promise<unknown>) =>
-        callback(tx),
+      async (callback: (client: unknown) => Promise<unknown>) => callback(tx),
     ),
   };
-  return { service: new AIAgentService(prisma as unknown as PrismaService) };
+  return {
+    service: new AIAgentService(
+      prisma as unknown as PrismaService,
+      new LlmService(),
+    ),
+  };
 }
 
 /** Happy-path transaction mocks: a MEMBER bot acting on unlocked content. */

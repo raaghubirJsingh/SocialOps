@@ -8,9 +8,13 @@ import {
 import { OrganizationRole } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service.js';
-import { CONTENT_REVISION_SELECT, INTERNAL_NOTE_SELECT } from './content.select.js';
+import {
+  CONTENT_REVISION_SELECT,
+  INTERNAL_NOTE_SELECT,
+} from './content.select.js';
 import { isContentImmutable } from './constants/content-transitions.js';
 import { contentHashOf } from './content-hash.js';
+import { LlmService } from './ai/llm.service.js';
 
 /**
  * AI Agent Foundation (Phase 2 - Unified Content & AI Foundation).
@@ -20,9 +24,9 @@ import { contentHashOf } from './content-hash.js';
  * `skillSpecialization` (e.g. "AI Copywriter", "Video Editor"). They operate
  * strictly under the existing MEMBER RBAC role (AGENTS.md §7).
  *
- * The actual LLM integration is MOCKED in this phase: `processAiTask()`
- * returns a deterministic placeholder response. A future phase will replace
- * the mock with a real LLM call (the interface is designed to accommodate this).
+ * The LLM call is delegated to a modular provider layer (see ./ai/): OpenAI,
+ * Anthropic, or a deterministic mock fallback. This service owns only
+ * authorization/scoping, audit-trail persistence, and the status-lock gate.
  *
  * AI-generated output is saved as either:
  *   - A new ContentRevision (if the task produces content text), or
@@ -44,7 +48,10 @@ import { contentHashOf } from './content-hash.js';
  */
 @Injectable()
 export class AIAgentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly llm: LlmService,
+  ) {}
 
   /**
    * Process an AI task for a Content item.
@@ -67,59 +74,61 @@ export class AIAgentService {
     const { contentId, clientId, aiUserId, agencyId, prompt, outputType } =
       params;
 
+    // Phase 1 - verify (no transaction). Authorization + tenant scope are
+    // proven before any external call, so the LLM round-trip never holds a
+    // database connection open.
+    const aiUser = await this.prisma.user.findUnique({
+      where: { id: aiUserId },
+      select: { id: true, isBot: true, skillSpecialization: true },
+    });
+    if (!aiUser || !aiUser.isBot) {
+      throw new BadRequestException({
+        code: 'AI_USER_REQUIRED',
+        message: 'The aiUserId must reference a User with isBot = true',
+      });
+    }
+
+    // The AI Employee must hold the ordinary MEMBER role in THIS Agency's
+    // Organization. AI never gets an RBAC role of its own (AGENTS.md §7),
+    // and membership is re-verified on every dispatch rather than trusted
+    // from the request.
+    const membership = await this.prisma.organizationMembership.findFirst({
+      where: { userId: aiUserId, organizationId: agencyId },
+      select: { role: true },
+    });
+    if (membership?.role !== OrganizationRole.MEMBER) {
+      throw new ForbiddenException({
+        code: 'AI_EMPLOYEE_NOT_MEMBER',
+        message: 'The AI Employee must be a MEMBER of the calling Organization',
+      });
+    }
+
+    const content = await this.prisma.content.findFirst({
+      where: { id: contentId, clientId },
+      select: { id: true, title: true, status: true },
+    });
+    if (!content) throw new NotFoundException('Content not found');
+
+    // Final-confirmation lock: the frozen text may not gain a revision.
+    if (outputType === 'revision' && isContentImmutable(content.status)) {
+      throw new ConflictException({
+        code: 'CONTENT_LOCKED',
+        message: `Content is locked at ${content.status}; no new revision may be created`,
+      });
+    }
+
+    // Phase 2 - generate (outside any transaction). Timeout + error mapping to
+    // 502/503 lives in the provider layer, not here.
+    const generated = await this.llm.generate({
+      prompt,
+      skillSpecialization: aiUser.skillSpecialization,
+      contentTitle: content.title,
+      outputType,
+    });
+
+    // Phase 3 - persist (transactional so the revision counter, authorId and
+    // contentHash write are atomic).
     return this.prisma.$transaction(async (tx) => {
-      // 1. Verify the AI User exists and is a bot.
-      const aiUser = await tx.user.findUnique({
-        where: { id: aiUserId },
-        select: { id: true, isBot: true, skillSpecialization: true },
-      });
-      if (!aiUser || !aiUser.isBot) {
-        throw new BadRequestException({
-          code: 'AI_USER_REQUIRED',
-          message: 'The aiUserId must reference a User with isBot = true',
-        });
-      }
-
-      // 1b. The AI Employee must hold the ordinary MEMBER role in THIS Agency's
-      //     Organization. AI never gets an RBAC role of its own (AGENTS.md §7),
-      //     and membership is re-verified on every dispatch rather than trusted
-      //     from the request.
-      const membership = await tx.organizationMembership.findFirst({
-        where: { userId: aiUserId, organizationId: agencyId },
-        select: { role: true },
-      });
-      if (membership?.role !== OrganizationRole.MEMBER) {
-        throw new ForbiddenException({
-          code: 'AI_EMPLOYEE_NOT_MEMBER',
-          message:
-            'The AI Employee must be a MEMBER of the calling Organization',
-        });
-      }
-
-      // 2. Verify the Content belongs to this Client.
-      const content = await tx.content.findFirst({
-        where: { id: contentId, clientId },
-        select: { id: true, title: true, body: true, status: true },
-      });
-      if (!content) throw new NotFoundException('Content not found');
-
-      // 2b. Final-confirmation lock: the frozen text may not gain a revision.
-      if (outputType === 'revision' && isContentImmutable(content.status)) {
-        throw new ConflictException({
-          code: 'CONTENT_LOCKED',
-          message: `Content is locked at ${content.status}; no new revision may be created`,
-        });
-      }
-
-      // 3. Mock the LLM call. In a future phase, this will be replaced with
-      //    a real LLM API call using the prompt and skillSpecialization.
-      const mockResponse = this.mockLLMCall(
-        prompt,
-        aiUser.skillSpecialization,
-        content.title,
-      );
-
-      // 4. Save the output.
       if (outputType === 'revision') {
         const latest = await tx.contentRevision.aggregate({
           where: { contentId },
@@ -132,54 +141,24 @@ export class AIAgentService {
             contentId,
             clientId,
             revision: nextRevision,
-            title: mockResponse.title,
-            body: mockResponse.body,
-            contentHash: contentHashOf(mockResponse.title, mockResponse.body),
+            title: generated.title,
+            body: generated.body,
+            contentHash: contentHashOf(generated.title, generated.body),
             createdByUserId: aiUserId,
           },
           select: CONTENT_REVISION_SELECT,
         });
-      } else {
-        return tx.internalNote.create({
-          data: {
-            contentId,
-            agencyId,
-            authorId: aiUserId,
-            body: mockResponse.body,
-          },
-          select: INTERNAL_NOTE_SELECT,
-        });
       }
-    });
-  }
 
-  /**
-   * Mock LLM call. Returns a placeholder response built from the prompt and the
-   * AI Employee's declared skill. In a future phase, this will be replaced with
-   * a real LLM API call.
-   */
-  private mockLLMCall(
-    prompt: string,
-    skillSpecialization: string | null,
-    contentTitle: string,
-  ): { title: string; body: string } {
-    const skill = skillSpecialization ?? 'General AI Assistant';
-    return {
-      title: `[AI Draft - ${skill}] ${contentTitle}`,
-      body: [
-        `## AI-Generated Response`,
-        ``,
-        `**Skill:** ${skill}`,
-        `**Prompt:** ${prompt}`,
-        ``,
-        `This is a mock LLM response. In a future phase, this will be replaced`,
-        `with a real LLM API call that generates content based on the prompt`,
-        `and the AI employee's skill specialization.`,
-        ``,
-        `---`,
-        ``,
-        `*Generated by ${skill} at ${new Date().toISOString()}*`,
-      ].join('\n'),
-    };
+      return tx.internalNote.create({
+        data: {
+          contentId,
+          agencyId,
+          authorId: aiUserId,
+          body: generated.body,
+        },
+        select: INTERNAL_NOTE_SELECT,
+      });
+    });
   }
 }

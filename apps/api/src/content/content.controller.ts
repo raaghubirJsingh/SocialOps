@@ -299,15 +299,15 @@ export class ContentController {
   }
 
   // ---------------------------------------------------------------------------
-  // AI Employee Fleet (Phase 2) - mocked LLM output, real audit trail
+  // AI Employee Fleet (Phase 2) - LLM output, real audit trail
   // ---------------------------------------------------------------------------
 
   /**
    * Dispatch a task to an AI Employee.
    *
    * `/ai-tasks` returns 202-style semantic ("accepted") but the work is
-   * synchronous for now: the LLM call is mocked, so the row is already written
-   * when the response is returned. The Agency (OWNER/ADMIN) dispatches; the AI
+   * synchronous for now: the provider call resolves in-process, so the row is
+   * already written when the response is returned. The Agency (OWNER/ADMIN) dispatches; the AI
    * Employee must itself hold the MEMBER role of this Organization, verified
    * again inside AIAgentService (AGENTS.md §7 - `isBot` is never authority).
    */
