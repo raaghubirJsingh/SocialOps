@@ -335,6 +335,93 @@ variants, and any employee-scoped content feature.
 Status: FINAL
 Approved: 2026-09-16
 
+## Decision 010 - AI Foundation/Fleet Governance Backfill (Retroactive Record)
+
+This entry records, retroactively, the AI Employee Fleet implementation that was
+committed to main (commits 80e1bab, 2a2c4aa, e6cfe64, aaf3a07, plus the
+subsequently approved, but not yet committed, LLM provider layer checkpoint) without a contemporaneous
+decision entry. The human approved this backfill explicitly (decision-package
+item D1, 2026-09-17).
+
+Recorded scope (as verified in the repository):
+
+- Phase 1 schema (migration `20260917063349_phase1_ai_content_foundation`):
+  `User.isBot` + `User.skillSpecialization`, Content `scenarioType` +
+  `agencyId`, and additional ContentStatus pipeline values
+  (AWAITING_MANAGER_APPROVAL, UNDER_CLIENT_REVIEW, FINAL_CONFIRMED). The
+  AccountType enum remains exactly SERVICE_PROVIDER | INDIVIDUAL_BUSINESS;
+  there is no EMPLOYEE account type (AGENTS.md 17.1 holds for AI staff too -
+  AI employees are Users with `isBot = true`, not an AccountType).
+- AI identity: AI employees are `User.isBot = true` rows with an optional
+  `skillSpecialization`. Under the CURRENT approved model they operate inside
+  a single Organization through a normal `OrganizationMembership` and are
+  re-verified on every dispatch. (Decision 011 below approves a platform-
+  direct target direction; until that redesign is separately approved and
+  built, this org-bound model remains the operative rule.)
+- Dispatch authorization (`POST /clients/:clientId/content/:contentId/ai-tasks`):
+  the dispatching side is the Agency (minimum ADMIN via RoleGuard); the bot
+  itself must hold the MEMBER role of the calling Organization, re-verified
+  server-side on every dispatch by AIAgentService (strict `role === MEMBER`);
+  `isBot` alone is never authority (AGENTS.md section 7). The AI never
+  receives an RBAC role of its own.
+- Discovery: `GET /api/organizations/ai-members` lists the `isBot` members of
+  the CALLER's ACTIVE organization (server-verified context; no RoleGuard by
+  design - listing is not authority).
+- Output boundary: AI output is persisted as an immutable ContentRevision
+  ("revision") or an agency-scoped InternalNote ("internal-note") in one
+  transaction, with the status-lock gate and audit trail owned by
+  AIAgentService; generation is delegated to a provider-neutral LLM layer
+  (`apps/api/src/content/ai/`: mock | openai | anthropic via `LLM_PROVIDER`,
+  defaulting to `mock`, placeholder-only env templates, AGENTS.md section 8).
+- Client data boundary: AI dispatch operates on Content scoped to the
+  verified `clientId` (ACTIVE Agency relationship); AI never appears on
+  client-side routes; no OAuth, no platform integration, and no credential
+  storage of any kind is authorized by this record.
+
+Explicitly NOT authorized by this record (still deferred, Section 13):
+Publishing/Distribution/Analytics, OAuth/token storage/encryption,
+S3-compatible storage, per-platform content variants, employee-scoped content
+features, AI employee management/administration surfaces, and any expansion of
+AI authority beyond the MEMBER role.
+
+Status: FINAL (retroactive record)
+Approved: 2026-09-17
+
+## Decision 011 - Core Architecture Target Model (Human-Approved Direction)
+
+Approved by the human on 2026-09-17 (decision-package items D6-D9). This entry
+records the approved TARGET direction for future phases; it authorizes the
+direction only - implementation remains gated per phase (Section 15).
+
+- D6 - Target model: SocialOps is the platform, the company/operator and
+  parent/global layer, itself a Service Provider for direct Clients, and the
+  owner/operator of its own human and AI employee workforce. External
+  Agencies remain independent Service Provider tenants; Clients remain
+  first-class Client entities whose ownership never transfers to an Agency;
+  the one-ACTIVE-Agency invariant is retained.
+- D7 - AI Employee architecture: the approved direction is that AI employees
+  are SocialOps staff (platform-direct), NOT External-Agency staff. This
+  MODIFIES the current org-bound model (Decision 010) and requires a
+  separately planned and approved redesign (schema, authorization, dispatch,
+  listing) before any implementation. Until that redesign is approved and
+  built, the Decision 010 org-bound MEMBER model remains the operative rule.
+- D8 - SocialOps Direct Service Provider: SocialOps may serve Clients
+  directly. Representation must not confuse the SocialOps company with
+  external Agency tenants (classification/representation approach to be
+  decided in the implementing phase).
+- D9 - Super Admin model: SOCIALOPS_ADMIN remains a User-level GLOBAL
+  authority, org-independent, DB-verified per request, deny-by-default. Its
+  currently approved powers remain exactly the two implemented ones (Client
+  status management, Agency discovery approval). Any additional global power
+  requires its own explicit approval (Sections 14-15); "complete global
+  rights" is a direction, not an authorization.
+
+Human Employee staff semantics (EmployeeProfile, platform-direct) are already
+approved under Decision 007 and are unaffected.
+
+Status: FINAL (direction; per-phase gates apply)
+Approved: 2026-09-17
+
 ## Decision Management Rule
 
 Do not change a FINAL decision without explicit user approval. When a new
