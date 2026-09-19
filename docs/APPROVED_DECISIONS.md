@@ -422,6 +422,117 @@ approved under Decision 007 and are unaffected.
 Status: FINAL (direction; per-phase gates apply)
 Approved: 2026-09-17
 
+## Decision 012 - Core Architecture Phase 1 (SocialOps Platform/Company/Provider Model)
+
+Approved by the human (ACT, 2026-09-19). This entry records the Phase-1 Core
+Architecture decisions from the approved Phase-1 PLAN. It records architecture
+direction only - implementation remains gated per phase (Decision 011 pattern;
+AGENTS.md Sections 14-15). No schema, backend, frontend, AI, database, or
+migration change is authorized by this entry.
+
+### 1. SocialOps Company / Provider Representation
+
+- SocialOps remains the platform/company/operator/global layer.
+- SocialOps will have ONE platform-owned Service-Provider Organization used
+  for direct Service Provider operations.
+- This Organization must be explicitly classified as platform-owned /
+  SOCIALOPS rather than an external Agency.
+- SocialOps Company and Service Provider are conceptually distinct, even
+  though the platform-owned Organization participates in provider operations.
+- Human Employees remain platform-direct and MUST NOT be placed into
+  OrganizationMembership merely to make provider features work.
+
+### 2. Direct Service Provider
+
+- SocialOps may directly serve Clients.
+- The platform-owned SocialOps Service-Provider Organization may participate
+  in the existing ClientAgencyRelationship machinery.
+- The existing one-ACTIVE-Agency invariant remains unchanged.
+- SocialOps and an external Agency cannot simultaneously hold ACTIVE provider
+  relationships for the same Client.
+- Switching provider requires the existing explicit termination /
+  re-engagement flow.
+- Client ownership and ownerUserId behavior remain unchanged.
+- Existing Client V1 behavior remains protected.
+
+### 3. Provider Organization Operators
+
+- Dedicated operator accounts will provide organization-scoped provider
+  operations for the SocialOps Service-Provider Organization.
+- Human EmployeeProfile users remain platform-direct.
+- Human Employees must not receive OrganizationMembership solely to access
+  provider functionality.
+- Any future exception to this rule requires a separate explicit governance
+  decision.
+
+### 4. AI Employee Target Architecture (approved Option A)
+
+- AI Employees become platform-direct SocialOps staff.
+- Future AI authorization will use explicit org-scoped grants rather than
+  treating OrganizationMembership MEMBER as the AI authorization mechanism.
+- Grants must be deny-by-default and explicitly identify the allowed
+  organization/context and capability/kind.
+- The current org-bound AI Employee implementation (Decision 010) remains
+  operative until the separate AI redesign implementation phase is approved.
+- No AI schema, authorization, controller, or dispatch changes are implemented
+  by this Decision 012 checkpoint.
+- Future AI design may be refined with Client/Work assignment as a later
+  layer without changing this core direction.
+
+### 5. Super Admin
+
+- SOCIALOPS_ADMIN remains global and organization-independent.
+- The existing two implemented powers remain: (a) Client status management,
+  (b) Agency discovery approval.
+- No additional Super Admin powers are granted by Decision 012.
+- Any future power must receive its own explicit approval before
+  implementation.
+
+### 6. Organization Classification
+
+- An additive Organization classification is approved. Target direction:
+  `Organization.kind` with at minimum the values SOCIALOPS and AGENCY.
+- Existing external Agency Organizations become AGENCY.
+- The platform-owned SocialOps Service-Provider Organization becomes
+  SOCIALOPS.
+- The SOCIALOPS organization is not eligible for external Agency discovery.
+- Classification must not change existing Client V1 access behavior.
+- Exact Prisma enum/field implementation remains an implementation detail for
+  the next approved ACT.
+- The Prisma schema is NOT modified by this Decision 012 recording.
+
+### 7. Migration Governance
+
+- The Organization classification migration will be additive only.
+- Migration generation and application are NOT part of this Decision 012
+  recording.
+- Existing development-data cleanup remains DEFERRED; existing dev DB residue
+  must remain untouched.
+- A future migration must be reviewed before application.
+- Production-safe additive migration and development-data cleanup are
+  separate concerns.
+
+### 8. Client V1 Protection
+
+Decision 012 does NOT authorize changes to: ClientAccessGuard; Client
+onboarding; ownerUserId binding; ClientAgencyRelationship contract; the
+one-ACTIVE-Agency invariant; Client Operations V1; Client content ownership;
+content review/final-confirmation behavior; social-account metadata behavior;
+Client authentication; Client field-change/security rules; or existing
+Agency isolation. Any required change to these areas requires separate
+approval.
+
+### 9. Phase Boundary
+
+Decision 012 records architecture direction only. It does NOT authorize:
+Prisma schema changes; migration creation/application; AI Employee redesign
+implementation; Super Admin power expansion; frontend global/Super Admin UI;
+employee management UI; dev-data cleanup; CI changes; deployment changes; or
+push to GitHub. Those require subsequent PLAN -> approval -> ACT gates.
+
+Status: FINAL (direction; per-phase gates apply)
+Approved: 2026-09-19
+
 ## Decision Management Rule
 
 Do not change a FINAL decision without explicit user approval. When a new
