@@ -101,4 +101,15 @@ describe('ClientAccessGuard (locked: binding + onboarding ACTIVE)', () => {
       guard.canActivate(makeContext(makeRequest({ headers: {} }))),
     ).rejects.toThrow(/X-Client-Id header is required/i);
   });
+
+  it('denies a malformed (non-UUID) Client ID without querying Prisma', async () => {
+    const { guard, findUnique } = makeGuard(makeClient());
+
+    await expect(
+      guard.canActivate(
+        makeContext(makeRequest({ headers: { 'x-client-id': 'not-a-uuid' } })),
+      ),
+    ).rejects.toThrow(/Client access denied/i);
+    expect(findUnique).not.toHaveBeenCalled();
+  });
 });

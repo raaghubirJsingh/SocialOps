@@ -19,6 +19,15 @@ export interface ClientAccessRequest extends Request {
 }
 
 /**
+ * Strict UUID v1-v5 syntactic check (variant bits enforced). UUID shape is
+ * the Client PK; anything else can never match a row, so it is denied
+ * without touching Prisma (a malformed id would otherwise throw inside
+ * `findUnique` and surface as 500 instead of the uniform 403).
+ */
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
  * Normal client-side operational access guard (Client Module V1).
  *
  * Locked rule: normal Client operational/self-service access requires
@@ -54,6 +63,12 @@ export class ClientAccessGuard implements CanActivate {
     const clientId = Array.isArray(headerValue) ? headerValue[0] : headerValue;
     if (typeof clientId !== 'string' || clientId.length === 0) {
       throw new BadRequestException('X-Client-Id header is required');
+    }
+
+    // Malformed ids can never match a UUID PK: deny uniformly without
+    // touching Prisma (fail closed, no existence leak).
+    if (!UUID_PATTERN.test(clientId)) {
+      throw new ForbiddenException('Client access denied');
     }
 
     const client = await this.prisma.client.findUnique({
