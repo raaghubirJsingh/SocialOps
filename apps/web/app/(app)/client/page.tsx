@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 
 import { ApiError } from '@/lib/api';
 import { clientApi } from '@/lib/client-api';

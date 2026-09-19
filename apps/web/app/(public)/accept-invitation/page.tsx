@@ -31,8 +31,12 @@ function InvitationShell({ children }: { children: ReactNode }) {
 /**
  * Public invitation acceptance page.
  * Token resolution is public; acceptance requires authentication.
+ *
+ * Exported (in addition to the default page) so contract tests can assert
+ * against the actual rendering component: the default export only wraps it
+ * in a Suspense boundary, which hides the contract from `toString()`.
  */
-function AcceptInvitationContent() {
+export function AcceptInvitationContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { isAuthenticated } = useSession();

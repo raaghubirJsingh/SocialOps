@@ -16,10 +16,27 @@ import { UserMenu } from '@/components/layout/user-menu';
  */
 const TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
+  '/clients': 'Clients',
+  '/client': 'Client dashboard',
+  '/client/onboarding': 'Client onboarding',
+  '/client/profile': 'Client profile',
+  '/client/notifications': 'Notifications',
+  '/client/social-accounts': 'Social accounts',
+  '/client/content': 'Content',
+  '/client/raw-data': 'Raw data',
 };
 
 function deriveTitle(pathname: string): string {
   if (TITLES[pathname]) return TITLES[pathname];
+  // Longest-prefix match so /client/social-accounts wins over /client, and
+  // /clients/… (agency client detail) resolves to "Clients".
+  const prefixes = Object.keys(TITLES).filter((key) =>
+    pathname.startsWith(key + '/'),
+  );
+  if (prefixes.length > 0) {
+    const best = prefixes.reduce((a, b) => (b.length > a.length ? b : a));
+    return TITLES[best];
+  }
   if (pathname.startsWith('/login')) return 'Sign in';
   return 'SocialOps';
 }

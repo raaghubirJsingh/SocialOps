@@ -111,6 +111,16 @@ export const clientApi = {
     }),
 
   /**
+   * Client-side audit history (GET /api/client/me/history): the Client
+   * sees its OWN full event trail (insert-only, newest first). Requires
+   * JWT + X-Client-Id; the backend re-verifies the binding per request.
+   */
+  getMyHistory: (clientId: string): Promise<ClientEventDto[]> =>
+    apiFetch<ClientEventDto[]>('/client/me/history', {
+      headers: { 'X-Client-Id': clientId },
+    }),
+
+  /**
    * Update a client field. JWT + X-Client-Id required.
    */
   updateField: (

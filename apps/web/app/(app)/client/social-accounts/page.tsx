@@ -25,13 +25,16 @@ import {
 } from '@/hooks/use-social-accounts';
 import { useSession } from '@/hooks/use-session';
 import { describeApiError } from '@/lib/api-error-messages';
+import { loadBoundClientId } from '@/lib/client-session';
 import type { SocialAccountDto } from '@/types/social-account';
 
 /**
  * Client self-service: my social accounts (METADATA ONLY).
  *
  * `clientId` comes from the `?clientId=` query parameter, exactly like the
- * existing `/client/...` pages; it is only a LOOKUP hint. The backend re-verifies
+ * existing `/client/...` pages; it is only a LOOKUP hint. When the parameter
+ * is missing (sidebar / dashboard navigation), the last server-verified
+ * binding is used as the hint. The backend re-verifies
  * the `X-Client-Id` header against the authenticated user's direct Client
  * binding (and onboarding ACTIVE) on every request, so a forged value cannot
  * reach another client's data.
@@ -46,7 +49,7 @@ type FormState =
 
 export default function ClientSocialAccountsPage() {
   const searchParams = useSearchParams();
-  const clientId = searchParams.get('clientId') ?? '';
+  const clientId = searchParams.get('clientId') ?? loadBoundClientId() ?? '';
   const { isAuthenticated, isLoading: sessionLoading } = useSession();
 
   const [formState, setFormState] = useState<FormState>({ mode: 'closed' });
