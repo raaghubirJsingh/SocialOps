@@ -59,6 +59,33 @@ html {
   color: #f8fafc;
 }
 
+/*
+ * Ambient radial gradient animation for auth route backgrounds.
+ *
+ * A slow, subtle pulse on the radial gradient backdrop draws the eye
+ * toward the centered glass auth card without competing with the form
+ * content (Modern SaaS visual language). Disabled under
+ * prefers-reduced-motion by the global motion-safety rule above.
+ */
+@utility bg-auth-gradient-animate {
+  background-image: radial-gradient(
+    ellipse at 50% 0%,
+    rgb(37 99 235 / 0.12) 0%,
+    transparent 60%
+  );
+  background-size: 200% 200%;
+  animation: auth-gradient-shift 20s ease-in-out infinite;
+}
+
+@keyframes auth-gradient-shift {
+  0%, 100% {
+    background-position: 0% 0%;
+  }
+  50% {
+    background-position: 100% 100%;
+  }
+}
+
 /* ---------------------------------------------------------------------------
  * Landing surface utilities (Modern SaaS visual language).
  *

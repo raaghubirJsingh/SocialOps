@@ -18,15 +18,16 @@ export const metadata: Metadata = {
  * session — the backend issues no tokens until the email is verified.
  */
 export default function RegisterPage() {
-  return (
+    return (
     <div className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 p-6 text-slate-100">
-      {/* Ambient backdrop - the same layered-glow recipe as the landing hero.
-          It exists so the single glass auth card (below) has a colourful
-          backdrop to blur, which is when backdrop-filter is worth its cost
-          (see the APP-SIDE BLUR BUDGET in globals.css). Decorative only. */}
+      {/* Ambient backdrop - the same layered-glow recipe as the landing hero and
+          the login page, so the single glass auth card below has something
+          colourful to blur (see the APP-SIDE BLUR BUDGET in globals.css).
+          Decorative only. */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
         <div className="absolute inset-x-0 top-0 h-[28rem] bg-[radial-gradient(ellipse_at_top,rgb(37_99_235/0.16),transparent_60%)]" />
         <div className="absolute -top-24 left-1/2 h-72 w-[42rem] -translate-x-1/2 rounded-full bg-blue-600/15 blur-3xl" />
+        <div className="absolute inset-0 bg-auth-gradient-animate" />
       </div>
 
       <div className="relative w-full max-w-sm">

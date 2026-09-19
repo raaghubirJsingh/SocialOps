@@ -18,7 +18,7 @@ export const metadata: Metadata = {
  * unverified accounts are rejected by the backend with 403.
  */
 export default function LoginPage() {
-  return (
+    return (
     <div className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 p-6 text-slate-100">
       {/* Ambient backdrop - the same layered-glow recipe as the landing hero.
           It exists so the single glass auth card (below) has a colourful
@@ -27,6 +27,7 @@ export default function LoginPage() {
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
         <div className="absolute inset-x-0 top-0 h-[28rem] bg-[radial-gradient(ellipse_at_top,rgb(37_99_235/0.16),transparent_60%)]" />
         <div className="absolute -top-24 left-1/2 h-72 w-[42rem] -translate-x-1/2 rounded-full bg-blue-600/15 blur-3xl" />
+        <div className="absolute inset-0 bg-auth-gradient-animate" />
       </div>
 
       <div className="relative w-full max-w-sm">
