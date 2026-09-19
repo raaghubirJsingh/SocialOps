@@ -179,11 +179,29 @@ model User {
   changeRequestsMade    ChangeRequest[] @relation("ChangeRequestRequester")
 }
 
+/// Platform vs external Service-Provider classification (Decision 012).
+/// - AGENCY: every external / self-registered Agency tenant (the default).
+/// - SOCIALOPS: the ONE platform-owned Service-Provider Organization used
+///   for direct SocialOps provider operations; never eligible for external
+///   Agency discovery; at most one such row may exist (partial unique
+///   index, enforced in migration 20260919000000_add_organization_kind).
+enum OrganizationKind {
+  SOCIALOPS
+  AGENCY
+}
+
 model Organization {
   id        String   @id @default(uuid()) @db.Uuid
   name      String
   slug      String   @unique
   isActive  Boolean  @default(true)
+  /// Platform-owned (SOCIALOPS) vs external Agency (AGENCY) classification.
+  /// AGENCY is the default for every pre-existing and self-registered
+  /// tenant; the single platform-owned SOCIALOPS Organization is provisioned
+  /// separately (never via public registration). Prisma cannot express the
+  /// partial unique index that limits SOCIALOPS to one row - it lives in
+  /// migration 20260919000000_add_organization_kind.
+  kind      OrganizationKind @default(AGENCY)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
