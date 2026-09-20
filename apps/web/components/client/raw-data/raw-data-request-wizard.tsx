@@ -20,6 +20,9 @@ import { SubmissionConfirmation } from '@/components/client/raw-data/submission-
 import { WizardStepper } from '@/components/client/raw-data/wizard-stepper';
 import { useRawDataDraft } from '@/hooks/use-raw-data-draft';
 import { useSession } from '@/hooks/use-session';
+import { describeApiError } from '@/lib/api-error-messages';
+import { rawDataApi } from '@/lib/raw-data-api';
+import type { CreateRawDataRequest, RawDataDto } from '@/types/content';
 import {
   RAW_DATA_REQUEST_DEFAULTS,
   WIZARD_STEPS,
@@ -41,6 +44,39 @@ const emptyResolver: Resolver<WizardValues> = async (values) => ({
   errors: {},
 });
 
+/**
+ * Pack the wizard's validated values into a CreateRawDataRequest for the
+ * backend. The structured brief fields are stored as metadata JSON; the main
+ * text body (brief) is sent as extractedText. File-upload fields (mimeType,
+ * originalFileName, byteSize) are left unset because V1 has no file upload.
+ */
+function packCreateRawDataRequest(values: Record<string, unknown>): CreateRawDataRequest {
+  const metadata: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined || value === null || value === '') continue;
+    if (Array.isArray(value)) {
+      const filtered = value.filter((v) => v !== '' && v !== null && v !== undefined);
+      if (filtered.length > 0) {
+        metadata[key] = filtered.join(', ');
+      }
+    } else if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed) metadata[key] = trimmed;
+    } else {
+      metadata[key] = value;
+    }
+  }
+
+  const brief = (values.brief as string | undefined)?.trim() || '';
+
+  return {
+    source: 'CLIENT_FORM',
+    extractedText: brief || undefined,
+    metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+  };
+}
+
 const STEP_SCHEMAS = [
   basicStepSchema,
   audienceStepSchema,
@@ -58,6 +94,7 @@ export function RawDataRequestWizard({ clientId }: { clientId: string }) {
   const [active, setActive] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [submittedRecord, setSubmittedRecord] = useState<RawDataDto | null>(null);
 
   const form = useForm<WizardValues>({
     resolver: emptyResolver,
@@ -97,7 +134,7 @@ export function RawDataRequestWizard({ clientId }: { clientId: string }) {
     setNotice(ok ? 'Draft saved on this device.' : 'Could not save the draft.');
   }, [getValues, save]);
 
-  const submit = useCallback(() => {
+  const submit = useCallback(async () => {
     const full = { ...RAW_DATA_REQUEST_DEFAULTS, ...(getValues() as Record<string, unknown>) };
     const parsed = rawDataRequestSchema.safeParse(full);
     if (!parsed.success) {
@@ -105,8 +142,17 @@ export function RawDataRequestWizard({ clientId }: { clientId: string }) {
       return;
     }
     setNotice(null);
-    setSubmitted(true);
-  }, [getValues]);
+
+    const request = packCreateRawDataRequest(full);
+
+    try {
+      const result = await rawDataApi.createMine(clientId, request);
+      setSubmittedRecord(result);
+      setSubmitted(true);
+    } catch (error) {
+      setNotice(describeApiError(error, 'Unable to submit the request. Please try again.'));
+    }
+  }, [getValues, clientId]);
 
   const startOver = useCallback(() => {
     clear();
@@ -118,7 +164,7 @@ export function RawDataRequestWizard({ clientId }: { clientId: string }) {
 
   if (isLoading) return <p className="text-sm text-slate-400">Loading…</p>;
   if (!session) return <p className="text-sm text-slate-400">Please sign in to create a request.</p>;
-  if (submitted) return <SubmissionConfirmation onCreateAnother={startOver} />;
+  if (submitted) return <SubmissionConfirmation onCreateAnother={startOver} record={submittedRecord ?? undefined} />;
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 p-6">

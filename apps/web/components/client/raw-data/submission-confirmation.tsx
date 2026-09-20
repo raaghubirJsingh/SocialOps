@@ -2,21 +2,33 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import type { RawDataDto } from '@/types/content';
 
 interface Props {
   onCreateAnother: () => void;
+  record?: RawDataDto;
 }
 
-export function SubmissionConfirmation({ onCreateAnother }: Props) {
+export function SubmissionConfirmation({ onCreateAnother, record }: Props) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>Request submitted</CardTitle>
-        <CardDescription>Your content request passed local validation.</CardDescription>
+        <CardDescription>Your content request has been recorded.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-slate-300">
-          This preview build validates the request locally. The server submission will be wired in a later step.
+          {record ? (
+            <>
+              Your intake record has been saved.
+              <br />
+              <span className="font-mono text-xs text-slate-400">
+                ID: {record.id} Â· captured {new Date(record.capturedAt).toLocaleString()}
+              </span>
+            </>
+          ) : (
+            'Your content request has been recorded.'
+          )}
         </p>
         <Button type="button" variant="secondary" onClick={onCreateAnother}>
           Create another
