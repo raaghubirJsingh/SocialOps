@@ -603,9 +603,44 @@ model SocialAccount {
   client        Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
   createdByUser User?  @relation("SocialAccountCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
+  /// OAuth credential (approved §13 override, Decision 013). 1:1 extension
+  /// holding ONLY ciphertext - the metadata row never gains a secret column.
+  credential SocialAccountCredential?
+
   @@unique([clientId, platform, platformAccountId])
   @@index([clientId, platform])
   @@index([clientId, isActive])
+}
+
+/// OAuth credential for a SocialAccount (approved AGENTS.md section 13
+/// override; Decision 013).
+///
+/// STRICT SECRETS BOUNDARY: this 1:1 table is the ONLY place platform
+/// credentials exist. Values are AES-256-GCM envelope ciphertexts
+/// (node:crypto only - no paid KMS); the plaintext never touches the
+/// database, a response body, or the frontend (AGENTS.md section 8).
+model SocialAccountCredential {
+  id              String   @id @default(uuid()) @db.Uuid
+  /// 1:1 with SocialAccount. UNIQUE FK => at most one credential per account.
+  socialAccountId String   @unique @db.Uuid
+  /// Envelope bookkeeping: which KEK version encrypted the per-row DEK.
+  tokenKeyVersion Int
+  /// AES-256-GCM envelope blob (base64url parts). NEVER a plaintext value.
+  accessTokenCiphertext  String  @db.Text
+  /// NULL for platforms that do not issue a refresh token.
+  refreshTokenCiphertext String? @db.Text
+  /// Granted scopes, space-separated. Audit/display only - never authority.
+  scopes          String
+  /// Platform-provided access-token expiry; NULL when not exposed by the
+  /// platform. Drives the future refresh-needed check.
+  expiresAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+
+  @@index([tokenKeyVersion])
+  @@index([expiresAt])
 }
 
 /// The canonical "one story" for a Client. Formatting it into per-platform

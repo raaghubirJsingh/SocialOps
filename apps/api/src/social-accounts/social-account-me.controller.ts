@@ -48,7 +48,9 @@ import { SocialAccountsService } from './social-accounts.service.js';
  *
  * `clientId` always comes from the guard-verified `@CurrentClient()` - it is
  * never accepted as input, so a Client cannot address another Client's data.
- * Metadata-only: no credential field and no OAuth route exists here.
+ * Metadata-only: no credential field exists on this contract. The OAuth
+ * connect route (approved Decision 013) lives in ./oauth/ and still returns
+ * no credential - only an authorize URL.
  */
 @ApiTags('social-accounts')
 @ApiBearerAuth()

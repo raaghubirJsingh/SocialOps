@@ -56,8 +56,9 @@ import { SocialAccountsService } from './social-accounts.service.js';
  *      Organization holds an ACTIVE ClientAgencyRelationship; anything else is
  *      a uniform 404 with no existence leak.
  *
- * Deliberately absent: any OAuth connect/authorize/callback/refresh/revoke
- * route, and any credential field (docs/APPROVED_DECISIONS.md Decision 008).
+ * OAuth connect (approved Decision 013) lives in ./oauth/oauth-connect.controller.ts
+ * under the SAME route base; this controller remains METADATA ONLY - no
+ * credential field is accepted or returned here (Decision 008 boundary).
  */
 @ApiTags('social-accounts')
 @ApiBearerAuth()

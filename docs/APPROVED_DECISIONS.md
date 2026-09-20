@@ -533,6 +533,116 @@ push to GitHub. Those require subsequent PLAN -> approval -> ACT gates.
 Status: FINAL (direction; per-phase gates apply)
 Approved: 2026-09-19
 
+## Decision 013 - OAuth Token Storage, Envelope Encryption, and Social Account OAuth Handshake
+
+Approved by the human (ACT, 2026-09-20). This entry records three explicit
+governance overrides plus the resulting implementation contract. It is an
+approved CHANGE to previously deferred scope - not a direction-only record.
+
+### 1. AGENTS.md Section 13 Override - OAuth Token Storage
+
+The Section 13 deferral of "OAuth implementation", "OAuth token storage", and
+"OAuth token encryption" is OVERRIDDEN for the SocialAccount module only.
+Authorized by this decision:
+
+- the 1:1 `SocialAccountCredential` Prisma model;
+- the OAuth connect/callback handshake for the three V1 platforms
+  (Instagram, Facebook, YouTube - AGENTS.md Section 2 unchanged);
+- platform API calls for the authorization-code exchange and profile fetch.
+
+NOT authorized: publishing, distribution, analytics, per-platform variants,
+OAuth for any platform outside the V1 scope, or any other deferred module.
+
+### 2. AGENTS.md Sections 5.7 / 15 - Encryption Key-Management Decision
+
+The encryption/key-management mechanism for locally stored platform tokens is
+SELECTED as:
+
+- **Algorithm**: AES-256-GCM (authenticated encryption).
+- **Tooling**: Node.js native `node:crypto` ONLY. No AWS KMS, no paid
+  services, no additional infrastructure.
+- **Envelope design**: a uniquely generated 32-byte per-credential DEK
+  encrypts the token payload; the environment's ACTIVE KEK encrypts that DEK.
+- **Key sourcing**: `TOKEN_KEK_V{n}` environment variables (base64 or hex,
+  exactly 32 bytes) with `TOKEN_KEK_ACTIVE_VERSION` selecting the KEK that
+  wraps NEW DEKs. Rotation is supported: the version is embedded in every
+  ciphertext, so old rows stay readable and are re-encrypted lazily.
+- **AAD binding**: the ciphertext is bound to
+  `social-account:{clientId}:{platform}` (Additional Authenticated Data), so a
+  blob moved to another tenant's row FAILS authentication on decrypt.
+- **Failure mode**: missing or malformed keys fail fast with a 503 at first
+  use - never a silent fallback or a plaintext path.
+
+### 3. AGENTS.md Section 4 Deviation - Local Token Storage
+
+The validated architecture contemplated a separate Central Authentication
+Proxy companion service. This decision DEVIATES: tokens are stored locally in
+PostgreSQL as envelope ciphertexts inside the SocialAccount module. The
+Section 4 guarantees are preserved in spirit and enforced by this
+implementation: platform secrets never reach the frontend or any normal
+application client; the database stores no plaintext token; no route returns
+a credential; and the storage layer is never the analytics database.
+
+### 4. Secrets Boundary
+
+- `storageRef`-style public URLs are never used for credentials: the
+  credential columns hold ONLY internal envelope ciphertext.
+- The 1:1 table is the ONLY place credentials exist; the SocialAccount
+  metadata SELECT allowlist is unchanged and remains asserted token-free by
+  the colocated spec.
+- Decryption is internal-only (`getDecryptedCredentialForUse`) for the future
+  connector layer. No controller returns a token, ciphertext, or scope.
+- All keys and platform client credentials arrive via environment variables
+  (AGENTS.md Section 8). Nothing is hard-coded; `.env.example` carries
+  placeholders only.
+
+### 5. CSRF State and Replay Protection
+
+- The OAuth `state` is `base64url(payload).base64url(HMAC-SHA256(payload))`
+  signed with a DEDICATED `OAUTH_STATE_SECRET` (never a JWT secret);
+  signatures are compared in constant time.
+- The payload tracks the authenticated user (`sub`), the verified
+  `organizationId`, the in-scope `clientId`, the platform, the persona source
+  (AGENCY | CLIENT), and a 32-byte random nonce with a 10-minute expiry.
+- The nonce is registered once in Redis (`SET NX`, TTL) and consumed
+  atomically (`DEL`) at callback time, so a captured state cannot be
+  replayed within its validity window.
+- The callback route is public BY NECESSITY (the browser arrives from the
+  platform). It bypasses the guards and relies on the signed single-use state
+  PLUS callback-time tenant re-verification: the user's OrganizationMembership
+  and the ACTIVE ClientAgencyRelationship recorded in the state are re-proven
+  BEFORE any token is stored. Failures produce a coarse redirect error code
+  with no user/org details.
+
+### 6. Tenant Isolation
+
+- Object/credential identity remains client-scoped: the tenant tuple comes
+  from verified server-side context only (JWT organization context, or the
+  `X-Client-Id` binding plus the ACTIVE relationship), never from request
+  body input.
+- Client-side (self-registered) connect parity is AUTHORIZED: the client
+  persona mints state through the `ClientAccessGuard` binding, and the
+  organization is resolved from the ACTIVE ClientAgencyRelationship (uniform
+  403 when the client is unmanaged).
+
+### 7. Migration
+
+The additive migration `20260920110046_add_oauth_token_storage` (1:1 table,
+`onDelete: Cascade`, two indexes) was reviewed and applied locally as part of
+this approved ACT. No destructive change and no development-data cleanup is
+authorized by this decision.
+
+### 8. Explicitly Not Authorized
+
+This decision does NOT authorize: token refresh scheduling; revocation or
+disconnect endpoints; publishing or distribution; analytics ingestion; OAuth
+for non-V1 platforms; frontend OAuth UI beyond the existing metadata surface;
+CI or deployment changes; or any push to GitHub. Each requires its own
+subsequent approval.
+
+Status: FINAL
+Approved: 2026-09-20
+
 ## Decision Management Rule
 
 Do not change a FINAL decision without explicit user approval. When a new
