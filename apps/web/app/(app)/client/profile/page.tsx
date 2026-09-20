@@ -27,30 +27,23 @@ interface FieldConfig {
 
 export const EDITABLE_PROFILE_FIELDS: readonly FieldConfig[] = Object.freeze([
   {
-    field: 'NAME',
-    label: 'Name',
-    requiresPassword: true,
-    hint: 'Password + verification code - changes are rate-limited',
-  },
-  {
-    field: 'DIRECT_MOBILE',
-    label: 'Phone',
-    requiresPassword: true,
-    hint: 'Password + verification code - changes are rate-limited',
-  },
-  {
-    field: 'PRIMARY_CONTACT_NAME',
-    label: 'Primary Contact Name',
+    field: 'WEBSITE',
+    label: 'Website',
     requiresPassword: false,
+    hint: 'Rate-limited changes — audited server-side.',
   },
   {
-    field: 'PRIMARY_CONTACT_MOBILE',
-    label: 'Primary Contact Phone',
+    field: 'INDUSTRY',
+    label: 'Industry',
     requiresPassword: false,
+    hint: 'Rate-limited changes — audited server-side.',
   },
-  { field: 'WEBSITE', label: 'Website', requiresPassword: false },
-  { field: 'INDUSTRY', label: 'Industry', requiresPassword: false },
-  { field: 'DESCRIPTION', label: 'Description', requiresPassword: false },
+  {
+    field: 'DESCRIPTION',
+    label: 'Description',
+    requiresPassword: false,
+    hint: 'Rate-limited changes — audited server-side.',
+  },
 ]);
 
 const INDUSTRY_OPTIONS: SelectOption[] = [
@@ -72,8 +65,6 @@ const INDUSTRY_OPTIONS: SelectOption[] = [
 ];
 
 const FILL_FIELDS: readonly ClientField[] = Object.freeze([
-  'PRIMARY_CONTACT_NAME',
-  'PRIMARY_CONTACT_MOBILE',
   'WEBSITE',
   'INDUSTRY',
   'DESCRIPTION',
@@ -292,16 +283,44 @@ export default function ClientProfilePage() {
       )}
 
       <div className="surface-panel rounded-lg">
-        <div className="flex items-center justify-between border-b border-white/[0.06] px-6 py-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-slate-300">Email</p>
-            <p className="text-slate-100">{client.directEmail}</p>
+        {/* Identity section — strictly read-only for ACTIVE clients. */}
+        <div className="border-b border-white/[0.06] px-6 py-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+            Identity
+          </p>
+        </div>
+
+        <div className="grid gap-4 border-b border-white/[0.06] px-6 py-4 sm:grid-cols-2">
+          <div>
+            <p className="text-sm font-medium text-slate-300">Name</p>
+            <p className="mt-1 text-slate-100">{client.name}</p>
             <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
               <Lock className="h-3 w-3" aria-hidden="true" />
-              Verified at sign-up - cannot be changed
+              Verified identity — cannot be changed here
             </p>
           </div>
-          {filledFields.length > 0 && (
+          <div>
+            <p className="text-sm font-medium text-slate-300">Phone</p>
+            <p className="mt-1 text-slate-100">{client.directPhone}</p>
+            <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+              <Lock className="h-3 w-3" aria-hidden="true" />
+              Verified at sign-up — cannot be changed here
+            </p>
+          </div>
+        </div>
+
+        <div className="border-b border-white/[0.06] px-6 py-4">
+          <p className="text-sm font-medium text-slate-300">Email</p>
+          <p className="mt-1 text-slate-100">{client.directEmail}</p>
+          <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+            <Lock className="h-3 w-3" aria-hidden="true" />
+            Verified at sign-up - cannot be changed
+          </p>
+        </div>
+
+        {filledFields.length > 0 && (
+          <div className="flex items-center justify-between border-b border-white/[0.06] px-6 py-4">
+            <p className="text-sm font-medium text-slate-300">Optional details</p>
             <Button
               size="sm"
               variant={isEditing ? 'secondary' : 'default'}
@@ -311,7 +330,15 @@ export default function ClientProfilePage() {
             >
               {isEditing ? (
                 <>
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    className="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <line x1="18" y1="6" x2="6" y2="18" />
                     <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
@@ -320,12 +347,12 @@ export default function ClientProfilePage() {
               ) : (
                 <>
                   <Edit className="h-4 w-4" />
-                  Edit Profile
+                  Edit details
                 </>
               )}
             </Button>
-          )}
-        </div>
+          </div>
+        )}
 
         {isEditing && (
           <form
@@ -333,7 +360,7 @@ export default function ClientProfilePage() {
               e.preventDefault();
               if (isLoading) return;
 
-              // Build a sanitized payload: only fields with actual values.
+              // Build a sanitized payload: only optional fields with actual values.
               const payload: Partial<Record<ClientField, string>> = {};
               for (const [field, value] of Object.entries(editValues)) {
                 if (field === 'INDUSTRY_OTHER') continue;
@@ -369,6 +396,7 @@ export default function ClientProfilePage() {
             }}
             className="border-t border-white/[0.06] px-6 py-4 space-y-4"
           >
+            <p className="text-sm font-medium text-slate-300">Edit optional details</p>
             <div className="grid gap-4 sm:grid-cols-2">
               {EDITABLE_PROFILE_FIELDS.map((fieldConfig) => {
                 if (fieldConfig.field === 'DIRECT_EMAIL') return null;
@@ -424,6 +452,11 @@ export default function ClientProfilePage() {
 
         {!isEditing && (
           <>
+            {filledFields.length > 0 && (
+              <p className="border-b border-white/[0.06] px-6 py-4 text-sm font-medium text-slate-300">
+                Optional details
+              </p>
+            )}
             {EDITABLE_PROFILE_FIELDS.map((fieldConfig) => {
               if (fieldConfig.field === 'DIRECT_EMAIL') return null;
 

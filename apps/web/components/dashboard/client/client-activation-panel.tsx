@@ -38,6 +38,8 @@ function isPhoneValid(value: string): boolean {
  *   - Name is editable and pre-filled from the session.
  *   - Phone is REQUIRED (validated before submit) — the backend contract
  *     needs `directPhone` to issue the verification code.
+ *   - Account Type (Individual/Business) is STRICTLY REQUIRED: the code is
+ *     never sent until a choice is made, and an inline error is shown.
  *   - No backend change: uses the existing start + activate endpoints. A
  *     retry may create another PENDING row (accepted backend behavior).
  *   - The activation panel is this screen's ONE glass surface (APP-SIDE
@@ -60,7 +62,12 @@ export function ClientActivationPanel({
 
   const handleDetailsSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (loading || !session || type === '') return;
+    if (loading || !session) return;
+    if (type === '') {
+      setError('Account type is strictly required — choose Individual or Business.');
+      return;
+    }
+    if (name.trim().length === 0) return;
     if (!isPhoneValid(phone)) {
       setPhoneError('Phone is required — enter a valid mobile number.');
       return;
