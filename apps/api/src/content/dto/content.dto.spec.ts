@@ -118,7 +118,7 @@ describe('RawData DTO keeps the hash server-computed', () => {
     ).toBe(true);
   });
 
-  it.each(['contentHash', 'storageRef', 'clientId', 'capturedAt'])(
+  it.each(['contentHash', 'clientId', 'capturedAt'])(
     'rejects the server-owned key %s',
     (key) => {
       expect(
@@ -130,6 +130,16 @@ describe('RawData DTO keeps the hash server-computed', () => {
       ).toBe(false);
     },
   );
+
+  it('accepts an optional storageRef (internal S3 object key)', () => {
+    expect(
+      createRawDataSchema.safeParse({
+        source: 'CLIENT_UPLOAD',
+        extractedText: 'x',
+        storageRef: 'org/client/raw-data/uuid.jpg',
+      }).success,
+    ).toBe(true);
+  });
 
   it('rejects an unknown source value', () => {
     expect(

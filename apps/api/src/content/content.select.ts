@@ -87,6 +87,8 @@ export const RAW_DATA_SELECT = {
   metadata: true,
   contentHash: true,
   byteSize: true,
+  // Internal S3 object key (approved §13 override) - never a public URL.
+  storageRef: true,
   capturedAt: true,
   capturedByUserId: true,
   createdAt: true,

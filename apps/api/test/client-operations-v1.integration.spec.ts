@@ -623,8 +623,9 @@ describe('Client Operations V1 - RawData intake (insert-only)', () => {
     // the hash is computed from the exact payload, not accepted from input
     expect(created.body.contentHash).toBe(sha256Hex(rawText));
     expect(created.body.clientId).toBe(client.clientId);
-    // storageRef is never written in this phase (S3 deferred)
-    expect(created.body).not.toHaveProperty('storageRef');
+    // storageRef is null here (S3 upload flow not exercised in this test;
+    // the approved override stores only the internal object key, never a URL)
+    expect(created.body.storageRef).toBeNull();
 
     // a caller-supplied hash is rejected outright
     const withHash = await http

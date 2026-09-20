@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { ClientsModule } from '../clients/clients.module.js';
 import { PrismaModule } from '../prisma/prisma.module.js';
+import { S3Module } from '../s3/s3.module.js';
 import { AIAgentService } from './ai-agent.service.js';
 import { ChangeRequestService } from './change-request.service.js';
 import { ContentMeController } from './content-me.controller.js';
@@ -20,9 +21,15 @@ import { RawDataService } from './raw-data.service.js';
  *
  * Scope guard: this module implements Content CRUD, the locked status machine,
  * Final Confirmation, and insert-only RawData intake. It deliberately does NOT
- * implement publishing, distribution, analytics, per-platform variants, OAuth,
- * or S3/object storage - those remain deferred (AGENTS.md section 13). APPROVED
+ * implement publishing, distribution, analytics, per-platform variants, or
+ * OAuth - those remain deferred (AGENTS.md section 13). APPROVED
  * is the terminal status: no PUBLISHED value exists.
+ *
+ * S3-compatible storage for RawData media was approved by explicit human
+ * override of the §13 deferral: the module imports S3Module and exposes
+ * zero-buffer presigned PUT URL endpoints (`.../raw-data/upload-url`). The
+ * backend never buffers file bytes; the browser uploads directly to the
+ * private bucket with a tenant-prefixed internal object key.
  *
  * Phase 2 (Unified Content & AI Foundation) adds, on top of the above:
  *   - the 3-scenario pipeline tag and the SCENARIO_1 max-2 change-request cap
@@ -41,7 +48,7 @@ import { RawDataService } from './raw-data.service.js';
  * exported by ClientsModule. No global guards are registered here.
  */
 @Module({
-  imports: [PrismaModule, ClientsModule],
+  imports: [PrismaModule, ClientsModule, S3Module],
   controllers: [
     ContentController,
     ContentMeController,
