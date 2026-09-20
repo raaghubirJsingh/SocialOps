@@ -28,11 +28,22 @@ const TABS: ReadonlyArray<{ id: PreviewTab; label: string }> = [
  * ManagerWorkspace via GET /api/organizations/ai-members, so the dropdown is
  * populated with the organization's real AI bots from the database.
  */
+// Hidden from dashboard navigation and restricted to development only
+// (AGENTS.md §13 — content UI preview is a Phase 4 dev tool).
+const isDevOnly = process.env.NODE_ENV !== 'development';
+
 export default function ContentUiTestPage() {
   const [tab, setTab] = useState<PreviewTab>('agency');
   const searchParams = useSearchParams();
   const clientId = searchParams.get('clientId') ?? '';
   const contentId = searchParams.get('contentId') ?? '';
+
+  // Return early in production: the page content is never sent to regular
+  // users. Hidden from the sidebar navigation array; this guard covers
+  // direct-URL access too.
+  if (isDevOnly) {
+    return null;
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
