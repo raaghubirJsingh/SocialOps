@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useRouter } from 'next/navigation';
 import type { RawDataDto } from '@/types/content';
 
 interface Props {
@@ -10,6 +11,8 @@ interface Props {
 }
 
 export function SubmissionConfirmation({ onCreateAnother, record }: Props) {
+  const router = useRouter();
+
   return (
     <Card>
       <CardHeader>
@@ -30,9 +33,14 @@ export function SubmissionConfirmation({ onCreateAnother, record }: Props) {
             'Your content request has been recorded.'
           )}
         </p>
-        <Button type="button" variant="secondary" onClick={onCreateAnother}>
-          Create another
-        </Button>
+        <div className="flex flex-wrap gap-3">
+          <Button type="button" onClick={() => router.push('/client/content')}>
+            Go to dashboard
+          </Button>
+          <Button type="button" variant="secondary" onClick={onCreateAnother}>
+            Create another
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

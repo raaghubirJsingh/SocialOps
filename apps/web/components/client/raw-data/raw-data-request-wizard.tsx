@@ -99,7 +99,6 @@ export function RawDataRequestWizard({ clientId }: { clientId: string }) {
   const form = useForm<WizardValues>({
     resolver: emptyResolver,
     mode: 'onBlur',
-    shouldUnregister: true,
     defaultValues: RAW_DATA_REQUEST_DEFAULTS as WizardValues,
   });
   const { control, getValues, reset, formState, watch } = form;
@@ -111,6 +110,21 @@ export function RawDataRequestWizard({ clientId }: { clientId: string }) {
   const contactValue = watch('contactSource') ?? '';
   const visited = WIZARD_STEPS.map((_, i) => i <= active);
 
+  const probeValues = useCallback(() => {
+    const current = getValues() as Record<string, unknown>;
+    const defaults = RAW_DATA_REQUEST_DEFAULTS as Record<string, unknown>;
+    const merged: Record<string, unknown> = {};
+    for (const key of Object.keys(defaults)) {
+      merged[key] = current[key] ?? defaults[key];
+    }
+    for (const key of Object.keys(current)) {
+      if (!(key in merged)) merged[key] = current[key];
+    }
+    merged.contentCategory = contentCategory;
+    merged.contentPurpose = contentPurpose;
+    return merged;
+  }, [getValues, contentCategory, contentPurpose]);
+
   useEffect(() => {
     const draft = load();
     if (draft) reset({ ...RAW_DATA_REQUEST_DEFAULTS, ...draft } as WizardValues);
@@ -119,7 +133,7 @@ export function RawDataRequestWizard({ clientId }: { clientId: string }) {
 
   const goNext = useCallback(() => {
     const schema = STEP_SCHEMAS[active];
-    const probe = { ...getValues(), contentCategory, contentPurpose } as Record<string, unknown>;
+    const probe = probeValues();
     const parsed = schema.safeParse(probe);
     if (!parsed.success) {
       setNotice(`Step ${active + 1} needs attention (${parsed.error.issues.length} issue(s)).`);
@@ -127,7 +141,7 @@ export function RawDataRequestWizard({ clientId }: { clientId: string }) {
     }
     setNotice(null);
     setActive((a) => Math.min(a + 1, WIZARD_STEPS.length - 1));
-  }, [active, getValues, contentCategory, contentPurpose]);
+  }, [active, probeValues]);
 
   const saveDraft = useCallback(() => {
     const ok = save(getValues() as Record<string, unknown>);
@@ -170,7 +184,7 @@ export function RawDataRequestWizard({ clientId }: { clientId: string }) {
     <div className="mx-auto w-full max-w-3xl space-y-6 p-6">
       <Card>
         <CardHeader>
-          <CardTitle>Create content request</CardTitle>
+          <CardTitle className="text-lg">Create content request</CardTitle>
           <CardDescription>
             Step {active + 1} of {WIZARD_STEPS.length} — {WIZARD_STEPS[active]}
           </CardDescription>
@@ -218,7 +232,7 @@ export function RawDataRequestWizard({ clientId }: { clientId: string }) {
                 Submit request
               </Button>
             )}
-            <Button type="button" variant="ghost" onClick={saveDraft}>
+            <Button type="button" variant="ghost" onClick={saveDraft} className="ml-auto">
               Save as draft
             </Button>
           </div>

@@ -71,7 +71,7 @@ interface Props {
 
 export function StepBasic({ control, errors }: Props) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid gap-5 sm:grid-cols-2">
       <Controller
         control={control}
         name="contentPurpose"
@@ -204,7 +204,7 @@ export function StepBasic({ control, errors }: Props) {
 
 export function StepAudience({ control, errors }: Props) {
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-5">
       <Controller
         control={control}
         name="targetAudience"
@@ -219,53 +219,66 @@ export function StepAudience({ control, errors }: Props) {
           />
         )}
       />
-      <Controller
-        control={control}
-        name="ageGroup"
-        render={({ field }) => (
-          <MultiSelectChips
-            label="Age Group (optional)"
-            options={AGE_GROUPS}
-            value={(field.value as string[]) ?? []}
-            onChange={field.onChange}
-          />
-        )}
-      />
-      <Controller
-        control={control}
-        name="gender"
-        render={({ field }) => (
-          <MultiSelectChips
-            label="Gender (optional)"
-            options={GENDERS}
-            value={(field.value as string[]) ?? []}
-            onChange={field.onChange}
-          />
-        )}
-      />
       <div className="grid gap-4 sm:grid-cols-2">
         <Controller
           control={control}
-          name="geoCountry"
+          name="ageGroup"
           render={({ field }) => (
-            <TextField label="Country (optional)" value={(field.value as string) ?? ''} onChange={field.onChange} />
+            <MultiSelectChips
+              label="Age Group (optional)"
+              options={AGE_GROUPS}
+              value={(field.value as string[]) ?? []}
+              onChange={field.onChange}
+            />
           )}
         />
         <Controller
           control={control}
-          name="geoState"
+          name="gender"
           render={({ field }) => (
-            <TextField label="State (optional)" value={(field.value as string) ?? ''} onChange={field.onChange} />
+            <MultiSelectChips
+              label="Gender (optional)"
+              options={GENDERS}
+              value={(field.value as string[]) ?? []}
+              onChange={field.onChange}
+            />
           )}
         />
       </div>
+
+      <details className="group">
+        <summary className="cursor-pointer list-none border-slate-800 bg-slate-900/40 text-sm font-medium text-slate-300 hover:text-slate-100 select-none rounded-md px-3 py-2 transition-colors">
+          <span className="flex items-center gap-2">
+            Advanced audience targeting
+            <svg className="size-4 text-slate-500 group-open:rotate-180 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </span>
+        </summary>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <Controller
+            control={control}
+            name="geoCountry"
+            render={({ field }) => (
+              <TextField label="Country (optional)" value={(field.value as string) ?? ''} onChange={field.onChange} />
+            )}
+          />
+          <Controller
+            control={control}
+            name="geoState"
+            render={({ field }) => (
+              <TextField label="State (optional)" value={(field.value as string) ?? ''} onChange={field.onChange} />
+            )}
+          />
+        </div>
+      </details>
     </div>
   );
 }
 
 export function StepLanguageStyle({ control, errors }: Props) {
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-5">
       <Controller
         control={control}
         name="language"
@@ -280,51 +293,64 @@ export function StepLanguageStyle({ control, errors }: Props) {
           />
         )}
       />
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Controller
-          control={control}
-          name="tone"
-          render={({ field }) => (
-            <SingleSelect
-              label="Tone (optional)"
-              options={TONES}
-              value={(field.value as string) ?? ''}
-              onChange={field.onChange}
+
+      <details className="group">
+        <summary className="cursor-pointer list-none border-slate-800 bg-slate-900/40 text-sm font-medium text-slate-300 hover:text-slate-100 select-none rounded-md px-3 py-2 transition-colors">
+          <span className="flex items-center gap-2">
+            Advanced style options
+            <svg className="size-4 text-slate-500 group-open:rotate-180 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </span>
+        </summary>
+        <div className="mt-4 grid gap-4">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Controller
+              control={control}
+              name="tone"
+              render={({ field }) => (
+                <SingleSelect
+                  label="Tone (optional)"
+                  options={TONES}
+                  value={(field.value as string) ?? ''}
+                  onChange={field.onChange}
+                />
+              )}
             />
-          )}
-        />
-        <Controller
-          control={control}
-          name="writingStyle"
-          render={({ field }) => (
-            <SingleSelect
-              label="Writing Style (optional)"
-              options={WRITING_STYLES}
-              value={(field.value as string) ?? ''}
-              onChange={field.onChange}
+            <Controller
+              control={control}
+              name="writingStyle"
+              render={({ field }) => (
+                <SingleSelect
+                  label="Writing Style (optional)"
+                  options={WRITING_STYLES}
+                  value={(field.value as string) ?? ''}
+                  onChange={field.onChange}
+                />
+              )}
             />
-          )}
-        />
-        <Controller
-          control={control}
-          name="creativeStyle"
-          render={({ field }) => (
-            <SingleSelect
-              label="Creative Style (optional)"
-              options={CREATIVE_STYLES}
-              value={(field.value as string) ?? ''}
-              onChange={field.onChange}
+            <Controller
+              control={control}
+              name="creativeStyle"
+              render={({ field }) => (
+                <SingleSelect
+                  label="Creative Style (optional)"
+                  options={CREATIVE_STYLES}
+                  value={(field.value as string) ?? ''}
+                  onChange={field.onChange}
+                />
+              )}
             />
-          )}
-        />
-      </div>
+          </div>
+        </div>
+      </details>
     </div>
   );
 }
 
 export function StepContentInfo({ control, errors }: Props) {
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-5">
       <Controller
         control={control}
         name="topic"
@@ -723,7 +749,7 @@ function ContactGroup({ control, errors, contactValue }: Props & { contactValue:
 
 export function StepReference({ control, errors }: Props) {
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-5">
       <Controller
         control={control}
         name="materialType"
@@ -756,94 +782,107 @@ export function StepReference({ control, errors }: Props) {
 
 export function StepPublishing({ control, errors }: Props) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <Controller
-        control={control}
-        name="preferredDate"
-        render={({ field }) => (
-          <TextField label="Preferred Date (optional)" type="date" value={(field.value as string) ?? ''} onChange={field.onChange} />
-        )}
-      />
-      <Controller
-        control={control}
-        name="deadline"
-        render={({ field }) => (
-          <TextField label="Deadline (optional)" type="date" value={(field.value as string) ?? ''} onChange={field.onChange} />
-        )}
-      />
-
-      <div className="sm:col-span-2">
+    <div className="grid gap-5">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Controller
           control={control}
-          name="publishingPlatform"
+          name="preferredDate"
           render={({ field }) => (
-            <MultiSelectChips
-              label="Publishing Platform (optional)"
-              options={PUBLISHING_PLATFORMS}
-              value={(field.value as string[]) ?? []}
-              onChange={field.onChange}
-              error={err(errors, 'publishingPlatform')}
-            />
+            <TextField label="Preferred Date (optional)" type="date" value={(field.value as string) ?? ''} onChange={field.onChange} />
+          )}
+        />
+        <Controller
+          control={control}
+          name="deadline"
+          render={({ field }) => (
+            <TextField label="Deadline (optional)" type="date" value={(field.value as string) ?? ''} onChange={field.onChange} />
           )}
         />
       </div>
-      <Controller
-        control={control}
-        name="publishingPriority"
-        render={({ field }) => (
-          <SingleSelect
-            label="Publishing Priority (optional)"
-            options={PRIORITIES}
-            value={(field.value as string) ?? ''}
-            onChange={field.onChange}
-            error={err(errors, 'publishingPriority')}
-          />
-        )}
-      />
-      <Controller
-        control={control}
-        name="campaignOccasion"
-        render={({ field }) => (
-          <TextField
-            label="Campaign / Occasion (optional)"
-            value={(field.value as string) ?? ''}
-            onChange={field.onChange}
-            error={err(errors, 'campaignOccasion')}
-          />
-        )}
-      />
-      <Controller
-        control={control}
-        name="customEmail"
-        render={({ field }) => (
-          <TextField
-            label="Custom Email (optional)"
-            value={(field.value as string) ?? ''}
-            onChange={field.onChange}
-            error={err(errors, 'customEmail')}
-          />
-        )}
-      />
-      <Controller
-        control={control}
-        name="customWebsite"
-        render={({ field }) => (
-          <TextField
-            label="Custom Website (optional)"
-            value={(field.value as string) ?? ''}
-            onChange={field.onChange}
-            error={err(errors, 'customWebsite')}
-          />
-        )}
-      />
 
+      <details className="group">
+        <summary className="cursor-pointer list-none border-slate-800 bg-slate-900/40 text-sm font-medium text-slate-300 hover:text-slate-100 select-none rounded-md px-3 py-2 transition-colors">
+          <span className="flex items-center gap-2">
+            Advanced publishing options
+            <svg className="size-4 text-slate-500 group-open:rotate-180 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </span>
+        </summary>
+        <div className="mt-4 grid gap-4">
+          <div className="sm:col-span-2">
+            <Controller
+              control={control}
+              name="publishingPlatform"
+              render={({ field }) => (
+                <MultiSelectChips
+                  label="Publishing Platform (optional)"
+                  options={PUBLISHING_PLATFORMS}
+                  value={(field.value as string[]) ?? []}
+                  onChange={field.onChange}
+                  error={err(errors, 'publishingPlatform')}
+                />
+              )}
+            />
+          </div>
+          <Controller
+            control={control}
+            name="publishingPriority"
+            render={({ field }) => (
+              <SingleSelect
+                label="Publishing Priority (optional)"
+                options={PRIORITIES}
+                value={(field.value as string) ?? ''}
+                onChange={field.onChange}
+                error={err(errors, 'publishingPriority')}
+              />
+            )}
+          />
+          <Controller
+            control={control}
+            name="campaignOccasion"
+            render={({ field }) => (
+              <TextField
+                label="Campaign / Occasion (optional)"
+                value={(field.value as string) ?? ''}
+                onChange={field.onChange}
+                error={err(errors, 'campaignOccasion')}
+              />
+            )}
+          />
+          <Controller
+            control={control}
+            name="customEmail"
+            render={({ field }) => (
+              <TextField
+                label="Custom Email (optional)"
+                value={(field.value as string) ?? ''}
+                onChange={field.onChange}
+                error={err(errors, 'customEmail')}
+              />
+            )}
+          />
+          <Controller
+            control={control}
+            name="customWebsite"
+            render={({ field }) => (
+              <TextField
+                label="Custom Website (optional)"
+                value={(field.value as string) ?? ''}
+                onChange={field.onChange}
+                error={err(errors, 'customWebsite')}
+              />
+            )}
+          />
+        </div>
+      </details>
     </div>
   );
 }
 
 export function StepReview({ control }: Props) {
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-5">
       <Controller
         control={control}
         name="additionalInformation"
