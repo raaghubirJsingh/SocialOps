@@ -18,6 +18,7 @@ import { useContentList, useCreateContent } from '@/hooks/use-content';
 import { useSession } from '@/hooks/use-session';
 import { describeApiError } from '@/lib/api-error-messages';
 import { cn } from '@/lib/cn';
+import { loadBoundClientId } from '@/lib/client-session';
 import {
   CONTENT_STATUSES,
   CONTENT_STATUS_LABELS,
@@ -34,7 +35,7 @@ import {
  */
 export default function ClientContentPage() {
   const searchParams = useSearchParams();
-  const clientId = searchParams.get('clientId') ?? '';
+  const clientId = searchParams.get('clientId') ?? loadBoundClientId() ?? '';
   const { isAuthenticated, isLoading: sessionLoading } = useSession();
 
   const [statusFilter, setStatusFilter] = useState<ContentStatus | 'ALL'>('ALL');

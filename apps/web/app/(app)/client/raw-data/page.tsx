@@ -18,6 +18,7 @@ import { useContentList } from '@/hooks/use-content';
 import { useCreateRawData, useRawData } from '@/hooks/use-raw-data';
 import { useSession } from '@/hooks/use-session';
 import { describeApiError } from '@/lib/api-error-messages';
+import { loadBoundClientId } from '@/lib/client-session';
 import type { CreateRawDataRequest } from '@/types/content';
 
 /**
@@ -29,7 +30,7 @@ import type { CreateRawDataRequest } from '@/types/content';
  */
 export default function ClientRawDataPage() {
   const searchParams = useSearchParams();
-  const clientId = searchParams.get('clientId') ?? '';
+  const clientId = searchParams.get('clientId') ?? loadBoundClientId() ?? '';
   const { isAuthenticated, isLoading: sessionLoading } = useSession();
 
   const [showForm, setShowForm] = useState(false);
