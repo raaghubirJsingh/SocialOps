@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 
 import { cn } from '@/lib/cn';
 import { useSession } from '@/hooks/use-session';
@@ -76,6 +76,8 @@ export const EMPLOYEE_NAV_ITEMS: readonly NavItem[] = [DASHBOARD_ITEM];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const clientId = searchParams.get('clientId') ?? '';
   const { session } = useSession();
   const isEmployee = session?.user?.isEmployee ?? false;
   const isClientAccount =
@@ -86,6 +88,8 @@ export function Sidebar() {
     : isClientAccount
       ? CLIENT_NAV_ITEMS
       : AGENCY_NAV_ITEMS;
+
+  const clientHrefs = new Set(CLIENT_NAV_ITEMS.map((item) => item.href));
 
   // Longest-prefix active match: `/client/social-accounts` highlights
   // "Social accounts" and NOT also "My client" (`/client`).
@@ -122,10 +126,14 @@ export function Sidebar() {
         <ul className="space-y-1">
           {items.map((item) => {
             const isActive = item.href === activeHref;
+            const href =
+              clientId && clientHrefs.has(item.href)
+                ? `${item.href}?clientId=${clientId}`
+                : item.href;
             return (
               <li key={item.href}>
                 <Link
-                  href={item.href}
+                  href={href}
                   aria-current={isActive ? 'page' : undefined}
                   title={item.description}
                   className={cn(
