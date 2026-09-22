@@ -94,11 +94,22 @@ export default function ClientContentPage() {
             text you approve. Publishing is not part of this phase.
           </p>
         </div>
-        {!showCreate && (
-          <Button type="button" onClick={() => setShowCreate(true)}>
-            New draft
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild>
+            <Link href={`/client/content/request?clientId=${clientId}`}>
+              Create Content Request
+            </Link>
           </Button>
-        )}
+          {!showCreate && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowCreate(true)}
+            >
+              New draft
+            </Button>
+          )}
+        </div>
       </header>
 
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
@@ -162,7 +173,14 @@ export default function ClientContentPage() {
         <ContentList
           items={listQuery.data}
           detailHref={(contentId) => `/client/content/${contentId}?clientId=${clientId}`}
-          emptyDescription="Nothing has been drafted yet. Create a draft or wait for your agency to prepare one."
+          emptyDescription="Nothing has been drafted yet. Start a guided request or create a draft — or wait for your agency to prepare one."
+          emptyAction={
+            <Button asChild>
+              <Link href={`/client/content/request?clientId=${clientId}`}>
+                Create Content Request
+              </Link>
+            </Button>
+          }
         />
       )}
     </div>

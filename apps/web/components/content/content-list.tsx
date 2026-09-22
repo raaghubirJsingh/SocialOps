@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 
 import { ContentStatusBadge } from '@/components/content/content-status-badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +9,8 @@ interface ContentListProps {
   /** Where each row links (agency detail vs client detail route). */
   detailHref: (contentId: string) => string;
   emptyDescription: string;
+  /** Optional CTA rendered in the empty state (e.g. wizard entry point). */
+  emptyAction?: ReactNode;
 }
 
 /**
@@ -19,6 +22,7 @@ export function ContentList({
   items,
   detailHref,
   emptyDescription,
+  emptyAction,
 }: ContentListProps) {
   if (items.length === 0) {
     return (
@@ -27,6 +31,9 @@ export function ContentList({
           <CardTitle className="text-base">Nothing here yet</CardTitle>
           <CardDescription>{emptyDescription}</CardDescription>
         </CardHeader>
+        {emptyAction ? (
+          <CardContent className="pt-0">{emptyAction}</CardContent>
+        ) : null}
       </Card>
     );
   }

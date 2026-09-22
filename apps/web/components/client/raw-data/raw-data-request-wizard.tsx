@@ -49,8 +49,13 @@ const emptyResolver: Resolver<WizardValues> = async (values) => ({
  * backend. The structured brief fields are stored as metadata JSON; the main
  * text body (brief) is sent as extractedText. File-upload fields (mimeType,
  * originalFileName, byteSize) are left unset because V1 has no file upload.
+ *
+ * Exported so the P1 simplified (text-first) flow can REUSE this exact packing
+ * path instead of duplicating it - the submitted metadata vocabulary therefore
+ * stays identical to the legacy wizard. No behaviour change: this keyword is
+ * the only difference from the original declaration.
  */
-function packCreateRawDataRequest(values: Record<string, unknown>): CreateRawDataRequest {
+export function packCreateRawDataRequest(values: Record<string, unknown>): CreateRawDataRequest {
   const metadata: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(values)) {
