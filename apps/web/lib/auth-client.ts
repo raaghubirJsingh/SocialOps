@@ -4,8 +4,17 @@ import type {
   LogoutRequest,
   LoginRequest,
     RefreshRequest,
+  OtpResendRequest,
+  OtpResendResponse,
+  OtpVerifyRequest,
+  OtpVerifyResponse,
   RegisterEmployeeRequest,
-  RegisterRequest,
+  RegistrationCompleteResponse,
+  RegistrationPasswordRequest,
+  RegistrationResumeRequest,
+  RegistrationResumeSnapshot,
+  RegistrationStartRequest,
+  RegistrationStartResponse,
   RegisterResult,
   Session,
   TokenPair,
@@ -64,17 +73,57 @@ export async function login(input: LoginRequest): Promise<Session> {
 }
 
 /**
- * Register a new account.
- *
- * Registration NEVER issues tokens or an authenticated session
- * (approved contract): the backend creates an UNVERIFIED user and
- * queues a verification email. The caller must navigate the user to
- * /verify-email afterwards. No session is saved here.
+ * Staged registration (Registration Phase v1.0): start or resume a
+ * pending registration. NEVER issues tokens or a session - the raw
+ * resumeToken returned here is the registration-stage credential only.
  */
-export async function register(
-  input: RegisterRequest,
-): Promise<RegisterResult> {
-  return apiFetch<RegisterResult>('/auth/register', {
+export async function startRegistration(
+  input: RegistrationStartRequest,
+): Promise<RegistrationStartResponse> {
+  return apiFetch<RegistrationStartResponse>('/auth/registration/start', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+/** Verify one channel's 6-digit registration OTP (dual gate). */
+export async function verifyRegistrationOtp(
+  input: OtpVerifyRequest,
+): Promise<OtpVerifyResponse> {
+  return apiFetch<OtpVerifyResponse>('/auth/registration/otp/verify', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+/** Resend one channel's registration OTP (max 3 successful resends). */
+export async function resendRegistrationOtp(
+  input: OtpResendRequest,
+): Promise<OtpResendResponse> {
+  return apiFetch<OtpResendResponse>('/auth/registration/otp/resend', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+/**
+ * Create the account after BOTH verifications succeed. Returns the
+ * status discriminator only - NEVER a token; continue at /login.
+ */
+export async function setRegistrationPassword(
+  input: RegistrationPasswordRequest,
+): Promise<RegistrationCompleteResponse> {
+  return apiFetch<RegistrationCompleteResponse>('/auth/registration/password', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+/** Restore an in-flight registration from the emailed resume link. */
+export async function resumeRegistration(
+  input: RegistrationResumeRequest,
+): Promise<RegistrationResumeSnapshot> {
+  return apiFetch<RegistrationResumeSnapshot>('/auth/registration/resume', {
     method: 'POST',
     body: input,
   });

@@ -5,6 +5,7 @@ import { PrismaClient, type OrganizationRole } from '@prisma/client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
+import { createActiveUser } from './helpers/active-user.factory.js';
 
 if (!process.env.JWT_ACCESS_SECRET)
   process.env.JWT_ACCESS_SECRET = 'integration-cv1-access-32chars!!';
@@ -32,21 +33,20 @@ interface SeededUser {
 async function seedUser(
   name: string,
   role: OrganizationRole,
-  accountType: 'SERVICE_PROVIDER' | 'INDIVIDUAL_BUSINESS' = 'SERVICE_PROVIDER',
+  accountType: 'SERVICE_PROVIDER' | 'CLIENT' = 'SERVICE_PROVIDER',
 ): Promise<SeededUser> {
   const orgId = uuid();
   await prisma.organization.create({
     data: { id: orgId, name: `Org ${name} ${runTag}`, slug: testSlug(name) },
   });
-  const authService = app.get(AuthService);
+  const auth = app.get(AuthService);
   const email = testEmail(name);
   const password = 'StrongPassword123!';
-  await authService.register({ accountType, fullName: name, email, password } as never);
-  await prisma.user.update({ where: { email }, data: { emailVerifiedAt: new Date(), isActive: true } });
-  const userId = (await prisma.user.findUniqueOrThrow({ where: { email } })).id;
-  await prisma.organizationMembership.create({ data: { organizationId: orgId, userId, role } });
-  const login = await authService.login({ email, password });
-  return { id: userId, email, organizationId: orgId, role, accessToken: login.accessToken };
+  // Legacy register is retired (L11): create the active fixture directly.
+  const user = await createActiveUser(prisma, { email, fullName: name, accountType, password });
+  await prisma.organizationMembership.create({ data: { organizationId: orgId, userId: user.id, role } });
+  const login = await auth.login({ email, password });
+  return { id: user.id, email, organizationId: orgId, role, accessToken: login.accessToken };
 }
 
 let app: INestApplication;

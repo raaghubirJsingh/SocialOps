@@ -20,6 +20,22 @@ import type { AuthenticatedUser, Session } from '@/types/auth';
 
 const STORAGE_KEY = 'socialops.session';
 
+/**
+ * Accepts the current AccountType values and NORMALIZES the legacy
+ * 'INDIVIDUAL_BUSINESS' value (renamed to 'CLIENT' by Registration
+ * Phase v1.0 / Decision 014) so sessions persisted before the rename
+ * keep the correct CLIENT persona until the next login refreshes the
+ * stored identity. Unknown values degrade to null (graceful fallback,
+ * same precedent as the pre-existing backward-compat handling below).
+ */
+function normalizeAccountType(
+  value: unknown,
+): AuthenticatedUser['accountType'] {
+  if (value === 'SERVICE_PROVIDER' || value === 'CLIENT') return value;
+  if (value === 'INDIVIDUAL_BUSINESS') return 'CLIENT';
+  return null;
+}
+
 export function loadSession(): Session | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -50,11 +66,7 @@ export function loadSession(): Session | null {
         email,
         fullName:
           typeof parsed.user?.fullName === 'string' ? parsed.user.fullName : null,
-        accountType:
-          parsed.user?.accountType === 'SERVICE_PROVIDER' ||
-          parsed.user?.accountType === 'INDIVIDUAL_BUSINESS'
-            ? parsed.user.accountType
-            : null,
+        accountType: normalizeAccountType(parsed.user?.accountType),
         // Backward compat: older sessions predate isEmployee. Default
         // to false so the UI degrades to standard (non-employee) routing.
         isEmployee: parsed.user?.isEmployee === true,

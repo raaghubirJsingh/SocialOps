@@ -24,8 +24,10 @@ async function bootstrap() {
     .setTitle('SocialOps API')
     .setDescription(
       'SocialOps - social media operations management platform. ' +
-        'Stage B7 (Authentication + RBAC Foundation) exposes user registration, ' +
-        'login, refresh-token rotation, and logout under the `auth` tag, ' +
+        'Registration Phase v1.0 exposes staged conversational registration ' +
+        '(pending registration + dual Email/WhatsApp OTP verification) under ' +
+        'the `auth` tag via /auth/registration/*, plus employee registration, ' +
+        'login, refresh-token rotation, and logout, ' +
         'and authenticated-membership read under the `memberships` tag. ' +
         'Organization context is provided through the `X-Organization-Id` ' +
         'header on every non-public route.',
@@ -37,14 +39,15 @@ async function bootstrap() {
         scheme: 'bearer',
         bearerFormat: 'JWT',
         description:
-          'Paste the `accessToken` returned from /api/auth/login. Registration does NOT return tokens - accounts start unverified and must complete email verification before login.',
+          'Paste the `accessToken` returned from /api/auth/login. Registration NEVER returns tokens - complete the staged registration (dual Email + WhatsApp OTP verification, then password) and sign in via /api/auth/login.',
       },
       'bearer',
     )
     .addTag(
       'auth',
-      'Authentication: register (unverified), email verification, ' +
-        'verification resend, login, refresh, logout.',
+      'Authentication: staged registration (/auth/registration/*), employee ' +
+        'registration, email verification, verification resend, login, ' +
+        'refresh, logout. Legacy POST /auth/register is retired (L11).',
     )
     .addTag(
       'memberships',

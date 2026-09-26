@@ -9,6 +9,7 @@ import { PrismaClient, type OrganizationRole } from '@prisma/client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
+import { createActiveUser } from './helpers/active-user.factory.js';
 
 if (!process.env.JWT_ACCESS_SECRET)
   process.env.JWT_ACCESS_SECRET = 'integration-cv1f-access-32ch';
@@ -32,14 +33,8 @@ async function seedOrgUser(name: string, role: OrganizationRole) {
   const orgId = randomUUID();
   await prisma.organization.create({ data: { id: orgId, name: `Org ${name}`, slug: testSlug(name) } });
   const email = testEmail(name);
-  const spy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
-  try {
-    await auth.register({ accountType: 'SERVICE_PROVIDER', fullName: name, email, password: PASSWORD } as never);
-  } finally {
-    spy.mockRestore();
-  }
-  await prisma.user.update({ where: { email }, data: { emailVerifiedAt: new Date(), isActive: true } });
-  const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+  // Legacy register is retired (L11): create the active fixture directly.
+  const user = await createActiveUser(prisma, { email, fullName: name, accountType: 'SERVICE_PROVIDER', password: PASSWORD });
   await prisma.organizationMembership.create({ data: { organizationId: orgId, userId: user.id, role } });
   const login = await auth.login({ email, password: PASSWORD });
   return { id: user.id, email, orgId, accessToken: login.accessToken };
@@ -48,14 +43,8 @@ async function seedOrgUser(name: string, role: OrganizationRole) {
 async function registerClientUser(name: string) {
   const auth = app.get(AuthService);
   const email = testEmail(name);
-  const spy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
-  try {
-    await auth.register({ accountType: 'INDIVIDUAL_BUSINESS', fullName: name, email, password: PASSWORD } as never);
-  } finally {
-    spy.mockRestore();
-  }
-  await prisma.user.update({ where: { email }, data: { emailVerifiedAt: new Date(), isActive: true } });
-  const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+  // Legacy register is retired (L11): create the active CLIENT fixture.
+  const user = await createActiveUser(prisma, { email, fullName: name, accountType: 'CLIENT', password: PASSWORD });
   const login = await auth.login({ email, password: PASSWORD });
   return { id: user.id, email, accessToken: login.accessToken };
 }

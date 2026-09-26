@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PrismaClient, type OrganizationRole } from '@prisma/client';
-import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
+import { createActiveUser } from './helpers/active-user.factory.js';
 import { ClientsService } from '../src/clients/clients.service.js';
 import { ClientInvitationService } from '../src/clients/client-invitation.service.js';
 import { ClientAgencyRelationshipService } from '../src/clients/client-agency-relationship.service.js';
@@ -39,16 +39,14 @@ async function seedUser(name: string, role: OrganizationRole): Promise<SeededUse
   const authService = app.get(AuthService);
   const email = testEmail(name);
   const password = 'StrongPassword123!';
-  await authService.register({ accountType: 'SERVICE_PROVIDER', fullName: name, email, password } as never);
-  await prisma.user.update({ where: { email }, data: { emailVerifiedAt: new Date(), isActive: true } });
-  const userId = (await prisma.user.findUniqueOrThrow({ where: { email } })).id;
-  await prisma.organizationMembership.create({ data: { organizationId: orgId, userId, role } });
+  // Legacy register is retired (L11): create the active fixture directly.
+  const seeded = await createActiveUser(prisma, { email, fullName: name, accountType: 'SERVICE_PROVIDER', password });
+  await prisma.organizationMembership.create({ data: { organizationId: orgId, userId: seeded.id, role } });
   const login = await authService.login({ email, password });
-  return { id: userId, email, organizationId: orgId, role, accessToken: login.accessToken };
+  return { id: seeded.id, email, organizationId: orgId, role, accessToken: login.accessToken };
 }
 
 let app: INestApplication;
-let http: ReturnType<typeof request>;
 
 beforeAll(async () => {
   await prisma.$connect();
@@ -86,9 +84,9 @@ describe('Client V1 — invitation onboarding (service-level, real DB)', () => {
     expect(client.ownerUserId).toBeNull();
 
     const inviteEmail = testEmail('invitee');
-    const authService = app.get(AuthService);
-    await authService.register({ accountType: 'INDIVIDUAL_BUSINESS', fullName: 'invitee', email: inviteEmail, password: 'StrongPassword123!' } as never);
-    await prisma.user.update({ where: { email: inviteEmail }, data: { emailVerifiedAt: new Date(), isActive: true } });
+    // Legacy register is retired (L11): create the active CLIENT fixture
+    // directly (invitation acceptance requires an existing verified user).
+    await createActiveUser(prisma, { email: inviteEmail, fullName: 'invitee', accountType: 'CLIENT' });
 
     const invSvc = app.get(ClientInvitationService) as {
       issueInvitation: (c: { id: string; onboardingStatus: string }, e: string, u: string) => Promise<{ email: string; expiresAt: Date }>;

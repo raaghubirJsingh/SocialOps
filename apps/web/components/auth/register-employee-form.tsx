@@ -21,7 +21,8 @@ import type { RegisterResult } from '@/types/auth';
  * discriminated by the 1:1 EmployeeProfile row, not AccountType
  * (AGENTS.md §17.1).
  *
- * The form follows the same conventions as register-form.tsx:
+ * The form follows the same hand-rolled ZHF resolver conventions used
+ * across the auth surfaces (no new deps):
  *   - React Hook Form + hand-rolled Zod resolver (Zod 4 compatibility)
  *   - confirmPassword is UI-only; never sent to the backend
  *   - On success, the same post-registration navigation as /register:

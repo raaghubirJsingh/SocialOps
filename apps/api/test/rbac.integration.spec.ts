@@ -10,7 +10,7 @@
  *
  * Executed via `npm run test:integration --workspace=apps/api`.
  */
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { Controller, Get, INestApplication, Module, UseGuards } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -18,6 +18,7 @@ import { PrismaClient, type OrganizationRole } from '@prisma/client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
+import { createActiveUser } from './helpers/active-user.factory.js';
 import { RequireMinimumRole } from '../src/rbac/decorators/require-roles.decorator.js';
 import { RoleGuard } from '../src/rbac/guards/role.guard.js';
 import { OrganizationContextService } from '../src/rbac/organization-context.service.js';
@@ -87,18 +88,18 @@ async function seedUser(
   const authService = app.get(AuthService);
   const email = testEmail(name);
   const password = 'StrongPassword123!';
-  await authService.register({
-    accountType: 'SERVICE_PROVIDER',
-    fullName: `RBAC ${name}`,
+  // Legacy register is retired (L11): create the active fixture directly.
+  // The membership is created BEFORE login so
+  // OrganizationProvisioningService.ensureForServiceProvider() finds an
+  // existing membership and skips the auto OWNER org; otherwise login
+  // provisions a new org and /me returns 2 rows instead of 1.
+  await createActiveUser(prisma, {
     email,
+    fullName: `RBAC ${name}`,
+    accountType: 'SERVICE_PROVIDER',
     password,
   });
 
-  // Registration creates an UNVERIFIED user and returns no tokens
-  // (approved contract). Create the (user, orgA) membership BEFORE login
-  // so OrganizationProvisioningService.ensureForServiceProvider() finds an
-  // existing membership and skips the auto OWNER org; otherwise login
-  // provisions `sp-<userId>` and /me returns 2 rows instead of 1.
   const preUser = await prisma.user.findUniqueOrThrow({ where: { email } });
   await prisma.organizationMembership.upsert({
     where: { userId_organizationId: { userId: preUser.id, organizationId: orgId } },
@@ -321,20 +322,15 @@ describe('RBAC foundation (real PostgreSQL + real JWT)', () => {
     const authService = app.get(AuthService);
     const email = testEmail('resolve-deactivated');
     const password = 'StrongPassword123!';
-    await authService.register({
-      accountType: 'SERVICE_PROVIDER',
-      fullName: 'Resolve Deactivated',
+    // Legacy register is retired (L11): seed an active fixture; the
+    // deactivated-org behaviour under test is orthogonal to registration.
+    await createActiveUser(prisma, {
       email,
+      fullName: 'Resolve Deactivated',
+      accountType: 'SERVICE_PROVIDER',
       password,
     });
 
-    const targetUserId = (await prisma.user.findUniqueOrThrow({ where: { email } })).id;
-    const rawToken = randomBytes(32).toString('base64url');
-    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
-    await prisma.emailVerificationToken.create({
-      data: { userId: targetUserId, tokenHash, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) },
-    });
-    await authService.verifyEmail(rawToken);
     const login = await authService.login({ email, password });
     const userId = login.user.id;
 

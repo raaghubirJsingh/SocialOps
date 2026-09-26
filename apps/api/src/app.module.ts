@@ -5,6 +5,7 @@ import { AppService } from './app.service.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { RedisModule } from './redis/redis.module.js';
 import { AuthModule } from './auth/auth.module.js';
+import { RegistrationModule } from './registration/registration.module.js';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard.js';
 import { RbacModule } from './rbac/rbac.module.js';
 import { OrganizationMembershipGuard } from './rbac/guards/organization-membership.guard.js';
@@ -20,6 +21,7 @@ import { HealthModule } from './health/health.module.js';
     PrismaModule,
     RedisModule,
     AuthModule,
+    RegistrationModule,
     RbacModule,
     MembershipsModule,
     ClientsModule,

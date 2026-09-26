@@ -35,7 +35,7 @@ describe('OrganizationProvisioningService', () => {
       email: 'a@b.com',
       fullName: 'Indie',
       displayName: 'Indie',
-      accountType: 'INDIVIDUAL_BUSINESS',
+      accountType: 'CLIENT',
     });
 
     await service.ensureForServiceProvider('user-1');

@@ -22,7 +22,6 @@ import { AuthService } from './auth.service.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 
 import { loginSchema } from './dto/login.dto.js';
-import { registerSchema } from './dto/register.dto.js';
 import { registerEmployeeSchema } from './dto/register-employee.dto.js';
 import { refreshTokenSchema } from './dto/refresh-token.dto.js';
 import { verifyEmailSchema } from './dto/verify-email.dto.js';
@@ -32,7 +31,6 @@ import { Public } from '../rbac/decorators/public.decorator.js';
 import { PublicAuth } from '../rbac/decorators/public-auth.decorator.js';
 
 import type { LoginDto } from './dto/login.dto.js';
-import type { RegisterDto } from './dto/register.dto.js';
 import type { RegisterEmployeeDto } from './dto/register-employee.dto.js';
 import type { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import type { VerifyEmailDto } from './dto/verify-email.dto.js';
@@ -55,7 +53,7 @@ import type { TokenPair } from './auth.service.js';
  *
  * Therefore:
  *
- * register:
+ * register-employee:
  *   JWT                  -> NOT required
  *   Organization context -> NOT required
  *
@@ -86,47 +84,6 @@ import type { TokenPair } from './auth.service.js';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
-
-  /**
-   * Register a new user.
-   *
-   * Public authentication endpoint:
-   * - No JWT required.
-   * - No organization context required.
-   *
-   * The response body is a discriminated union on `status`:
-   *   - `verification_required` (production): the new user is INACTIVE
-   *     with `emailVerifiedAt = null`; an `EmailVerificationToken` row
-   *     has been created. The client must direct the user to
-   *     `/verify-email` to complete verification before login.
-   *   - `registration_complete` (dev-only bypass): the new user is
-   *     ACTIVE with `emailVerifiedAt` populated. The client must direct
-   *     the user to `/login`. This branch is only ever produced when
-   *     the dev-only `AUTH_DEV_AUTO_VERIFY_REGISTER` env var is open
-   *     AND `NODE_ENV` is not `production`.
-   *
-   * In both branches: registration NEVER issues a JWT, access token,
-   * refresh token, or session. The session is always created by
-   * `POST /api/auth/login`. Returns 403 on duplicate email.
-   */
-  @Post('register')
-  @PublicAuth()
-  @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({
-    summary:
-      'Register a new user. The response discriminator indicates whether email verification is still required (production) or already complete (dev-only bypass).',
-    description:
-      'Creates a User with an Argon2id-hashed password and (in production) queues an email verification token (single-use, 24h expiry, only the SHA-256 hash is persisted). Registration NEVER returns a JWT, access token, refresh token, or session - login is the only way to obtain a session. Returns 403 on duplicate email. In the dev-only `AUTH_DEV_AUTO_VERIFY_REGISTER` bypass mode (NON-production only), the new user is created ACTIVE with `emailVerifiedAt` populated and the response is `status: "registration_complete"`.',
-  })
-  @ApiCreatedResponse({
-    description:
-      'User registered. Response body is one of: { status: "verification_required", email } (production) or { status: "registration_complete", email } (dev-only bypass). The client must read the `status` discriminator and navigate to /verify-email or /login respectively.',
-  })
-  register(
-    @Body(new ZodValidationPipe(registerSchema)) dto: RegisterDto,
-  ): Promise<RegisterResult> {
-    return this.authService.register(dto);
-  }
 
   /**
    * Register an EMPLOYEE account (Employee Module V1, Phase 2).

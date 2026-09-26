@@ -1,36 +1,39 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { RegisterForm } from '@/components/auth/register-form';
+import { RegistrationFlow } from '@/components/registration/registration-flow';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export const metadata: Metadata = {
   title: 'Register · SocialOps',
-  description: 'Create a SocialOps account.',
+  description: 'Start your SocialOps account.',
 };
 
 /**
  * Registration route (/register) — public.
  *
- * Email + password only (mobile/OTP/SMS are explicitly out of scope for
- * this phase). On success the account exists UNVERIFIED and the user is
- * sent to /verify-email. Registration NEVER creates an authenticated
- * session — the backend issues no tokens until the email is verified.
+ * Registration Phase v1.0: this route renders the approved CONVERSATIONAL
+ * registration experience (discovery first, then name/WhatsApp/email,
+ * dual Email + WhatsApp OTP verification, then password). The legacy
+ * form-first registration is fully retired (L11); there is no alternate
+ * registration path.
+ *
+ * Registration NEVER creates an authenticated session — the backend
+ * issues no tokens until /api/auth/login.
  */
 export default function RegisterPage() {
-    return (
+  return (
     <div className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 p-6 text-slate-100">
       {/* Ambient backdrop - the same layered-glow recipe as the landing hero and
-          the login page, so the single glass auth card below has something
-          colourful to blur (see the APP-SIDE BLUR BUDGET in globals.css).
-          Decorative only. */}
+          the login page, so the glass auth card below has something colourful
+          to blur (see the APP-SIDE BLUR BUDGET in globals.css). Decorative only. */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
         <div className="absolute inset-x-0 top-0 h-[28rem] bg-[radial-gradient(ellipse_at_top,rgb(37_99_235/0.16),transparent_60%)]" />
         <div className="absolute -top-24 left-1/2 h-72 w-[42rem] -translate-x-1/2 rounded-full bg-blue-600/15 blur-3xl" />
         <div className="absolute inset-0 bg-auth-gradient-animate" />
       </div>
 
-      <div className="relative w-full max-w-sm">
+      <div className="relative w-full max-w-lg">
         <div className="mb-8 text-center">
           <Link
             href="/"
@@ -42,15 +45,14 @@ export default function RegisterPage() {
         </div>
         <Card surface="glass" className="rounded-2xl">
           <CardHeader>
-            <CardTitle>Create your account</CardTitle>
+            <CardTitle>नमस्ते 👋 मैं SocialOps हूँ</CardTitle>
             <CardDescription>
-              Tell us how you plan to use SocialOps, then add your
-              details. We will email you a verification link before
-              you can sign in.
+              कुछ आसान सवालों से शुरू करते हैं — फिर आपका account बन जाएगा।
+              (A few quick questions first, then your account.)
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <RegisterForm />
+            <RegistrationFlow />
           </CardContent>
         </Card>
         <p className="mt-6 text-center text-sm text-slate-400">

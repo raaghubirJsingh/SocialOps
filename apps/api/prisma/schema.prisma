@@ -33,12 +33,19 @@ enum OrganizationRole {
   VIEWER
 }
 
-/// Account type selected on the public registration page
-/// (AGENTS.md §17.1). Exactly two choices; employee is intentionally
-/// NOT here — employee registration is a separate future flow.
+/// Account classification derived during Registration Phase v1.0
+/// discovery (human-approved; supersedes the previous
+/// SERVICE_PROVIDER | INDIVIDUAL_BUSINESS pairing - see L12 /
+/// AGENTS.md §17.1). Exactly two values:
+///   - CLIENT: the person primarily manages their own account(s).
+///     Individual vs Business is a ClientType, NOT an AccountType.
+///   - SERVICE_PROVIDER: manages accounts for others (including
+///     mixed own + others).
+/// Employee is intentionally NOT here: employee registration is a
+/// separate flow and employees carry `accountType = null` (AGENTS.md §17.1).
 enum AccountType {
   SERVICE_PROVIDER
-  INDIVIDUAL_BUSINESS
+  CLIENT
 }
 
 /// Client Module V1 (Phase 2, human-approved under AGENTS.md §13).
@@ -128,6 +135,10 @@ model User {
   // their current value (see 20260903220000 migration note).
   isActive        Boolean      @default(false)
   emailVerifiedAt DateTime?
+  // Registration Phase v1.0 (L9): permanent evidence that the User's
+  // phone/WhatsApp number was verified during registration. Set inside
+  // the completion transaction and survives PendingRegistration deletion.
+  phoneVerifiedAt DateTime?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
@@ -291,6 +302,102 @@ model EmailVerificationToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Registration Phase v1.0 (human-approved; GATE A).
+// ---------------------------------------------------------------------------
+
+/// Verification channel for a registration OTP challenge. Email AND
+/// WhatsApp are both mandatory (simultaneous); the architecture is
+/// provider-agnostic - no vendor is selected in this phase (L1/L2).
+enum RegistrationOtpChannel {
+  EMAIL
+  WHATSAPP
+}
+
+/// A pending (incomplete) registration. The final User record does NOT
+/// exist until every completion condition is satisfied (discovery
+/// accepted, name, both verifications, password). Lifetime is exactly
+/// 72 hours; `createdAt`/`expiresAt` never reset - a duplicate /start
+/// for the same email resumes this row (L6/OPEN-7/OPEN-9). On expiry or
+/// completion the row is hard-deleted and every piece of temporary
+/// sensitive registration data goes with it (OTP rows cascade; the
+/// resume token dies with the row).
+model PendingRegistration {
+  id    String @id @default(uuid()) @db.Uuid
+  /// Primary registration identity (OPEN-9). At most one active pending
+  /// per email (L6); never editable for the life of the row.
+  email String @unique
+  fullName String
+  /// Canonical normalized phone per the approved OPEN-2 shapes
+  /// (9876543210 / 919876543210 / +919876543210 -> '+919876543210').
+  phone String
+  /// Null only while discovery classification is unresolved (L13).
+  /// MUST be non-null before User creation; User.accountType is never null.
+  accountType AccountType?
+  /// JSON snapshot of the accepted discovery conversation (L8).
+  discoveryAnswers   Json?
+  emailVerifiedAt    DateTime?
+  whatsappVerifiedAt DateTime?
+  /// Pending-global OTP lock: set to now + 1h after 3 wrong attempts (L4).
+  /// A lock NEVER deletes the registration.
+  lockedUntil DateTime?
+  /// SHA-256 of the CURRENT raw resume token (the registration-stage
+  /// credential, OPEN-1). The value rotates IN PLACE at each reminder
+  /// event (+24h/+48h/+66h, D1-A); the previous raw token is
+  /// immediately invalid after rotation. Only the hash is ever stored.
+  resumeTokenHash String  @unique
+  /// createdAt + 72h (OPEN-7). Never modified by resume, pre-completion
+  /// edits, or the Day-3 reminder.
+  expiresAt DateTime
+  /// Per-day reminder event state for +24h/+48h/+66h (OPEN-6B/OPEN-7):
+  /// { day1?: { processedAt, email?, whatsapp? }, ... }. Presence of a
+  /// day's record means the event was already processed - the dedupe
+  /// guard ensuring duplicate processing never rotates again (D1-A).
+  reminderState Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  otps RegistrationOtp[]
+
+  @@index([expiresAt])
+}
+
+/// A 6-digit numeric OTP challenge for one channel of one pending
+/// registration (L4). Only the Argon2id hash of the code is stored; the
+/// raw OTP never touches the database, production logs, or API responses.
+/// Exactly one active row per (pendingRegistrationId, channel): a resend
+/// re-issues this row in place so `attempts` survives (L5).
+model RegistrationOtp {
+  id                    String   @id @default(uuid()) @db.Uuid
+  pendingRegistrationId String   @db.Uuid
+  channel               RegistrationOtpChannel
+  /// Argon2id hash of the 6-digit code (stored as a string so a leading
+  /// zero is preserved exactly; L4).
+  codeHash String
+  /// Issue time + 5 minutes (L4).
+  expiresAt DateTime
+  /// Wrong attempts. Survives resends (L5: resend does NOT reset the
+  /// count); reset to 0 only when a fresh challenge is issued after
+  /// lock expiry (OPEN-5).
+  attempts Int @default(0)
+  /// Successful dispatches only (OPEN-5): a provider-unavailable send
+  /// does NOT increment this counter. Maximum 3 (L4). The initial /start
+  /// dispatch never counts.
+  resendCount Int @default(0)
+  usedAt   DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pendingRegistration PendingRegistration @relation(fields: [pendingRegistrationId], references: [id], onDelete: Cascade)
+
+  /// Concurrency guard (remediation): exactly one row per
+  /// (pendingRegistrationId, channel) at the DATABASE level, so concurrent
+  /// challenge generation deterministically upserts the same row instead of
+  /// creating duplicates. Prisma exposes this as the
+  /// `pendingRegistrationId_channel` compound unique for atomic upserts.
+  @@unique([pendingRegistrationId, channel])
 }
 
 // ---------------------------------------------------------------------------

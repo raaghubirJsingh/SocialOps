@@ -9,6 +9,7 @@ import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
+import { createActiveUser } from './helpers/active-user.factory.js';
 
 if (!process.env.JWT_ACCESS_SECRET)
   process.env.JWT_ACCESS_SECRET = 'integration-cv1e-access-32ch';
@@ -26,17 +27,11 @@ const PASSWORD = 'StrongPassword123!';
 let app: INestApplication;
 let http: ReturnType<typeof request>;
 
-async function registerLogin(accountType: 'INDIVIDUAL_BUSINESS' | 'SERVICE_PROVIDER', name: string) {
+async function registerLogin(accountType: 'CLIENT' | 'SERVICE_PROVIDER' | null, name: string) {
   const auth = app.get(AuthService);
   const email = testEmail(name);
-  const spy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
-  try {
-    await auth.register({ accountType, fullName: name, email, password: PASSWORD } as never);
-  } finally {
-    spy.mockRestore();
-  }
-  await prisma.user.update({ where: { email }, data: { emailVerifiedAt: new Date(), isActive: true } });
-  const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+  // Legacy register is retired (L11): create the active fixture directly.
+  const user = await createActiveUser(prisma, { email, fullName: name, accountType, password: PASSWORD });
   const login = await auth.login({ email, password: PASSWORD });
   return { id: user.id, email, accessToken: login.accessToken };
 }
@@ -98,7 +93,7 @@ afterAll(async () => {
 });
 describe('L1 self-registration', () => {
   it('start PENDING then activate ACTIVE with scoped events', async () => {
-    const user = await registerLogin('INDIVIDUAL_BUSINESS', 'sr-ok');
+    const user = await registerLogin('CLIENT', 'sr-ok');
     const { result, logs } = await withCapturedLogs(() =>
       http.post('/api/onboarding/start').set('Authorization', `Bearer ${user.accessToken}`).send(payload('ok')),
     );
@@ -122,7 +117,7 @@ describe('L1 self-registration', () => {
   });
 
   it('mobile token single-use', async () => {
-    const user = await registerLogin('INDIVIDUAL_BUSINESS', 'sr-once');
+    const user = await registerLogin('CLIENT', 'sr-once');
     const { result, logs } = await withCapturedLogs(() =>
       http.post('/api/onboarding/start').set('Authorization', `Bearer ${user.accessToken}`).send(payload('once')),
     );
@@ -138,17 +133,26 @@ describe('L1 self-registration', () => {
     ).toBe(403);
   });
 
-  it('SERVICE_PROVIDER rejected', async () => {
+  it('SERVICE_PROVIDER may self-register their own Client (decision 21)', async () => {
     const sp = await registerLogin('SERVICE_PROVIDER', 'sr-sp');
     const res = await http
       .post('/api/onboarding/start')
       .set('Authorization', `Bearer ${sp.accessToken}`)
       .send(payload('sp'));
+    expect(res.status).toBe(201);
+  });
+
+  it('accountType-null (employee-like) user rejected from self-registration', async () => {
+    const nullUser = await registerLogin(null, 'sr-null');
+    const res = await http
+      .post('/api/onboarding/start')
+      .set('Authorization', `Bearer ${nullUser.accessToken}`)
+      .send(payload('null'));
     expect(res.status).toBe(403);
   });
 
   it('already-bound rejected CLIENT_ALREADY_BOUND', async () => {
-    const user = await registerLogin('INDIVIDUAL_BUSINESS', 'sr-bound');
+    const user = await registerLogin('CLIENT', 'sr-bound');
     const { result, logs } = await withCapturedLogs(() =>
       http.post('/api/onboarding/start').set('Authorization', `Bearer ${user.accessToken}`).send(payload('b1')),
     );
@@ -167,7 +171,7 @@ describe('L1 self-registration', () => {
   });
 
   it('hash-only mobile storage, no raw leak', async () => {
-    const user = await registerLogin('INDIVIDUAL_BUSINESS', 'sr-hash');
+    const user = await registerLogin('CLIENT', 'sr-hash');
     const { result, logs } = await withCapturedLogs(() =>
       http.post('/api/onboarding/start').set('Authorization', `Bearer ${user.accessToken}`).send(payload('hash')),
     );

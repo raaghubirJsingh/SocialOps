@@ -9,6 +9,7 @@ import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
+import { createActiveUser } from './helpers/active-user.factory.js';
 
 if (!process.env.JWT_ACCESS_SECRET)
   process.env.JWT_ACCESS_SECRET = 'integration-cv1d-access-32ch';
@@ -26,17 +27,11 @@ const PASSWORD = 'StrongPassword123!';
 let app: INestApplication;
 let http: ReturnType<typeof request>;
 
-async function registerLogin(accountType: 'INDIVIDUAL_BUSINESS' | 'SERVICE_PROVIDER', name: string) {
+async function registerLogin(accountType: 'CLIENT' | 'SERVICE_PROVIDER', name: string) {
   const auth = app.get(AuthService);
   const email = testEmail(name);
-  const spy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
-  try {
-    await auth.register({ accountType, fullName: name, email, password: PASSWORD } as never);
-  } finally {
-    spy.mockRestore();
-  }
-  await prisma.user.update({ where: { email }, data: { emailVerifiedAt: new Date(), isActive: true } });
-  const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+  // Legacy register is retired (L11): create the active fixture directly.
+  const user = await createActiveUser(prisma, { email, fullName: name, accountType, password: PASSWORD });
   const login = await auth.login({ email, password: PASSWORD });
   return { id: user.id, email, accessToken: login.accessToken };
 }
@@ -113,7 +108,7 @@ afterAll(async () => {
 });
 describe('L1 field-change pipeline', () => {
   it('cooldown second WEBSITE change returns 409 with retryAt', async () => {
-    const user = await registerLogin('INDIVIDUAL_BUSINESS', 'fc-cool');
+    const user = await registerLogin('CLIENT', 'fc-cool');
     const { clientId } = await onboardActiveClient(user.accessToken, 'cool');
     const first = await http
       .patch('/api/client/me')
@@ -131,7 +126,7 @@ describe('L1 field-change pipeline', () => {
     expect(second.body.retryAt).toBeTruthy();
   });
   it('missing password gives 409 VERIFICATION_REQUIRED; wrong gives 403', async () => {
-    const user = await registerLogin('INDIVIDUAL_BUSINESS', 'fc-pw');
+    const user = await registerLogin('CLIENT', 'fc-pw');
     const { clientId } = await onboardActiveClient(user.accessToken, 'pw');
     const missing = await http
       .patch('/api/client/me')
@@ -148,7 +143,7 @@ describe('L1 field-change pipeline', () => {
     expect(wrong.status).toBe(403);
   });
   it('email staged and verified via stored hash path; single-use enforced', async () => {
-    const user = await registerLogin('INDIVIDUAL_BUSINESS', 'fc-email');
+    const user = await registerLogin('CLIENT', 'fc-email');
     const { clientId } = await onboardActiveClient(user.accessToken, 'email');
     const nextEmail = testEmail('email-next');
     const { result, logs } = await withCapturedLogs(() =>
@@ -192,8 +187,8 @@ describe('L1 field-change pipeline', () => {
     expect(reuse.status).toBe(409);
   });
   it('mobile staged, verified, applied; cross-client token isolation', async () => {
-    const userA = await registerLogin('INDIVIDUAL_BUSINESS', 'fc-mob-a');
-    const userB = await registerLogin('INDIVIDUAL_BUSINESS', 'fc-mob-b');
+    const userA = await registerLogin('CLIENT', 'fc-mob-a');
+    const userB = await registerLogin('CLIENT', 'fc-mob-b');
     const a = await onboardActiveClient(userA.accessToken, 'moba');
     const b = await onboardActiveClient(userB.accessToken, 'mobb');
     const { result, logs } = await withCapturedLogs(() =>
@@ -222,7 +217,7 @@ describe('L1 field-change pipeline', () => {
     expect(updated.directPhone).toBe('+15551119999');
   });
   it('primary contact fields have no cooldown', async () => {
-    const user = await registerLogin('INDIVIDUAL_BUSINESS', 'fc-pc');
+    const user = await registerLogin('CLIENT', 'fc-pc');
     const { clientId } = await onboardActiveClient(user.accessToken, 'pc');
     const first = await http
       .patch('/api/client/me')
@@ -251,7 +246,7 @@ describe('L1 field-change pipeline', () => {
   });
 
   it('audit events are client-scoped', async () => {
-    const user = await registerLogin('INDIVIDUAL_BUSINESS', 'fc-audit');
+    const user = await registerLogin('CLIENT', 'fc-audit');
     const { clientId } = await onboardActiveClient(user.accessToken, 'audit');
     await http
       .patch('/api/client/me')

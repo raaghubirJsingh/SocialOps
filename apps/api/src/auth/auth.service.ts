@@ -14,7 +14,6 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { OrganizationProvisioningService } from '../memberships/organization-provisioning.service.js';
 import type { JwtAccessPayload, JwtRefreshPayload } from './types/jwt-payload.type.js';
 import type { LoginDto } from './dto/login.dto.js';
-import type { RegisterDto } from './dto/register.dto.js';
 import type { RegisterEmployeeDto } from './dto/register-employee.dto.js';
 
 import type { RegisterResult } from './dto/register-response.dto.js';
@@ -102,80 +101,6 @@ export class AuthService {
     return tokens;
   }
 
-  async register(dto: RegisterDto): Promise<RegisterResult> {
-    const passwordHash = await this.hashPassword(dto.password);
-
-    // Dev-only temporary bypass. See `dev-auto-verify.ts` for the
-    // strict string-match + NODE_ENV hard-stop contract. The default
-    // is OFF (production-safe). When ON, the new user is created
-    // ACTIVE + already verified, no EmailVerificationToken is issued,
-    // and the response is `status: 'registration_complete'`. The
-    // server STILL issues no JWT, no access token, no refresh token,
-    // and no session: registration creates the account; login creates
-    // the session. This preserves the existing authentication
-    // boundary (AGENTS.md §17.2).
-    const skipVerification = isAuthDevAutoVerifyRegister();
-
-    let user: { id: string; email: string };
-
-    try {
-      user = await this.prisma.user.create({
-        data: {
-          email: dto.email,
-          passwordHash,
-          // displayName is back-compat (AGENTS.md §17.2). It is
-          // populated from fullName at registration so existing code
-          // that reads `displayName` continues to work unchanged.
-          displayName: dto.fullName,
-          fullName: dto.fullName,
-          // Phone is optional at this phase. SMS/OTP/mobile
-          // verification are explicitly out of scope (AGENTS.md §13).
-          phone: dto.phone ?? null,
-          // accountType is the public registration selection
-          // (AGENTS.md §17.1). It is product metadata, NOT a role
-          // and NOT authorization state. Roles live on
-          // OrganizationMembership (AGENTS.md §7).
-          accountType: dto.accountType,
-          // New users are normally INACTIVE until they verify their
-          // email (AGENTS.md §17.2). The dev-only bypass flips
-          // `isActive` to true and populates `emailVerifiedAt` so the
-          // user can log in immediately. The verification transaction
-          // additionally sets `isActive = true` together with
-          // `emailVerifiedAt` for the production path.
-          isActive: skipVerification,
-          emailVerifiedAt: skipVerification ? new Date() : null,
-        },
-        select: { id: true, email: true },
-      });
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        throw new ForbiddenException('Email already in use');
-      }
-      throw error;
-    }
-
-    if (!skipVerification) {
-      // Production path: queue a single-use 24h EmailVerificationToken.
-      await this.issueVerificationToken(user.id, user.email);
-    } else {
-      // Local-only auto-verify skips the verification endpoint, so
-      // tenant provisioning must run here. Production registration
-      // still creates no Organization (AGENTS.md §17.2).
-      await this.organizationProvisioning.ensureForServiceProvider(user.id);
-    }
-
-    // Registration NEVER issues a JWT, access token, refresh token, or
-    // any authenticated session (approved plan; AGENTS.md §17.2). The
-    // response discriminator tells the frontend which page to navigate
-    // to: /verify-email in production, /login in dev-bypass.
-    return skipVerification
-      ? { status: 'registration_complete', email: user.email }
-      : { status: 'verification_required', email: user.email };
-  }
-
   /**
    * Register an employee account (Employee Module V1, Phase 2).
    *
@@ -183,7 +108,7 @@ export class AuthService {
    * ONE interactive transaction — there is never a User with employee
    * intent lacking its profile, and never an orphan profile. The
    * verification token is issued AFTER the transaction commits, exactly
-   * like the standard register() flow (it is an independent write using
+   * like the retired registration flow (it is an independent write using
    * this.prisma, not tx).
    *
    * accountType stays NULL: the AccountType enum intentionally has no
@@ -193,7 +118,8 @@ export class AuthService {
    * Tenant provisioning (ensureForServiceProvider) is deliberately NOT
    * invoked: it is a no-op for non-SERVICE_PROVIDER users.
    *
-   * The response discriminator matches register(): verification_required
+   * The response discriminator mirrors the retired public registration
+   * contract: verification_required
    * (production) or registration_complete (dev-only bypass).
    */
   async registerEmployee(dto: RegisterEmployeeDto): Promise<RegisterResult> {
@@ -208,7 +134,7 @@ export class AuthService {
           data: {
             email: dto.email,
             passwordHash,
-            // displayName back-compat, mirrors register().
+            // displayName back-compat for the employee registration path.
             displayName: dto.fullName,
             fullName: dto.fullName,
             phone: dto.phone ?? null,

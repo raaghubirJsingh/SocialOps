@@ -74,17 +74,26 @@ export class ClientOnboardingService {
   /**
    * Self-registration onboarding, step 1: create the Client PENDING and
    * UNBOUND and issue the mobile verification token. Requires a verified
-   * Individual/Business account that does not already own a Client. No
-   * Agency invitation and no Organization provisioning is involved.
+   * CLIENT or SERVICE_PROVIDER account that does not already own a
+   * Client (Registration Phase v1.0 decision 21: a SERVICE_PROVIDER may
+   * own their OWN Client record without a second SocialOps identity; a
+   * new AccountType value was NOT added). No Agency invitation and no
+   * Organization provisioning is involved.
    */
   async startSelfRegistration(user: JwtAccessPayload, dto: StartOnboardingDto) {
     const dbUser = await this.prisma.user.findUnique({
       where: { id: user.sub },
     });
     if (!dbUser) throw new UnauthorizedException('Authentication required');
-    if (dbUser.accountType !== 'INDIVIDUAL_BUSINESS') {
+    // Eligible: CLIENT (self-managed accounts) and SERVICE_PROVIDER
+    // (own + others; may add themselves as a Client). Employees
+    // (accountType = null) remain blocked.
+    if (
+      dbUser.accountType !== 'CLIENT' &&
+      dbUser.accountType !== 'SERVICE_PROVIDER'
+    ) {
       throw new ForbiddenException(
-        'Only Individual/Business accounts can onboard a Client',
+        'Only Client or Service Provider accounts can onboard a Client',
       );
     }
     if (!dbUser.emailVerifiedAt) {
@@ -160,9 +169,14 @@ export class ClientOnboardingService {
     let bind = false;
     if (client.ownerUserId === null) {
       // Self-registration path: the controlled binding happens HERE.
-      if (dbUser.accountType !== 'INDIVIDUAL_BUSINESS') {
+      // CLIENT or SERVICE_PROVIDER may own their own Client (decision
+      // 21); employees (accountType = null) remain blocked.
+      if (
+        dbUser.accountType !== 'CLIENT' &&
+        dbUser.accountType !== 'SERVICE_PROVIDER'
+      ) {
         throw new ForbiddenException(
-          'Only Individual/Business accounts can become the Client owner',
+          'Only Client or Service Provider accounts can become the Client owner',
         );
       }
       bind = true;

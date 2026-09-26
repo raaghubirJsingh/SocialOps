@@ -1,10 +1,9 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { jest } from '@jest/globals';
-import { Logger } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { AuthService } from '../src/auth/auth.service.js';
 import { OrganizationProvisioningService } from '../src/memberships/organization-provisioning.service.js';
+import { createActiveUser } from './helpers/active-user.factory.js';
 
 /**
  * Service Provider tenant provisioning integration tests.
@@ -38,25 +37,17 @@ const testEmail = (name: string) => `${name}.${runTag}@example.test`;
 async function registerUser(opts: {
   email: string;
   fullName: string;
-  accountType: 'SERVICE_PROVIDER' | 'INDIVIDUAL_BUSINESS';
+  accountType: 'SERVICE_PROVIDER' | 'CLIENT';
 }) {
-  // Suppress the verification URL log noise during registration
-  const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
-  try {
-    await authService.register({
-      email: opts.email,
-      password: 'Password123!',
-      fullName: opts.fullName,
-      accountType: opts.accountType,
-    });
-  } finally {
-    logSpy.mockRestore();
-  }
-  const user = await prisma.user.findUnique({
-    where: { email: opts.email },
-    select: { id: true },
+  // The legacy public register flow is retired (L11); provisioning is
+  // exercised at LOGIN (the recovery path), so a fixture user is enough.
+  const user = await createActiveUser(prisma, {
+    email: opts.email,
+    fullName: opts.fullName,
+    accountType: opts.accountType,
+    password: 'Password123!',
   });
-  return user!;
+  return { id: user.id };
 }
 
 async function cleanup() {
@@ -115,9 +106,9 @@ describe('Service Provider tenant provisioning (integration)', () => {
     expect(memberships).toHaveLength(1);
   });
 
-  it('does not provision a tenant for Individual / Business users', async () => {
-    const email = testEmail('individual-no-provision');
-    const user = await registerUser({ email, fullName: 'Just a Person', accountType: 'INDIVIDUAL_BUSINESS' });
+  it('does not provision a tenant for CLIENT users', async () => {
+    const email = testEmail('client-no-provision');
+    const user = await registerUser({ email, fullName: 'Just a Person', accountType: 'CLIENT' });
 
     await authService.login({ email, password: 'Password123!' });
 

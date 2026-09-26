@@ -4,7 +4,7 @@
  * Covers the persona-aware navigation arrays (sidebar) and the client
  * session binding helper introduced with the persona-aware dashboard:
  *   - agency (SERVICE_PROVIDER): keeps the /clients list;
- *   - client (INDIVIDUAL_BUSINESS): own /client/* links, no agency list;
+ *   - client (CLIENT - "Business / Personal Account"): own /client/* links, no agency list;
  *   - employee (isEmployee): dashboard only (AGENTS.md §17.4);
  *   - bound clientId persistence is a UX hint only, never auth state.
  */
@@ -140,7 +140,7 @@ describe('dashboard persona contracts', () => {
     const mod = await import('@/app/(app)/dashboard/page');
     const src = mod.default.toString();
     expect(src).toMatch(/isEmployee/);
-    expect(src).toMatch(/INDIVIDUAL_BUSINESS/);
+    expect(src).toMatch(/CLIENT/);
     expect(src).toMatch(/ClientPersonaSurface/);
     expect(src).toMatch(/ClientActivationPanel/);
     expect(src).toMatch(/ApiStatusCard/);

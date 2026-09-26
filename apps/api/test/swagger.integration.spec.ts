@@ -39,8 +39,10 @@ beforeAll(async () => {
     .setTitle('SocialOps API')
     .setDescription(
       'SocialOps - social media operations management platform. ' +
-        'Stage B7 (Authentication + RBAC Foundation) exposes user registration, ' +
-        'login, refresh-token rotation, and logout under the `auth` tag, ' +
+        'Registration Phase v1.0 exposes staged conversational registration ' +
+        '(pending registration + dual Email/WhatsApp OTP verification) under ' +
+        'the `auth` tag via /auth/registration/*, plus employee registration, ' +
+        'login, refresh-token rotation, and logout, ' +
         'and authenticated-membership read under the `memberships` tag. ' +
         'Organization context is provided through the `X-Organization-Id` ' +
         'header on every non-public route.',
@@ -52,14 +54,15 @@ beforeAll(async () => {
         scheme: 'bearer',
         bearerFormat: 'JWT',
         description:
-          'Paste the `accessToken` returned from /api/auth/login or /api/auth/register.',
+          'Paste the `accessToken` returned from /api/auth/login. Registration NEVER returns tokens - complete the staged registration (dual Email + WhatsApp OTP verification, then password) and sign in via /api/auth/login.',
       },
       'bearer',
     )
     .addTag(
       'auth',
-      'Authentication: register (unverified), email verification, ' +
-        'verification resend, login, refresh, logout.',
+      'Authentication: staged registration (/auth/registration/*), employee ' +
+        'registration, email verification, verification resend, login, ' +
+        'refresh, logout. Legacy POST /auth/register is retired (L11).',
     )
     .addTag(
       'memberships',
@@ -104,8 +107,15 @@ describe('Swagger / OpenAPI (real Nest bootstrap)', () => {
     expect(res.status).toBe(200);
     const paths: string[] = Object.keys(res.body.paths ?? {});
     expect(paths).toContain('/api/health');
-    expect(paths).toContain('/api/auth/register');
+    expect(paths).toContain('/api/auth/register-employee');
+    expect(paths).toContain('/api/auth/registration/start');
+    expect(paths).toContain('/api/auth/registration/otp/verify');
+    expect(paths).toContain('/api/auth/registration/otp/resend');
+    expect(paths).toContain('/api/auth/registration/password');
+    expect(paths).toContain('/api/auth/registration/resume');
     expect(paths).toContain('/api/auth/login');
+    // L11: the legacy public registration route is fully retired.
+    expect(paths).not.toContain('/api/auth/register');
     expect(paths).toContain('/api/auth/refresh');
     expect(paths).toContain('/api/auth/logout');
     expect(paths).toContain('/api/memberships/me');

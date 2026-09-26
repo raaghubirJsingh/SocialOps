@@ -7,7 +7,6 @@ import * as argon2 from 'argon2';
 import { AuthService } from '../src/auth/auth.service.js';
 import { OrganizationProvisioningService } from '../src/memberships/organization-provisioning.service.js';
 import type { LoginDto } from '../src/auth/dto/login.dto.js';
-import type { RegisterDto } from '../src/auth/dto/register.dto.js';
 
 if (!process.env.JWT_ACCESS_SECRET) process.env.JWT_ACCESS_SECRET = 'integration-access-secret-32-chars-min';
 if (!process.env.JWT_REFRESH_SECRET) process.env.JWT_REFRESH_SECRET = 'integration-refresh-secret-32-chars-min';
@@ -47,14 +46,13 @@ async function registerAndCaptureToken(
   // + log URL for the production-path tests that consume it.
   delete process.env.AUTH_DEV_AUTO_VERIFY_REGISTER;
   try {
-    // Tests in this file exercise the verified/unverified lifecycle
-    // of the public registration contract. The new contract
-    // (AGENTS.md §17.2) requires accountType and fullName; we use
-    // SERVICE_PROVIDER here because the lifecycle behaviour is
-    // identical for both account types and the accountType field
-    // does not affect auth state.
-    await authService.register({
-      accountType: 'SERVICE_PROVIDER',
+    // These tests exercise the verified/unverified lifecycle shared by
+    // every registration path. The retired public register flow (L11) is
+    // gone; employee registration issues the same single-use verification
+    // token (same 24h TTL, hash-only storage), so it drives the lifecycle
+    // coverage here. accountType stays NULL for employee registrations
+    // (AGENTS.md §17.1).
+    await authService.registerEmployee({
       fullName: 'Integration Test User',
       email,
       password,
@@ -130,9 +128,8 @@ afterAll(async () => {
 });
 
 describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
-  it('registers a new user and stores an Argon2id password hash', async () => {
-    const dto: RegisterDto = {
-      accountType: 'SERVICE_PROVIDER',
+  it('employee registration creates an unverified INACTIVE user, Argon2id hash, NO tokens, no tenant side effects', async () => {
+    const dto = {
       fullName: 'Register Test',
       email: testEmail('register'),
       password: 'StrongPassword123!',
@@ -154,15 +151,15 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
     // discriminator plus the registered email. The account starts
     // UNVERIFIED and INACTIVE (AGENTS.md §17.2). The frontend uses the
     // explicit status tag to navigate to /verify-email.
-    const result = await authService.register(dto);
+    const result = await authService.registerEmployee(dto);
     expect(result).toEqual({
       status: 'verification_required',
       email: dto.email,
     });
 
-    // The created user must be INACTIVE and have accountType/fullName
-    // persisted; displayName is the back-compat field populated from
-    // fullName.
+    // The created user must be INACTIVE with accountType NULL (employee
+    // path, AGENTS §17.1); fullName is persisted and displayName is the
+    // back-compat field populated from fullName.
     const created = await prisma.user.findUnique({
       where: { email: dto.email },
       select: {
@@ -177,7 +174,7 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
     expect(created).not.toBeNull();
     expect(created!.isActive).toBe(false);
     expect(created!.emailVerifiedAt).toBeNull();
-    expect(created!.accountType).toBe('SERVICE_PROVIDER');
+    expect(created!.accountType).toBeNull();
     expect(created!.fullName).toBe('Register Test');
     expect(created!.displayName).toBe('Register Test');
     expect(created!.phone).toBeNull();
@@ -200,10 +197,9 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
     expect(refreshTokens).toBe(0);
   });
 
-  it('persists INDIVIDUAL_BUSINESS account type with phone and displayName=fullName', async () => {
+  it('persists phone and displayName=fullName (employee registration keeps accountType null)', async () => {
     const email = testEmail('indi-phone');
-    await authService.register({
-      accountType: 'INDIVIDUAL_BUSINESS',
+    await authService.registerEmployee({
       fullName: 'Indy Phone',
       email,
       phone: '+1-555-0123',
@@ -220,7 +216,7 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
       },
     });
     expect(created).not.toBeNull();
-    expect(created!.accountType).toBe('INDIVIDUAL_BUSINESS');
+    expect(created!.accountType).toBeNull();
     expect(created!.fullName).toBe('Indy Phone');
     expect(created!.displayName).toBe('Indy Phone');
     expect(created!.phone).toBe('+1-555-0123');
@@ -248,15 +244,16 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
     expect(after!.emailVerifiedAt).not.toBeNull();
   });
 
-  it('rejects duplicate registration with ForbiddenException', async () => {
-    const dto: RegisterDto = {
-      accountType: 'SERVICE_PROVIDER',
+  it('rejects duplicate employee registration with ForbiddenException', async () => {
+    const dto = {
       fullName: 'Duplicate Test',
       email: testEmail('dup'),
       password: 'StrongPassword123!',
     };
-    await authService.register(dto);
-    await expect(authService.register(dto)).rejects.toBeInstanceOf(ForbiddenException);
+    await authService.registerEmployee(dto);
+    await expect(
+      authService.registerEmployee(dto),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('rejects login before verification and allows it after', async () => {
@@ -348,8 +345,7 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
   it('hashes passwords using Argon2id (not bcrypt, not plain text)', async () => {
     const email = testEmail('hashcheck');
     const password = 'HashCheck678!';
-    await authService.register({
-      accountType: 'SERVICE_PROVIDER',
+    await authService.registerEmployee({
       fullName: 'Hash Check',
       email,
       password,
@@ -452,20 +448,19 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
   // EmailVerificationToken row is created, and login succeeds.
   // -------------------------------------------------------------------------
 
-  it('bypass ON: register returns registration_complete and creates ACTIVE+verified user without an EmailVerificationToken', async () => {
+  it('bypass ON: registerEmployee returns registration_complete and creates ACTIVE+verified user without an EmailVerificationToken', async () => {
     const prevBypass = process.env.AUTH_DEV_AUTO_VERIFY_REGISTER;
     const prevNodeEnv = process.env.NODE_ENV;
     process.env.AUTH_DEV_AUTO_VERIFY_REGISTER = 'true';
     // NODE_ENV stays at whatever Jest set it to (typically 'test', which
     // is non-production, so the gate passes the NODE_ENV check).
     try {
-      const dto: RegisterDto = {
-        accountType: 'SERVICE_PROVIDER',
+      const dto = {
         fullName: 'Dev Bypass IT',
         email: testEmail('dev-bypass'),
         password: 'Bypass123!',
       };
-      const result = await authService.register(dto);
+      const result = await authService.registerEmployee(dto);
       // Response discriminator: registration_complete, never
       // verification_required. Email is the registered email.
       expect(result).toEqual({
@@ -504,13 +499,12 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
     const prevBypass = process.env.AUTH_DEV_AUTO_VERIFY_REGISTER;
     process.env.AUTH_DEV_AUTO_VERIFY_REGISTER = 'true';
     try {
-      const dto: RegisterDto = {
-        accountType: 'SERVICE_PROVIDER',
+      const dto = {
         fullName: 'Dev Bypass Login',
         email: testEmail('dev-bypass-login'),
         password: 'BypassLogin123!',
       };
-      const registered = await authService.register(dto);
+      const registered = await authService.registerEmployee(dto);
       expect(registered).toEqual({
         status: 'registration_complete',
         email: dto.email,
@@ -531,7 +525,7 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
     }
   });
 
-  it('bypass OFF (default): register returns verification_required, creates INACTIVE user, and issues a verification token (regression)', async () => {
+  it('bypass OFF (default): registerEmployee returns verification_required, creates INACTIVE user, and issues a verification token (regression)', async () => {
     // The gate is OFF by default. The production-path behavior is
     // preserved: verification_required, isActive=false, a token row
     // is created. This is a regression guard so the bypass never leaks
@@ -539,13 +533,12 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
     const prevBypass = process.env.AUTH_DEV_AUTO_VERIFY_REGISTER;
     delete process.env.AUTH_DEV_AUTO_VERIFY_REGISTER;
     try {
-      const dto: RegisterDto = {
-        accountType: 'SERVICE_PROVIDER',
+      const dto = {
         fullName: 'Default OFF',
         email: testEmail('bypass-off'),
         password: 'Off123!',
       };
-      const result = await authService.register(dto);
+      const result = await authService.registerEmployee(dto);
       expect(result).toEqual({
         status: 'verification_required',
         email: dto.email,

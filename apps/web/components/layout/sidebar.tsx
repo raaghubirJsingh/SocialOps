@@ -13,7 +13,8 @@ import { useSession } from '@/hooks/use-session';
  * tests). The sidebar is NOT a security boundary — AGENTS.md §7 keeps
  * server-side authorization authoritative; this is a UX convenience only:
  *   - Agency (SERVICE_PROVIDER): the agency-side /clients surface.
- *   - Client (INDIVIDUAL_BUSINESS, self-registered): their own /client
+ *   - Client (CLIENT - user-facing label "Business / Personal Account",
+ *     Decision 014/OPEN-11; self-registered): their own /client
  *     self-service area. The agency /clients list is hidden — a
  *     self-registered client has no Organization membership and would
  *     only hit the organization-selection dead end.
@@ -81,7 +82,7 @@ export function Sidebar() {
   const { session } = useSession();
   const isEmployee = session?.user?.isEmployee ?? false;
   const isClientAccount =
-    !isEmployee && session?.user?.accountType === 'INDIVIDUAL_BUSINESS';
+    !isEmployee && session?.user?.accountType === 'CLIENT';
 
   const items = isEmployee
     ? EMPLOYEE_NAV_ITEMS

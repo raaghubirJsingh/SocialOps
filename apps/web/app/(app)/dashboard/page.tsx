@@ -24,17 +24,21 @@ import { loadBoundClientId } from '@/lib/client-session';
 import type { AccountType } from '@/types/auth';
 
 /**
- * Maps the public-registration account-type enum to the user-facing
- * label shown in the dashboard and (in the future) the user menu.
+ * Maps the account-type enum to the user-facing label shown in the
+ * dashboard and (in the future) the user menu.
  *
- * AGENTS.md §17.1: the two public account-type values are
+ * AGENTS.md §17.1 (as amended by Decision 014): the two public
+ * account-type values are
  *   - SERVICE_PROVIDER
- *   - INDIVIDUAL_BUSINESS
- * The label is presentational; the underlying value is unchanged.
+ *   - CLIENT
+ * The CLIENT label is the user-facing wording "Business / Personal
+ * Account" (OPEN-11) - the technical enum name is never the primary
+ * user-facing label. The label is presentational; the underlying value
+ * is unchanged.
  */
 function labelForAccountType(t: AccountType | null | undefined): string {
   if (t === 'SERVICE_PROVIDER') return 'Service Provider';
-  if (t === 'INDIVIDUAL_BUSINESS') return 'Individual / Business';
+  if (t === 'CLIENT') return 'Business / Personal Account';
   return '';
 }
 
@@ -76,11 +80,12 @@ export default function DashboardPage() {
   // EmployeeContextGuard remains authoritative for the API call.
   const isEmployee = session?.user?.isEmployee === true;
 
-  // Client persona: self-registered Individual/Business account.
-  // `accountType` is product metadata, NOT authorization state (§7);
-  // the backend enforces the real boundary on every /client/me/* call.
+  // Client persona (CLIENT - "Business / Personal Account"): the
+  // self-registered client account. `accountType` is product metadata,
+  // NOT authorization state (§7); the backend enforces the real
+  // boundary on every /client/me/* call.
   const isClientAccount =
-    !isEmployee && session?.user?.accountType === 'INDIVIDUAL_BUSINESS';
+    !isEmployee && session?.user?.accountType === 'CLIENT';
 
   // Defense-in-depth page guard. The (app) layout AuthGuard already
   // redirects unauthenticated visitors to the public home page "/"

@@ -83,7 +83,13 @@ Out of primary V1 scope:
 
 Rules:
 
-- Do not implement X or WhatsApp integrations in V1.
+- Do not implement X or WhatsApp integrations in V1. WhatsApp remains OUT
+  OF SCOPE as a SocialOps-managed/publishing social platform. However,
+  WhatsApp MAY be used as (a) a registration verification channel and
+  (b) a pending-registration reminder channel; such use does NOT make
+  WhatsApp a SocialOps-managed platform and does not authorize any
+  WhatsApp social-account or publishing feature (Registration Phase
+  v1.0, Decision 014).
 - Do not introduce additional social platforms unless explicitly approved
   by the human.
 - Do not expand V1 scope under any circumstance without explicit human
@@ -490,7 +496,10 @@ bootstrap:
 - Facebook API integration
 - YouTube API integration
 - X integration
-- WhatsApp integration
+- WhatsApp integration (as a managed/publishing social platform; WhatsApp
+  MAY be used as a registration verification channel and a
+  pending-registration reminder channel - Registration Phase v1.0,
+  Decision 014)
 - OAuth implementation
 - OAuth token storage
 - OAuth token encryption
@@ -605,7 +614,9 @@ without explicit human approval.
 ### 17.1 Employee Identity
 
 - An employee is NOT an AccountType. The AccountType enum remains exactly
-  SERVICE_PROVIDER | INDIVIDUAL_BUSINESS. There is no EMPLOYEE value, and
+  SERVICE_PROVIDER | CLIENT (amended by Registration Phase v1.0,
+  Decision 014; Individual vs Business is a ClientType, never an
+  AccountType). There is no EMPLOYEE value, and
   none may be added, without explicit human approval.
 - Employee identity is carried by an EmployeeProfile row: a 1:1 extension of
   User whose `userId` is UNIQUE, so a user has at most one employee profile.

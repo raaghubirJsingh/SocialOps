@@ -38,7 +38,7 @@ import {
   type WizardValues,
 } from '@/types/raw-data';
 
-/** Hand-rolled RHF resolver (register-form pattern): no new deps. */
+/** Hand-rolled RHF resolver (auth-form pattern): no new deps. */
 const emptyResolver: Resolver<WizardValues> = async (values) => ({
   values: values as WizardValues,
   errors: {},

@@ -54,16 +54,11 @@ describe('client activation flow', () => {
 });
 
 describe('profile governance contracts', () => {
-  it('email is NOT an editable profile field', () => {
+  it('identity fields (email, name, phone) are NOT optional editable profile fields', () => {
     const fields = EDITABLE_PROFILE_FIELDS.map((field) => field.field);
     expect(fields).not.toContain('DIRECT_EMAIL');
-    // Sensitive fields keep the password + verification gate.
-    const name = EDITABLE_PROFILE_FIELDS.find((f) => f.field === 'NAME');
-    const phone = EDITABLE_PROFILE_FIELDS.find(
-      (f) => f.field === 'DIRECT_MOBILE',
-    );
-    expect(name?.requiresPassword).toBe(true);
-    expect(phone?.requiresPassword).toBe(true);
+    expect(fields).not.toContain('NAME');
+    expect(fields).not.toContain('DIRECT_MOBILE');
   });
 
   it('profile page renders full details, the fill form and governance hints', async () => {
@@ -73,6 +68,6 @@ describe('profile governance contracts', () => {
     expect(src).toMatch(/cannot be changed/);
     // Governance hints live on the editable-field configs rendered per row.
     const hints = EDITABLE_PROFILE_FIELDS.map((f) => f.hint ?? '').join(' ');
-    expect(hints).toMatch(/rate-limited/);
+    expect(hints.toLowerCase()).toMatch(/rate-limited/);
   });
 });

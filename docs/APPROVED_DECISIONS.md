@@ -643,7 +643,140 @@ subsequent approval.
 Status: FINAL
 Approved: 2026-09-20
 
+## Decision 014 — Registration Phase v1.0 (Conversational Registration)
+
+Status: FINAL
+Approved: 2026-09-24 (explicit ACT gate in session; plan revision 2 +
+D1 amendment)
+
+### Summary
+
+Human-approved Registration Phase v1.0: conversation-first registration
+("category is discovered, not declared") with a dedicated
+PendingRegistration lifecycle (no User row until completion), dual
+simultaneous Email + WhatsApp OTP verification, password created only
+after both verifications, and a single hashed resumeToken as the only
+registration-stage credential. Final User.accountType MUST be CLIENT or
+SERVICE_PROVIDER and is never null at creation.
+
+### AccountType amendment
+
+The AccountType enum becomes `SERVICE_PROVIDER | CLIENT`
+(INDIVIDUAL_BUSINESS renamed to CLIENT, data-preserving migration).
+Individual vs Business is a ClientType, never an AccountType. AGENTS.md
+§17.1 wording amended accordingly (approved with this decision). There is
+still no EMPLOYEE value; employees remain `accountType = null`.
+
+### Key locked rules recorded (all human-approved, none reopenable)
+
+- Providers: WhatsApp and Email are provider-agnostic PORTS only. NO
+  vendor is selected or installed; production delivery is a later,
+  separately approved phase. Dev/test uses the Console Provider (real
+  OTP pipeline; never auto-verifies; hard-disabled in production).
+- Queue: BullMQ is the approved future direction but is NOT installed
+  in this phase; no substitute scheduler is invented. Lazy expiry at
+  72h is mandatory and authoritative. Reminder state, job-shape types,
+  content builder, and D1-A rotation logic ship now; delayed-job
+  execution awaits separate BullMQ approval.
+- OTP: 6-digit numeric string (leading zero valid), 5-minute validity,
+  Argon2id hash only (raw OTP never stored/logged/returned in
+  production), max 3 wrong attempts -> 1-hour temporary lock that never
+  deletes the registration, resend does NOT reset attempts, max 3
+  SUCCESSFUL resends (provider failure and post-lock re-issues consume
+  no quota), fresh post-lock challenge starts at attempts = 0, no
+  production verification bypass.
+- Pending lifecycle: 72h lifetime; createdAt/expiresAt never reset;
+  duplicate /start for the same email resumes the SAME row; explicit
+  403 "Email already in use" for existing Users (no generic
+  anti-enumeration response); expiry hard-deletes the row (temp
+  sensitive data removed, OTPs cascade, resume token dies).
+- Classification: undecided users must explicitly choose CLIENT or
+  SERVICE_PROVIDER before Account Creation; the server never guesses.
+  PendingRegistration.accountType may be null meanwhile.
+- Completion: requires discovery accepted + name + BOTH verifications +
+  password (min 8, confirm UI-only). Creates User with emailVerifiedAt
+  + phoneVerifiedAt, deletes the pending row, provisions an Organization
+  only for SERVICE_PROVIDER, and NEVER issues a JWT/session - /login is
+  the only session issuer (login/refresh/logout unchanged).
+- Identity: Email is the PRIMARY identity and is never changeable after
+  Account Creation (no endpoint mutates User.email; route-surface
+  regression test guards it). Pre-completion fields (name, phone,
+  classification, discovery answers) are editable while the pending is
+  active without touching the timer. Other applicable profile fields
+  are restricted for 15 days after Account Creation
+  (PROFILE_EDIT_RESTRICTION_DAYS anchor; no profile editor built; Client
+  Module field governance untouched).
+- Phone (OPEN-2): only 9876543210 / 919876543210 / +919876543210 are
+  accepted and normalize to one canonical form; no other country/format
+  rules may be invented.
+- Rate limiting (L15/OPEN-3): Redis fixed-window budgets on the five
+  registration operations ONLY - start 5, OTP verify 10, OTP resend 6,
+  password 5, resume 10 (each per 15-minute window, approved key
+  scoping), 429 + Retry-After; separate from OTP attempt/lock rules; no
+  new rate-limit package; existing auth endpoints untouched.
+- Reminders: Day 1 (+24h), Day 2 (+48h), Day 3 (+66h final + expiry
+  warning), expiry +72h; Email + WhatsApp independently (one failure
+  never blocks the other); reminders include the secure resume link and
+  NEVER contain OTP/password/sensitive security data; exact copy
+  deferred.
+- D1 = Option A (single-token rotation): each reminder event (+24/+48/
+  +66h) generates a new random raw resumeToken, stores only its
+  SHA-256 over the previous hash (old token immediately invalid),
+  embeds the new raw token in that reminder's resume link, and never
+  touches createdAt/expiresAt. Duplicate processing of the same event
+  never rotates again; provider failure causes no additional rotation;
+  retries reuse the CURRENT token (hash-verified). NO second
+  credential, no registrationRefHash, no additional resume/delivery
+  credential may ever be added.
+- Legacy retirement (L11): POST /api/auth/register, AuthService.register,
+  RegisterDto/registerSchema, and RegisterForm are removed completely;
+  the /register route renders the new conversational experience. No
+  compatibility registration path exists.
+- Scope: Dashboard/Home, landing/audience copy, social account
+  connections, content, client creation UI, teams, payments,
+  subscriptions, business profile, analytics, S3, LLM, agency
+  directory, CI, and Git push are OUT of this decision.
+
+### Schema applied (GATE A)
+
+Migration `20260924163000_registration_phase_v1`: data-preserving
+AccountType value rename; `User.phoneVerifiedAt`; new
+`PendingRegistration` (email unique, resumeTokenHash unique,
+expiresAt index); new `RegistrationOtp` + `RegistrationOtpChannel`
+(cascade FK, composite index).
+
 ## Decision Management Rule
+## Decision 015 — OTP Concurrency Remediation (RegistrationOtp Unique Constraint)
+
+Status: FINAL
+Approved: 2026-09-25 (explicit approval in session for database schema & atomic queries)
+
+### Summary
+
+Remediates race conditions and concurrency risks in the OTP lifecycle under
+Registration Phase v1.0:
+
+1. **Prisma Schema & Database Constraint**: Replaces `@@index([pendingRegistrationId, channel])`
+   with `@@unique([pendingRegistrationId, channel])` on `RegistrationOtp`. A safe
+   migration (`20260925000000_enforce_otp_concurrency`, renamed from `20250925090000_enforce_otp_concurrency`
+   to restore chronological replay on fresh databases) de-duplicates any existing
+   rows before applying the unique index.
+2. **Atomic In-Place Challenge Generation**:
+   - `findChallenge` uses `prisma.registrationOtp.findUnique` via the composite key
+     `pendingRegistrationId_channel`.
+   - `issueChallenge` uses atomic `upsert` targeting `pendingRegistrationId_channel`.
+3. **Atomic Resend Quota Guard**:
+   - `resend` reserves quota before dispatch using atomic guarded `updateMany`
+     (`resendCount: { lt: OTP_MAX_RESENDS }`, incrementing by 1).
+   - In-place challenge update preserves wrong-attempt counts (L5 rule).
+   - Provider dispatch failure refunds the quota increment via guarded `decrement: 1`.
+4. **Atomic Verification & Lock Blocks**:
+   - Success path wraps `PendingRegistration` channel verification stamp and `RegistrationOtp`
+     single-use (`usedAt`) stamp in a single `prisma.$transaction`.
+   - 3rd wrong attempt path wraps attempt increment and `lockedUntil` stamp in a single
+     `prisma.$transaction`.
+
+
 
 Do not change a FINAL decision without explicit user approval. When a new
 decision supersedes an existing one: mark the previous decision SUPERSEDED,

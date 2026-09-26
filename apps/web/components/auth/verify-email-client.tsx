@@ -65,9 +65,11 @@ type VerificationState =
 export function VerifyEmailClient() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
-  // `status=sent` is the signal the registration form sets when it
-  // navigates to /verify-email after a successful POST /api/auth/register
-  // (plan instruction §16). The pre-filled `email` query parameter is
+  // `status=sent` is the signal the employee registration form sets when
+  // it navigates to /verify-email after a successful
+  // POST /api/auth/register-employee (the legacy public register flow is
+  // retired - L11; this page still serves the employee email-verification
+  // lifecycle, AGENTS.md §17.2). The pre-filled `email` query parameter is
   // the same email the backend just registered, so the resend form is
   // already populated and the user does not have to retype it. The
   // raw verification token never appears as a query parameter or in

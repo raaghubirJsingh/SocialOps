@@ -6,7 +6,6 @@ import { jest } from '@jest/globals';
 
 type MockAuthService = {
   login: jest.Mock;
-  register: jest.Mock;
   refresh: jest.Mock;
   logout: jest.Mock;
   verifyEmail: jest.Mock;
@@ -15,7 +14,6 @@ type MockAuthService = {
 
 const makeMockService = (overrides: Partial<MockAuthService> = {}): MockAuthService => ({
   login: jest.fn(),
-  register: jest.fn(),
   refresh: jest.fn(),
   logout: jest.fn(),
   verifyEmail: jest.fn(),
@@ -35,41 +33,6 @@ describe('AuthController', () => {
       providers:[{provide:AuthService,useValue:mockService}]
     }).compile();
     controller=module.get(AuthController);
-  });
-
-  describe('POST /auth/register',()=>{
-    it('returns the verification_required branch unchanged (production path)',async()=>{
-      const registration={status:'verification_required' as const, email:'a@b.com'};
-      // Registration issues NO tokens: the mock resolves to the
-      // verification-required RegisterResult (AGENTS.md §17.2).
-      mockService.register = jest.fn(async () => registration);
-      const dto={
-        accountType: 'SERVICE_PROVIDER' as const,
-        fullName: 'New User',
-        email: 'a@b.com',
-        password: 'Password123!',
-      };
-      const result=await controller.register(dto);
-      expect(result).toBe(registration);
-      expect(mockService.register).toHaveBeenCalledWith(dto);
-    });
-
-    it('passes through the registration_complete branch unchanged (dev-only bypass path)',async()=>{
-      const registration={status:'registration_complete' as const, email:'a@b.com'};
-      mockService.register = jest.fn(async () => registration);
-      const dto={
-        accountType: 'SERVICE_PROVIDER' as const,
-        fullName: 'New User',
-        email: 'a@b.com',
-        password: 'Password123!',
-      };
-      const result=await controller.register(dto);
-      expect(result).toBe(registration);
-      // The dev-bypass response MUST NOT include a token: the contract
-      // says login creates the session, registration does not.
-      expect(result).not.toHaveProperty('accessToken');
-      expect(result).not.toHaveProperty('refreshToken');
-    });
   });
 
   describe('POST /auth/verify-email',()=>{
