@@ -54,6 +54,21 @@ type Stage =
   | 'password'
   | 'created';
 
+/**
+ * Stages that cannot proceed without a live resume credential.
+ *
+ * `identity` is deliberately absent: it runs BEFORE /start and is what
+ * OBTAINS the resumeToken, so a null token there is the normal
+ * pre-registration state. `discovery` needs no credential either.
+ * Everything else (resume verification/password, and the forced choice on
+ * an emailed resume link) is credential-gated.
+ */
+const RESUME_REQUIRED_STAGES: readonly Stage[] = [
+  'forced-choice',
+  'verification',
+  'password',
+];
+
 interface Msg {
   role: 'bot' | 'user' | 'error';
   text: string;
@@ -170,7 +185,13 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
 
   const lockSeconds =
     lockedUntil && lockedUntil > now ? Math.ceil((lockedUntil - now) / 1000) : 0;
-  const dead = resumeToken === null && stage !== 'discovery' && stage !== 'created';
+  // "Dead" = the staged registration cannot continue, because the resume
+  // credential is gone (a 404 clears it in handleFailure) while the user
+  // sits in a stage that requires it. Computed from the stages that DO
+  // require a credential so the pre-registration identity form (name /
+  // WhatsApp / email - the step that asks "आपको किस नाम से बुलाऊँ?")
+  // keeps rendering instead of being masked as a dead end.
+  const dead = resumeToken === null && RESUME_REQUIRED_STAGES.includes(stage);
 
   function handleFailure(err: unknown): void {
     const body = bodyOf(err);
