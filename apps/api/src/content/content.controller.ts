@@ -13,12 +13,14 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 
 import type { JwtAccessPayload } from '../auth/types/jwt-payload.type.js';
@@ -34,6 +36,7 @@ import { RoleGuard } from '../rbac/guards/role.guard.js';
 import { ContentStatusService } from './content-status.service.js';
 import { ContentService } from './content.service.js';
 import { AIAgentService } from './ai-agent.service.js';
+import { AiTaskDispatchGuard } from './ai-task-dispatch.guard.js';
 import { ChangeRequestService } from './change-request.service.js';
 import { createContentSchema } from './dto/create-content.dto.js';
 import type { CreateContentDto } from './dto/create-content.dto.js';
@@ -78,6 +81,7 @@ export class ContentController {
     private readonly changeRequestService: ChangeRequestService,
     private readonly internalNoteService: InternalNoteService,
     private readonly aiAgentService: AIAgentService,
+    private readonly aiTaskGuard: AiTaskDispatchGuard,
   ) {}
 
   @Get()
@@ -310,22 +314,36 @@ export class ContentController {
    * already written when the response is returned. The Agency (OWNER/ADMIN) dispatches; the AI
    * Employee must itself hold the MEMBER role of this Organization, verified
    * again inside AIAgentService (AGENTS.md §7 - `isBot` is never authority).
+   *
+   * Because the provider call is synchronous AND costs money per request, two
+   * content-scoped guards run BEFORE the LLM is called (AiTaskDispatchGuard):
+   * a 10/15min org+user rate limit, and a Redis SET NX in-flight lock that
+   * refuses a concurrent duplicate for the same (contentId, aiUserId) with
+   * 409. A deliberate later re-dispatch is still allowed.
    */
   @Post(':contentId/ai-tasks')
   @HttpCode(201)
   @UseGuards(RoleGuard)
   @RequireMinimumRole('ADMIN')
   @ApiOperation({
-    summary: 'Process a mocked AI task and store it under the AI User id.',
+    summary: 'Dispatch an AI task and store it under the AI User id.',
     description:
-      'Dispatches a task to a User with isBot = true that holds the MEMBER role in this Organization. The mocked output is stored as an insert-only ContentRevision or InternalNote authored by that AI User.',
+      'Dispatches a task to a User with isBot = true that holds the MEMBER role in this Organization. The provider output is stored as an insert-only ContentRevision or InternalNote authored by that AI User. Throttled to 10 requests per 15 minutes per organization+user; a concurrent duplicate for the same content item and AI employee is refused with 409.',
   })
   @ApiCreatedResponse({ description: 'The stored revision or note.' })
   @ApiForbiddenResponse({
     description: 'Requires OWNER/ADMIN, or the AI User is not a MEMBER.',
   })
   @ApiNotFoundResponse({ description: 'Content not found for this Client.' })
+  @ApiTooManyRequestsResponse({
+    description: 'Dispatch rate limit exceeded (429 with Retry-After).',
+  })
+  @ApiConflictResponse({
+    description:
+      'A dispatch for this content item and AI employee is already in flight.',
+  })
   async processAiTask(
+    @CurrentUser() user: JwtAccessPayload,
     @CurrentOrganization() organization: RequestOrganizationContext,
     @Param('clientId', ParseUUIDPipe) clientId: string,
     @Param('contentId', ParseUUIDPipe) contentId: string,
@@ -333,14 +351,22 @@ export class ContentController {
   ) {
     await this.requireClientInScope(clientId, organization.id);
     const body = dto as ProcessAiTaskDto;
-    return this.aiAgentService.processAiTask({
-      contentId,
-      clientId,
-      aiUserId: body.aiUserId,
-      agencyId: organization.id,
-      prompt: body.prompt,
-      outputType: body.outputType,
-    });
+
+    // Cost control BEFORE any provider call.
+    await this.aiTaskGuard.enforceRateLimit(organization.id, user.sub);
+
+    return this.aiTaskGuard.runOnce(
+      { contentId, aiUserId: body.aiUserId },
+      () =>
+        this.aiAgentService.processAiTask({
+          contentId,
+          clientId,
+          aiUserId: body.aiUserId,
+          agencyId: organization.id,
+          prompt: body.prompt,
+          outputType: body.outputType,
+        }),
+    );
   }
 
   private async requireClientInScope(

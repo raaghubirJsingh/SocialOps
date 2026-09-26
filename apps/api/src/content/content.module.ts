@@ -4,6 +4,7 @@ import { ClientsModule } from '../clients/clients.module.js';
 import { PrismaModule } from '../prisma/prisma.module.js';
 import { S3Module } from '../s3/s3.module.js';
 import { AIAgentService } from './ai-agent.service.js';
+import { AiTaskDispatchGuard } from './ai-task-dispatch.guard.js';
 import { ChangeRequestService } from './change-request.service.js';
 import { ContentMeController } from './content-me.controller.js';
 import { ContentStatusService } from './content-status.service.js';
@@ -62,6 +63,7 @@ import { RawDataService } from './raw-data.service.js';
     ChangeRequestService,
     InternalNoteService,
     LlmService,
+    AiTaskDispatchGuard,
     AIAgentService,
   ],
   exports: [
@@ -71,6 +73,7 @@ import { RawDataService } from './raw-data.service.js';
     ChangeRequestService,
     InternalNoteService,
     LlmService,
+    AiTaskDispatchGuard,
     AIAgentService,
   ],
 })
