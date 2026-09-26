@@ -1,11 +1,16 @@
 import {
   CONFIRMATION_MESSAGE,
   CONTINUE_OPTION,
+  EMAIL_QUESTION,
+  IDENTITY_QUESTION,
+  PHONE_QUESTION,
   botMessageFor,
   createConversation,
   discoveryAnswersSnapshot,
+  identityFieldFor,
   optionsFor,
   selectOption,
+  submitIdentityField,
   type ConversationState,
 } from '@/lib/registration-conversation';
 
@@ -87,6 +92,132 @@ describe('registration conversation state machine (Registration Phase v1.0)', ()
   });
 
 
+  describe('field-by-field identity wizard (Rule 7)', () => {
+    /** Reach the wizard through an accepted discovery path. */
+    function atWizard(): ConversationState {
+      let s = createConversation();
+      s = pick(s, 0); // अपने Accounts
+      s = pick(s, 0); // मेरे Personal Accounts -> CLIENT
+      return selectOption(s, 'continue');
+    }
+
+    it('[आगे बढ़ें] opens the wizard on the NAME step only', () => {
+      const s = atWizard();
+      expect(s.stage).toBe('identity-name');
+      expect(identityFieldFor(s.stage)).toBe('fullName');
+      // The phone and email inputs must not exist yet.
+      expect(identityFieldFor('identity-phone')).toBe('phone');
+      expect(s.phone).toBeNull();
+      expect(s.email).toBeNull();
+    });
+
+    it('asks exactly one field per step, in the approved order', () => {
+      let s = atWizard();
+      expect(botMessageFor(s)).toBe(IDENTITY_QUESTION);
+
+      s = submitIdentityField(s, 'टेस्ट यूज़र');
+      expect(s.stage).toBe('identity-phone');
+      expect(s.fullName).toBe('टेस्ट यूज़र');
+      expect(botMessageFor(s)).toBe(PHONE_QUESTION);
+
+      s = submitIdentityField(s, '9876543210');
+      expect(s.stage).toBe('identity-email');
+      expect(s.phone).toBe('9876543210');
+      expect(botMessageFor(s)).toBe(EMAIL_QUESTION);
+
+      s = submitIdentityField(s, 'user@example.com');
+      expect(s.stage).toBe('identity'); // terminal
+      expect(s.email).toBe('user@example.com');
+    });
+
+    it('rejects a blank or whitespace-only value without advancing', () => {
+      for (const blank of ['', '   ', '\t\n']) {
+        const s = atWizard();
+        const after = submitIdentityField(s, blank);
+        expect(after.stage).toBe('identity-name');
+        expect(after.fullName).toBeNull();
+        expect(after).toBe(s); // same reference: no partial mutation
+      }
+    });
+
+    it('trims the stored value so /start receives clean input', () => {
+      let s = atWizard();
+      s = submitIdentityField(s, '  टेस्ट यूज़र  ');
+      expect(s.fullName).toBe('टेस्ट यूज़र');
+    });
+
+    it('never re-asks a field and never regresses to an earlier step', () => {
+      let s = atWizard();
+      s = submitIdentityField(s, 'टेस्ट यूज़र');
+      s = submitIdentityField(s, '9876543210');
+      s = submitIdentityField(s, 'user@example.com');
+      expect(s.stage).toBe('identity');
+
+      // Further input at the terminal stage is ignored entirely.
+      const after = submitIdentityField(s, 'ignored@example.com');
+      expect(after.stage).toBe('identity');
+      expect(after.email).toBe('user@example.com');
+
+      // Options never apply inside the wizard.
+      expect(selectOption(s, 'own').stage).toBe('identity');
+      expect(optionsFor(s)).toEqual([]);
+    });
+
+    it('ignores identity input submitted from a non-wizard stage', () => {
+      // discovery-root
+      const root = createConversation();
+      expect(submitIdentityField(root, 'नाम').stage).toBe('discovery-root');
+      expect(root.fullName).toBeNull();
+
+      // confirmation (discovery accepted, wizard not opened yet)
+      const confirmed = pick(pick(createConversation(), 0), 0);
+      expect(confirmed.stage).toBe('confirmation');
+      expect(submitIdentityField(confirmed, 'नाम').stage).toBe('confirmation');
+      expect(confirmed.fullName).toBeNull();
+    });
+
+    it('offers no option buttons for any identity step', () => {
+      let s = atWizard();
+      expect(optionsFor(s)).toEqual([]);
+      s = submitIdentityField(s, 'नाम');
+      expect(optionsFor(s)).toEqual([]);
+      s = submitIdentityField(s, '9876543210');
+      expect(optionsFor(s)).toEqual([]);
+      s = submitIdentityField(s, 'user@example.com');
+      expect(optionsFor(s)).toEqual([]);
+    });
+
+    it('keeps identity fields OUT of the discoveryAnswers snapshot (L8)', () => {
+      let s = atWizard();
+      s = submitIdentityField(s, 'टेस्ट यूज़र');
+      s = submitIdentityField(s, '9876543210');
+      s = submitIdentityField(s, 'user@example.com');
+
+      const snapshot = discoveryAnswersSnapshot(s);
+      // The backend DTO is strict; identity is sent as separate top-level
+      // fields to /start and must never be duplicated into the snapshot.
+      expect(snapshot).toEqual({
+        root: 'own',
+        ownBranch: 'personal',
+        mixedBranch: null,
+        clarificationAnswer: null,
+        classification: 'CLIENT',
+        discoveryAccepted: true,
+      });
+      expect(Object.keys(snapshot)).not.toContain('fullName');
+      expect(Object.keys(snapshot)).not.toContain('phone');
+      expect(Object.keys(snapshot)).not.toContain('email');
+      expect(JSON.stringify(snapshot)).not.toContain('user@example.com');
+    });
+
+    it('identityFieldFor returns null outside the wizard', () => {
+      expect(identityFieldFor('discovery-root')).toBeNull();
+      expect(identityFieldFor('confirmation')).toBeNull();
+      expect(identityFieldFor('forced-choice')).toBeNull();
+      expect(identityFieldFor('identity')).toBeNull();
+    });
+  });
+
   describe('approved copy and options', () => {
     it('root stage shows the exact approved question with exactly 3 options', () => {
       const s = createConversation();
@@ -116,7 +247,8 @@ describe('registration conversation state machine (Registration Phase v1.0)', ()
       s = selectOption(s, 'own'); // wrong-stage option ignored
       expect(s.stage).toBe('confirmation');
       s = selectOption(s, 'continue');
-      expect(s.stage).toBe('identity');
+      // Rule 7: continue opens the wizard at the NAME step.
+      expect(s.stage).toBe('identity-name');
       expect(s.discoveryAccepted).toBe(true);
     });
   });
@@ -127,8 +259,8 @@ describe('registration conversation state machine (Registration Phase v1.0)', ()
       s = pick(s, 1);
       s = pick(s, 0);
       s = pick(s, 0); // continue
-      expect(selectOption(s, 'own').stage).toBe('identity');
-      expect(selectOption(s, 'undecided').stage).toBe('identity');
+      expect(selectOption(s, 'own').stage).toBe('identity-name');
+      expect(selectOption(s, 'undecided').stage).toBe('identity-name');
       expect(s.classification).toBe('SERVICE_PROVIDER');
     });
 
@@ -140,7 +272,7 @@ describe('registration conversation state machine (Registration Phase v1.0)', ()
       ];
       for (const run of paths) {
         const final = run(createConversation());
-        expect(final.stage).toBe('identity');
+        expect(final.stage).toBe('identity-name');
         expect(final.classification).not.toBeNull();
         expect(final.discoveryAccepted).toBe(true);
       }

@@ -19,8 +19,10 @@ import {
   botMessageFor,
   createConversation,
   discoveryAnswersSnapshot,
+  identityFieldFor,
   optionsFor,
   selectOption,
+  submitIdentityField,
   type ConversationState,
 } from '@/lib/registration-conversation';
 import type {
@@ -148,10 +150,16 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
     initialResume?.snapshot.accountType ?? null,
   );
 
-  const [fullName, setFullName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
+  // Identity wizard (Rule 7) is owned by the pure state machine; this
+  // component only renders the single field for the current sub-step.
   const [identityError, setIdentityError] = useState<string | null>(null);
+  /** Draft text for the one identity input currently on screen. */
+  const [identityDraft, setIdentityDraft] = useState('');
+
+  // Which identity field the state machine is asking for right now. The
+  // draft is cleared at the moment the step advances (in the submit handler),
+  // so a previous answer is never carried into the next input.
+  const identitySubStep = identityFieldFor(conversation.stage);
 
   const [otpInputs, setOtpInputs] = useState<{ EMAIL: string; WHATSAPP: string }>({
     EMAIL: '',
@@ -188,10 +196,19 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
   // "Dead" = the staged registration cannot continue, because the resume
   // credential is gone (a 404 clears it in handleFailure) while the user
   // sits in a stage that requires it. Computed from the stages that DO
-  // require a credential so the pre-registration identity form (name /
-  // WhatsApp / email - the step that asks "आपको किस नाम से बुलाऊँ?")
-  // keeps rendering instead of being masked as a dead end.
+  // require a credential so the pre-registration identity wizard (the steps
+  // asking "आपको किस नाम से बुलाऊँ?" etc.) keeps rendering instead of being
+  // masked as a dead end.
+  //
+  // The identity wizard is deliberately NOT gated on `dead` at its render
+  // block: those steps run BEFORE /start, so a null resumeToken is their
+  // NORMAL state, and a stale credential must never suppress them.
   const dead = resumeToken === null && RESUME_REQUIRED_STAGES.includes(stage);
+
+  // Single source of truth for "is the wizard asking for a field right now".
+  // Derived from the PURE state machine (conversation.stage), not from the
+  // local `stage`, which is presentation bookkeeping only and can disagree.
+  const inIdentityWizard = identitySubStep !== null;
 
   function handleFailure(err: unknown): void {
     const body = bodyOf(err);
@@ -209,7 +226,7 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
     const next = selectOption(conversation, id);
     setConversation(next);
     if (next.stage !== conversation.stage) {
-      if (next.stage === 'identity') setStage('identity');
+      if (next.stage === 'identity-name') setStage('identity');
       push({ role: 'bot', text: botMessageFor(next) });
     }
   }
@@ -225,21 +242,55 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
     push({ role: 'bot', text: target === 'password' ? PASSWORD_PROMPT : EMAIL_OTP_HINT });
   }
 
-  async function submitIdentity(): Promise<void> {
+  /**
+   * Rule 7: one field at a time, in the approved order
+   * name -> WhatsApp mobile -> email. Each accepted answer echoes into the
+   * transcript and advances the pure state machine; the FINAL step
+   * (email) re-validates all three and performs the single /start call that
+   * obtains the resumeToken. The /start payload is unchanged.
+   */
+  async function submitIdentityFieldAndAdvance(value: string): Promise<void> {
     setIdentityError(null);
-    if (!fullName.trim()) {
-      setIdentityError('कृपया अपना नाम लिखें। (Please enter your name.)');
+    const field = identityFieldFor(conversation.stage);
+    if (!field) return;
+
+    if (!value.trim()) {
+      setIdentityError(
+        field === 'fullName'
+          ? 'कृपया अपना नाम लिखें। (Please enter your name.)'
+          : field === 'phone'
+            ? 'WhatsApp mobile number ज़रूरी है। (WhatsApp mobile is required.)'
+            : 'सही email address डालें। (Enter a valid email address.)',
+      );
       return;
     }
-    if (!phone.trim()) {
-      setIdentityError('WhatsApp mobile number ज़रूरी है। (WhatsApp mobile is required.)');
-      return;
-    }
-    if (!/^\S+@\S+\.\S+$/.test(email)) {
+    if (field === 'email' && !/^\S+@\S+\.\S+$/.test(value.trim())) {
       setIdentityError('सही email address डालें। (Enter a valid email address.)');
       return;
     }
-    if (!conversation.classification) {
+
+    // Blank values are rejected above, so this always advances.
+    const next = submitIdentityField(conversation, value);
+    if (next.stage === conversation.stage) return;
+
+    push({ role: 'user', text: value.trim() });
+    setConversation(next);
+    // Clear the draft as the step advances so the next input starts empty.
+    setIdentityDraft('');
+
+    if (next.stage !== 'identity') {
+      // Intermediate step: ask the next question.
+      push({ role: 'bot', text: botMessageFor(next) });
+      return;
+    }
+    await completeRegistration(next);
+  }
+
+  /** All three identity fields are in: classify-check, then POST /start once. */
+  async function completeRegistration(state: ConversationState): Promise<void> {
+    const { fullName, phone, email } = state;
+    if (!fullName || !phone || !email) return; // defensive; wizard guarantees these
+    if (!state.classification) {
       // Defensive: discovery always resolves classification before the
       // identity step; if it somehow does not, force the explicit choice.
       push({ role: 'bot', text: FORCED_QUESTION });
@@ -253,8 +304,8 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
         fullName: fullName.trim(),
         email: email.trim(),
         phone: phone.trim(),
-        accountType: conversation.classification,
-        discoveryAnswers: discoveryAnswersSnapshot(conversation),
+        accountType: state.classification,
+        discoveryAnswers: discoveryAnswersSnapshot(state),
       });
       setResumeToken(result.resumeToken);
       setStartInfo(result);
@@ -450,7 +501,11 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
         </p>
       )}
 
-      {dead && (
+      {/* Dead-end fallback. NEVER shown while the identity wizard is active:
+          those steps run before /start and a null resumeToken is normal
+          there, so offering only "Start again" would discard a conversation
+          the user can still legitimately finish. */}
+      {dead && !inIdentityWizard && (
         <div className="space-y-2">
           <Button type="button" onClick={restart}>
             फिर से शुरू करें (Start again)
@@ -483,55 +538,77 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
         </div>
       )}
 
-      {!dead && stage === 'identity' && (
+      {/* Rule 7 identity wizard - ONE field at a time, in order
+          name -> WhatsApp mobile -> email.
+
+          Visibility is driven PURELY by the state machine via
+          `identitySubStep`. It is deliberately NOT gated on the local
+          `stage` or on `dead`: those describe the post-/start credential
+          lifecycle, whereas every identity step runs BEFORE /start. Gating
+          the inputs on them is what previously let the "Start again"
+          fallback mask the Name input entirely. */}
+      {inIdentityWizard && (
         <form
           className="space-y-3"
           onSubmit={(e) => {
             e.preventDefault();
-            void submitIdentity();
+            void submitIdentityFieldAndAdvance(identityDraft);
           }}
         >
-          <div className="space-y-1.5">
-            <Label htmlFor="reg-name">Name</Label>
-            <Input
-              id="reg-name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="आपका पूरा नाम"
-              autoComplete="name"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="reg-phone">WhatsApp mobile</Label>
-            <Input
-              id="reg-phone"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="9876543210 / +919876543210"
-              inputMode="tel"
-              autoComplete="tel"
-            />
-            <p className="text-xs text-slate-500">
-              यह WhatsApp से जुड़ा नंबर होना चाहिए। (Must be a WhatsApp-connected
-              number.)
-            </p>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="reg-email">Email address</Label>
-            <Input
-              id="reg-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              autoComplete="email"
-            />
-          </div>
+          {identitySubStep === 'fullName' && (
+            <div className="space-y-1.5">
+              <Label htmlFor="reg-name">Name</Label>
+              <Input
+                id="reg-name"
+                value={identityDraft}
+                onChange={(e) => setIdentityDraft(e.target.value)}
+                placeholder="आपका पूरा नाम"
+                autoComplete="name"
+              />
+            </div>
+          )}
+
+          {identitySubStep === 'phone' && (
+            <div className="space-y-1.5">
+              <Label htmlFor="reg-phone">WhatsApp mobile</Label>
+              <Input
+                id="reg-phone"
+                value={identityDraft}
+                onChange={(e) => setIdentityDraft(e.target.value)}
+                placeholder="9876543210 / +919876543210"
+                inputMode="tel"
+                autoComplete="tel"
+              />
+              <p className="text-xs text-slate-500">
+                यह WhatsApp से जुड़ा नंबर होना चाहिए। (Must be a WhatsApp-connected
+                number.)
+              </p>
+            </div>
+          )}
+
+          {identitySubStep === 'email' && (
+            <div className="space-y-1.5">
+              <Label htmlFor="reg-email">Email address</Label>
+              <Input
+                id="reg-email"
+                type="email"
+                value={identityDraft}
+                onChange={(e) => setIdentityDraft(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+              />
+            </div>
+          )}
+
           {identityError && (
             <p className="text-xs text-red-300">{identityError}</p>
           )}
           <Button type="submit" disabled={busy} className="w-full">
-            {busy ? 'भेज रहे हैं…' : 'OTP भेजें (Send OTP)'}
+            {busy
+              ? 'भेज रहे हैं…'
+              : identitySubStep === 'email'
+                ? 'OTP भेजें (Send OTP)'
+                : 'अगला (Next)'}
           </Button>
         </form>
       )}

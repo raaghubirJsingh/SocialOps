@@ -38,12 +38,37 @@ test.describe('conversational registration discovery', () => {
 
     await page.getByRole('button', { name: 'आगे बढ़ें' }).click();
 
-    // Identity stage: the fixed text step (never classification first).
+    // Rule 7: the identity wizard asks ONE field at a time, in order
+    // name -> WhatsApp mobile -> email. The later inputs must not exist yet.
     await expect(page.getByLabel('Name')).toBeVisible();
+    await expect(page.getByLabel('WhatsApp mobile')).toHaveCount(0);
+    await expect(page.getByLabel('Email address')).toHaveCount(0);
+    await page.getByLabel('Name').fill('टेस्ट यूज़र');
+    await page.getByRole('button', { name: 'अगला (Next)' }).click();
+
     await expect(page.getByLabel('WhatsApp mobile')).toBeVisible();
+    await expect(page.getByLabel('Name')).toHaveCount(0);
+    await expect(page.getByLabel('Email address')).toHaveCount(0);
+    await page.getByLabel('WhatsApp mobile').fill('9876543210');
+    await page.getByRole('button', { name: 'अगला (Next)' }).click();
+
     await expect(page.getByLabel('Email address')).toBeVisible();
+    await expect(page.getByLabel('WhatsApp mobile')).toHaveCount(0);
     // No forced Client/Agency/Individual/Business classification control:
     await expect(page.getByText('Individual / Business')).toHaveCount(0);
+  });
+
+  test('an empty identity field does not advance the wizard', async ({ page }) => {
+    await page.goto('/register');
+    await page.getByRole('button', { name: 'अपने Accounts' }).click();
+    await page.getByRole('button', { name: 'मेरे Personal Accounts' }).click();
+    await page.getByRole('button', { name: 'आगे बढ़ें' }).click();
+
+    await expect(page.getByLabel('Name')).toBeVisible();
+    // Submitting blank must keep the user on the name step.
+    await page.getByRole('button', { name: 'अगला (Next)' }).click();
+    await expect(page.getByLabel('Name')).toBeVisible();
+    await expect(page.getByLabel('WhatsApp mobile')).toHaveCount(0);
   });
 
   test('the undecided path asks a minimum clarification and never guesses', async ({

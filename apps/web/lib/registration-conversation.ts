@@ -32,6 +32,11 @@ export type ConversationStage =
   | 'clarification'
   | 'forced-choice'
   | 'confirmation'
+  // Identity wizard (Rule 7): strictly sequential, one field at a time.
+  | 'identity-name'
+  | 'identity-phone'
+  | 'identity-email'
+  // Terminal: all three identity fields collected.
   | 'identity';
 
 export type DiscoveryRoot = 'own' | 'mixed' | 'undecided';
@@ -49,6 +54,14 @@ export interface ConversationState {
   classification: AccountType | null;
   clarificationAnswer: 'ownOnly' | 'mixed' | 'undecided' | null;
   discoveryAccepted: boolean;
+  /**
+   * Identity fields collected one at a time (Rule 7). Null until the user
+   * submits the corresponding step. These NEVER enter discoveryAnswers -
+   * that snapshot is the discovery conversation only.
+   */
+  fullName: string | null;
+  phone: string | null;
+  email: string | null;
 }
 
 export interface OptionDef {
@@ -102,7 +115,14 @@ export const CONFIRMATION_MESSAGE =
   'समझ गया।\nअब आपका SocialOps account बनाते हैं।';
 export const CONTINUE_OPTION: OptionDef = { id: 'continue', label: 'आगे बढ़ें' };
 
+/**
+ * Identity wizard copy (Rule 7 - strict sequential order).
+ * `IDENTITY_QUESTION` is the approved name-step question; the phone and email
+ * questions follow it in the same bilingual style.
+ */
 export const IDENTITY_QUESTION = 'आपको किस नाम से बुलाऊँ?';
+export const PHONE_QUESTION = 'आपका WhatsApp mobile number क्या है?';
+export const EMAIL_QUESTION = 'आपका email address क्या है?';
 
 // ---------------------------------------------------------------------------
 // State machine
@@ -118,6 +138,9 @@ export function createConversation(): ConversationState {
     classification: null,
     clarificationAnswer: null,
     discoveryAccepted: false,
+    fullName: null,
+    phone: null,
+    email: null,
   };
 }
 
@@ -134,6 +157,11 @@ export function optionsFor(state: ConversationState): readonly OptionDef[] {
       return FORCED_OPTIONS;
     case 'confirmation':
       return [CONTINUE_OPTION];
+    // The identity wizard is free-text: one input at a time, no option
+    // buttons ever (same discipline as the module docstring).
+    case 'identity-name':
+    case 'identity-phone':
+    case 'identity-email':
     case 'identity':
       return [];
   }
@@ -152,8 +180,58 @@ export function botMessageFor(state: ConversationState): string {
       return FORCED_QUESTION;
     case 'confirmation':
       return CONFIRMATION_MESSAGE;
-    case 'identity':
+    case 'identity-name':
       return IDENTITY_QUESTION;
+    case 'identity-phone':
+      return PHONE_QUESTION;
+    case 'identity-email':
+      return EMAIL_QUESTION;
+    case 'identity':
+      return EMAIL_QUESTION;
+  }
+}
+
+/** Which identity field the wizard is currently asking for, if any. */
+export function identityFieldFor(
+  stage: ConversationStage,
+): 'fullName' | 'phone' | 'email' | null {
+  switch (stage) {
+    case 'identity-name':
+      return 'fullName';
+    case 'identity-phone':
+      return 'phone';
+    case 'identity-email':
+      return 'email';
+    default:
+      return null;
+  }
+}
+
+/**
+ * Record the user's answer for the CURRENT identity step and advance.
+ *
+ * Rule 7: strictly sequential - name -> phone -> email -> terminal
+ * 'identity'. A blank/whitespace value returns the state UNCHANGED so the
+ * component can show an inline error without ever skipping a step, and there
+ * is deliberately no way to move backwards (a field is asked exactly once).
+ * Calls from a non-identity stage are ignored.
+ */
+export function submitIdentityField(
+  state: ConversationState,
+  value: string,
+): ConversationState {
+  const trimmed = value.trim();
+  if (!trimmed) return state;
+
+  switch (state.stage) {
+    case 'identity-name':
+      return { ...state, fullName: trimmed, stage: 'identity-phone' };
+    case 'identity-phone':
+      return { ...state, phone: trimmed, stage: 'identity-email' };
+    case 'identity-email':
+      return { ...state, email: trimmed, stage: 'identity' };
+    default:
+      return state;
   }
 }
 
@@ -236,11 +314,16 @@ export function selectOption(
     }
     case 'confirmation': {
       if (optionId === CONTINUE_OPTION.id) {
-        return { ...state, stage: 'identity' };
+        // Rule 7: continue opens the wizard at the NAME step.
+        return { ...state, stage: 'identity-name' };
       }
       return state;
     }
     case 'identity':
+    case 'identity-name':
+    case 'identity-phone':
+    case 'identity-email':
+      // The identity wizard is free-text; options never apply here.
       return state;
   }
 }
