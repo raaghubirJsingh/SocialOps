@@ -51,6 +51,13 @@ export interface SocialAccountDto {
   createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Derived by the backend: whether a 1:1 credential row exists for this
+   * account. Exposes THAT a connection exists, never any part of it - no
+   * ciphertext, scope, expiry, or key version reaches the client. Drives
+   * Connect vs Reconnect vs Disconnect in the UI.
+   */
+  hasCredential: boolean;
 }
 
 /**

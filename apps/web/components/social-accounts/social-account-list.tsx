@@ -9,20 +9,38 @@ interface SocialAccountListProps {
   /** UI convenience only: the backend RoleGuard is the real authority. */
   canManage: boolean;
   onEdit: (account: SocialAccountDto) => void;
+  /**
+   * Reconnect hand-off. The parent performs the full-page redirect to the
+   * authorize URL - OAuth cannot be completed by a background fetch.
+   */
+  onStartConnect?: (platform: SocialAccountDto['platform']) => void;
+  onDisconnect?: (account: SocialAccountDto) => void;
+  /** Account id currently being disconnected, for the row's busy state. */
+  disconnectingId?: string | null;
 }
 
 /**
  * Social account list (metadata only).
  *
  * Rows render ONLY non-secret metadata: platform, handle, display name, a
- * public profile link (marked external), the active flag, and timestamps.
- * There is no connection status to render - nothing is connected in V1 - and
- * no token/expiry/scope information exists to display.
+ * public profile link (marked external), the active flag, and timestamps. The
+ * backend-derived `hasCredential` boolean drives the connection affordances:
+ *
+ *   - no credential  -> "Connect"   (start a new handshake)
+ *   - has credential -> "Reconnect" (re-authorise; reuses the same endpoint)
+ *                      + "Disconnect" (removes the stored credential; the
+ *                      metadata row itself is kept server-side)
+ *
+ * No token, scope, expiry, or key-version information is displayed - none of
+ * it is ever sent to the browser.
  */
 export function SocialAccountList({
   accounts,
   canManage,
   onEdit,
+  onStartConnect,
+  onDisconnect,
+  disconnectingId = null,
 }: SocialAccountListProps) {
   if (accounts.length === 0) {
     return (
@@ -55,6 +73,9 @@ export function SocialAccountList({
                 ) : (
                   <Badge variant="muted">Inactive</Badge>
                 )}
+                {account.hasCredential ? (
+                  <Badge variant="info">Connected</Badge>
+                ) : null}
               </div>
 
               <p className="text-xs text-slate-400">
@@ -78,14 +99,39 @@ export function SocialAccountList({
             </div>
 
             {canManage && (
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={() => onEdit(account)}
-              >
-                Edit
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => onEdit(account)}
+                >
+                  Edit
+                </Button>
+                {onStartConnect && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => onStartConnect(account.platform)}
+                  >
+                    {account.hasCredential ? 'Reconnect' : 'Connect'}
+                  </Button>
+                )}
+                {onDisconnect && account.hasCredential && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={disconnectingId === account.id}
+                    onClick={() => onDisconnect(account)}
+                  >
+                    {disconnectingId === account.id
+                      ? 'Disconnecting…'
+                      : 'Disconnect'}
+                  </Button>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>

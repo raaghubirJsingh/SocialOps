@@ -92,6 +92,17 @@ export const socialAccountApi = {
     }),
 
   /**
+   * Agency disconnect: removes ONLY the 1:1 credential row. The SocialAccount
+   * metadata survives and simply reports `hasCredential: false` afterwards.
+   * NO tenant header here - apiFetch attaches the verified `X-Organization-Id`.
+   */
+  disconnectForClient: (clientId: string, socialAccountId: string) =>
+    apiFetch<void>(
+      `/clients/${clientId}/social-accounts/${socialAccountId}/connection`,
+      { method: 'DELETE' },
+    ),
+
+  /**
    * Client self-service connect start. The tenant context is the EXPLICIT
    * `X-Client-Id` header (there is no organization context for a client owner);
    * the backend re-verifies it against the User -> Client binding and the
@@ -104,5 +115,15 @@ export const socialAccountApi = {
     apiFetch<OAuthConnectResponse>(
       `/client/me/social-accounts/${platform}/connect`,
       { headers: { 'X-Client-Id': clientId } },
+    ),
+
+  /**
+   * Client self-service disconnect. Tenant context is the EXPLICIT
+   * `X-Client-Id` header; the backend re-verifies it before deleting.
+   */
+  disconnectMine: (clientId: string, socialAccountId: string) =>
+    apiFetch<void>(
+      `/client/me/social-accounts/${socialAccountId}/connection`,
+      { method: 'DELETE', headers: { 'X-Client-Id': clientId } },
     ),
 };

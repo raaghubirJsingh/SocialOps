@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -15,6 +16,7 @@ import {
   ApiBearerAuth,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -127,6 +129,34 @@ export class SocialAccountMeController {
       client.id,
       socialAccountId,
       dto as UpdateSocialAccountDto,
+    );
+  }
+
+  /**
+   * Disconnect one of my own social accounts. Removes ONLY the 1:1 credential;
+   * the metadata row stays. `clientId` comes from the guard, never from input.
+   */
+  @Delete(':socialAccountId/connection')
+  @Public()
+  @UseGuards(ClientAccessGuard)
+  @HttpCode(204)
+  @ApiOperation({
+    summary: 'Disconnect one of my own social accounts.',
+    description:
+      'Deletes only the 1:1 credential row; the metadata row is preserved. Local deletion only - no token is revoked at the platform in this version. Idempotent.',
+  })
+  @ApiNoContentResponse({ description: 'The stored credential was removed.' })
+  @ApiForbiddenResponse({ description: 'No Client binding for this user.' })
+  @ApiNotFoundResponse({ description: 'Not found for this Client.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  async disconnect(
+    @CurrentClient() client: Client,
+    @Param('socialAccountId', ParseUUIDPipe) socialAccountId: string,
+  ): Promise<void> {
+    await this.socialAccountsService.disconnect(
+      client.id,
+      socialAccountId,
+      client.ownerUserId as string,
     );
   }
 }

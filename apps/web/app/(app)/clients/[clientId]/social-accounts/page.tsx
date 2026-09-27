@@ -26,6 +26,7 @@ import { useSession } from '@/hooks/use-session';
 import {
   useCreateSocialAccount,
   useSocialAccounts,
+  useDisconnectSocialAccount,
   useStartOAuthConnect,
   useUpdateSocialAccount,
 } from '@/hooks/use-social-accounts';
@@ -66,6 +67,29 @@ export default function AgencyClientSocialAccountsPage() {
   const createMutation = useCreateSocialAccount('agency', clientId);
   const updateMutation = useUpdateSocialAccount('agency', clientId);
   const connectMutation = useStartOAuthConnect('agency', clientId);
+  const disconnectMutation = useDisconnectSocialAccount('agency', clientId);
+  const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+
+  /**
+   * Disconnect removes ONLY the stored credential; the metadata row is kept by
+   * the backend, so the list simply flips the row back to "Connect".
+   */
+  const handleDisconnect = async (account: SocialAccountDto) => {
+    setServerError(null);
+    setDisconnectingId(account.id);
+    try {
+      await disconnectMutation.mutateAsync(account.id);
+    } catch (error) {
+      setServerError(
+        describeApiError(
+          error,
+          'Unable to disconnect this account. Please try again.',
+        ),
+      );
+    } finally {
+      setDisconnectingId(null);
+    }
+  };
 
   /**
    * OAuth requires a FULL-PAGE navigation: the authorization code is returned
@@ -233,6 +257,13 @@ export default function AgencyClientSocialAccountsPage() {
             setServerError(null);
             setFormState({ mode: 'edit', account });
           }}
+          onStartConnect={(platform) => {
+            void startConnect(platform);
+          }}
+          onDisconnect={(account) => {
+            void handleDisconnect(account);
+          }}
+          disconnectingId={disconnectMutation.isPending ? disconnectingId : null}
         />
       )}
     </div>

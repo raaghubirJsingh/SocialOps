@@ -30,6 +30,38 @@ export const SOCIAL_ACCOUNT_SELECT = {
 } as const;
 
 /**
+ * LIST-ONLY projection: the metadata allowlist plus the derived
+ * `hasCredential` signal.
+ *
+ * The 1:1 credential row is fetched as an EXISTENCE PROBE ONLY - just its id -
+ * and the relation is stripped by `toSocialAccountDto` before the response
+ * leaves the service. No ciphertext, scope, expiry, or key-version field is
+ * ever selected here, so nothing about the credential can leak; the client
+ * learns only WHETHER one exists.
+ *
+ * This stays separate from SOCIAL_ACCOUNT_SELECT on purpose: single reads and
+ * create/update returns keep the pure metadata shape, and the colocated DTO
+ * spec continues to assert that allowlist is secret-free.
+ */
+export const SOCIAL_ACCOUNT_LIST_SELECT = {
+  ...SOCIAL_ACCOUNT_SELECT,
+  credential: { select: { id: true } },
+} as const;
+
+type CredentialProbe = { credential: { id: string } | null };
+
+/**
+ * Strip the credential relation and expose only the boolean the UI needs to
+ * choose between "Connect" and "Reconnect". The relation never reaches the wire.
+ */
+function toSocialAccountDto<T extends Record<string, unknown>>(
+  row: T & CredentialProbe,
+): Omit<T, 'credential'> & { hasCredential: boolean } {
+  const { credential, ...metadata } = row;
+  return { ...metadata, hasCredential: credential !== null };
+}
+
+/**
  * SocialAccount metadata domain service (Client Operations V1).
  *
  * Every method is scoped by a `clientId` that the caller obtained from a
@@ -44,27 +76,32 @@ export const SOCIAL_ACCOUNT_SELECT = {
 export class SocialAccountsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  listForClient(clientId: string, filters: ListSocialAccountsQuery) {
-    return this.prisma.socialAccount.findMany({
+  /**
+   * List with the derived `hasCredential` flag. The credential relation is
+   * probed for existence only and stripped before returning.
+   */
+  async listForClient(clientId: string, filters: ListSocialAccountsQuery) {
+    const rows = await this.prisma.socialAccount.findMany({
       where: {
         clientId,
         ...(filters.platform ? { platform: filters.platform } : {}),
         ...(filters.isActive === undefined ? {} : { isActive: filters.isActive }),
       },
-      select: SOCIAL_ACCOUNT_SELECT,
+      select: SOCIAL_ACCOUNT_LIST_SELECT,
       orderBy: [{ platform: 'asc' }, { createdAt: 'desc' }],
       take: filters.take,
     });
+    return rows.map(toSocialAccountDto);
   }
 
   /** Tenant-scoped single read: uniform 404 when missing or out of scope. */
   async findOneForClient(clientId: string, socialAccountId: string) {
     const account = await this.prisma.socialAccount.findFirst({
       where: { id: socialAccountId, clientId },
-      select: SOCIAL_ACCOUNT_SELECT,
+      select: SOCIAL_ACCOUNT_LIST_SELECT,
     });
     if (!account) throw new NotFoundException('Social account not found');
-    return account;
+    return toSocialAccountDto(account);
   }
 
   async create(
@@ -73,7 +110,7 @@ export class SocialAccountsService {
     dto: CreateSocialAccountDto,
   ) {
     try {
-      return await this.prisma.socialAccount.create({
+      const created = await this.prisma.socialAccount.create({
         data: {
           clientId,
           platform: dto.platform,
@@ -84,8 +121,10 @@ export class SocialAccountsService {
           isActive: dto.isActive ?? true,
           createdByUserId: actorUserId,
         },
-        select: SOCIAL_ACCOUNT_SELECT,
+        select: SOCIAL_ACCOUNT_LIST_SELECT,
       });
+      // A brand-new metadata row has no credential yet.
+      return toSocialAccountDto(created);
     } catch (error) {
       throwIfDuplicatePlatformAccount(error);
       throw error;
@@ -102,18 +141,67 @@ export class SocialAccountsService {
     await this.findOneForClient(clientId, socialAccountId);
 
     try {
-      return await this.prisma.socialAccount.update({
+      const updated = await this.prisma.socialAccount.update({
         where: { id: socialAccountId },
         // `dto` is a `.strict()` metadata payload: an undefined entry means
         // "leave unchanged" (Prisma ignores undefined), and `null` clears the
         // optional field.
         data: { ...dto },
-        select: SOCIAL_ACCOUNT_SELECT,
+        select: SOCIAL_ACCOUNT_LIST_SELECT,
       });
+      return toSocialAccountDto(updated);
     } catch (error) {
       throwIfDuplicatePlatformAccount(error);
       throw error;
     }
+  }
+
+  /**
+   * Disconnect a social account: remove ONLY the 1:1 credential row.
+   *
+   * The parent SocialAccount METADATA row is deliberately preserved - a client
+   * keeps its record of which platforms it operates after the live connection
+   * is removed, and the row simply reports `hasCredential: false` afterwards.
+   * The SocialAccount itself is never deleted here.
+   *
+   * Scope discipline mirrors every other method: `clientId` is proven by the
+   * calling guard (ACTIVE agency relationship, or the X-Client-Id binding), and
+   * the credential is located through the tenant-scoped account id, so a
+   * caller cannot address another tenant's credential by guessing an id. A
+   * miss is a uniform 404 with no existence leak.
+   *
+   * Revocation scope (V1, decision D1): this is a LOCAL delete. No outbound
+   * call is made to the platform, so the token is destroyed on our side but may
+   * remain live at the provider until it expires or is revoked there. Platform
+   * revocation is deliberately deferred rather than silently half-done.
+   *
+   * The delete is idempotent: a repeated call removes zero rows and still
+   * succeeds, so a double-click cannot fail the request.
+   */
+  async disconnect(
+    clientId: string,
+    socialAccountId: string,
+    actorUserId: string,
+  ): Promise<void> {
+    const account = await this.prisma.socialAccount.findFirst({
+      where: { id: socialAccountId, clientId },
+      select: { id: true, platform: true },
+    });
+    if (!account) throw new NotFoundException('Social account not found');
+
+    await this.prisma.socialAccountCredential.deleteMany({
+      where: { socialAccountId: account.id },
+    });
+
+    // Audit trail: disconnect is a security-relevant action (AGENTS.md §11).
+    await this.prisma.clientEvent.create({
+      data: {
+        clientId,
+        actorUserId,
+        action: 'social-account.oauth.disconnected',
+        details: { platform: account.platform },
+      },
+    });
   }
 }
 

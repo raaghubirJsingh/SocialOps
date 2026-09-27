@@ -119,3 +119,31 @@ export function useStartOAuthConnect(
     retry: 0,
   });
 }
+
+/**
+ * Disconnect a social account: removes ONLY the stored credential, keeping the
+ * metadata row (the account simply reports `hasCredential: false` afterwards).
+ *
+ * The list is invalidated on settle so the row re-renders with the new flag.
+ * No optimistic update: the credential's existence is server-owned state and
+ * the server response defines the truth.
+ */
+export function useDisconnectSocialAccount(
+  scope: SocialAccountScope,
+  clientId: string,
+) {
+  const queryClient = useQueryClient();
+  const { activeOrganizationId } = useActiveOrganization();
+
+  return useMutation<void, Error, string>({
+    mutationFn: (socialAccountId) =>
+      scope === 'agency'
+        ? socialAccountApi.disconnectForClient(clientId, socialAccountId)
+        : socialAccountApi.disconnectMine(clientId, socialAccountId),
+    retry: 0,
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.socialAccounts(scope, activeOrganizationId, clientId),
+      }),
+  });
+}

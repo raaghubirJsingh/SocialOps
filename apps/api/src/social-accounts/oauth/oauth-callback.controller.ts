@@ -16,6 +16,8 @@ import {
 import type { Response } from 'express';
 
 import { isSocialPlatform } from '../../social-accounts/constants/social-platforms.js';
+import { OAuthStateService } from './oauth-state.service.js';
+import type { OAuthStatePayload } from './oauth-state.service.js';
 import { SocialAccountsOAuthService } from './social-accounts-oauth.service.js';
 
 /**
@@ -42,11 +44,36 @@ type CallbackErrorCode =
 @ApiTags('social-accounts')
 @Controller('social-accounts')
 export class SocialAccountOAuthCallbackController {
-  constructor(private readonly oauth: SocialAccountsOAuthService) {}
+  constructor(
+    private readonly oauth: SocialAccountsOAuthService,
+    private readonly state: OAuthStateService,
+  ) {}
 
   @Get('callback/:platform')
   @ApiExcludeEndpoint() // browser-facing redirect; kept out of Swagger paths
   @ApiOkResponse({ description: '302 redirect to the frontend.' })
+  /**
+   * Resolve where to send the browser after the handshake (Design A).
+   *
+   * The destination is DERIVED SERVER-SIDE from the verified tenant context in
+   * the state - never from a client-supplied path. Accepting a `returnTo` from
+   * the browser would be an open-redirect: the state is HMAC-signed, which
+   * proves we minted it, but the USER starts the flow and would choose the
+   * value, so they could aim the post-consent redirect at an attacker's site
+   * while still passing through our real handshake. Deriving the path from
+   * `clientId` + `source` removes that surface entirely - there is nothing for
+   * a caller to tamper with.
+   *
+   * Falls back to `/` only when no verified payload exists (invalid/missing
+   * state), which is the one case where the destination genuinely is unknown.
+   */
+  private destinationFor(payload: OAuthStatePayload | null): string {
+    if (!payload) return '/';
+    return payload.source === 'AGENCY'
+      ? `/clients/${encodeURIComponent(payload.clientId)}/social-accounts`
+      : `/client/social-accounts?clientId=${encodeURIComponent(payload.clientId)}`;
+  }
+
   async callback(
     @Param('platform') rawPlatform: string,
     @Query('code') code: string | undefined,
@@ -56,24 +83,42 @@ export class SocialAccountOAuthCallbackController {
     const frontendBase = (
       process.env.PUBLIC_WEB_URL ?? 'http://localhost:3000'
     ).replace(/\/$/, '');
+    // Every redirect is absolute, built from the configured base plus a
+    // destination WE derived - never from untrusted input.
+    const to = (destination: string, status: string, platform?: string) => {
+      const params = new URLSearchParams({ status });
+      if (platform) params.set('platform', platform);
+      res.redirect(`${frontendBase}${destination}?${params.toString()}`);
+    };
 
     if (!isSocialPlatform(rawPlatform) || !state) {
-      res.redirect(`${frontendBase}/?status=oauth_state_invalid`);
+      to('/', 'oauth_state_invalid');
       return;
     }
+
+    // Verify + consume the state HERE so the destination is known before the
+    // exchange and on every failure path. completeConnect receives the
+    // already-verified payload and therefore never re-consumes the nonce.
+    let payload: OAuthStatePayload;
+    try {
+      payload = await this.state.verify(state);
+    } catch {
+      // Forged, expired or replayed state: indistinguishable to the browser.
+      to('/', 'oauth_state_invalid');
+      return;
+    }
+
+    const destination = this.destinationFor(payload);
+
     if (!code) {
       // User denied consent at the platform - a normal, non-hostile exit.
-      res.redirect(
-        `${frontendBase}/?status=oauth_denied&platform=${rawPlatform}`,
-      );
+      to(destination, 'oauth_denied', rawPlatform);
       return;
     }
 
     try {
-      await this.oauth.completeConnect(rawPlatform, code, state);
-      res.redirect(
-        `${frontendBase}/?status=connected&platform=${rawPlatform}`,
-      );
+      await this.oauth.completeConnect(rawPlatform, code, payload);
+      to(destination, 'connected', rawPlatform);
     } catch (error) {
       let errorCode: CallbackErrorCode = 'oauth_exchange_failed';
       if (
@@ -86,7 +131,7 @@ export class SocialAccountOAuthCallbackController {
       ) {
         errorCode = 'oauth_forbidden';
       }
-      res.redirect(`${frontendBase}/?status=${errorCode}&platform=${rawPlatform}`);
+      to(destination, errorCode, rawPlatform);
     }
   }
 }

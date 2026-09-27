@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 import { TokenEncryptionService } from '../../crypto/token-encryption.service.js';
 import type { JwtAccessPayload } from '../../auth/types/jwt-payload.type.js';
 import { OAuthStateService } from './oauth-state.service.js';
+import type { OAuthStatePayload } from './oauth-state.service.js';
 import { getOAuthProvider, oauthRedirectUri } from './providers/oauth-providers.js';
 
 /** Expiry buffer: treat tokens expiring within 60s as already expired. */
@@ -146,9 +147,11 @@ export class SocialAccountsOAuthService {
   async completeConnect(
     platform: SocialPlatform,
     code: string,
-    state: string,
+    payload: OAuthStatePayload,
   ): Promise<{ clientId: string }> {
-    const payload = await this.state.verify(state);
+    // The callback controller has ALREADY verified and consumed the state, so
+    // this service never re-consumes the nonce. The tenant context is
+    // therefore taken from the verified payload, never from the request.
     if (payload.platform !== platform) {
       throw new ForbiddenException('Invalid OAuth state');
     }

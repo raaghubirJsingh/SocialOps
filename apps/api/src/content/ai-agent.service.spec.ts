@@ -10,6 +10,8 @@ import { ContentStatus, OrganizationRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AIAgentService } from './ai-agent.service.js';
 import { LlmService } from './ai/llm.service.js';
+import { MockLlmProvider } from './ai/mock-llm.provider.js';
+import type { LlmProvider } from './ai/llm.types.js';
 import { contentHashOf } from './content-hash.js';
 
 const CLIENT_ID = '11111111-1111-4111-8111-111111111111';
@@ -42,9 +44,32 @@ function makeService(tx: ReturnType<typeof makeTxMock>) {
   return {
     service: new AIAgentService(
       prisma as unknown as PrismaService,
-      new LlmService(),
+      makeStubLlm(),
     ),
   };
+}
+
+/**
+ * Hermetic LLM double.
+ *
+ * These are UNIT tests: they must never depend on ambient process.env and must
+ * never make a network call. Constructing a real `LlmService()` reads
+ * LLM_PROVIDER/OPENAI_API_KEY, so once a developer configures a real key the
+ * suite would silently start calling the live provider (and fail, or worse,
+ * spend money and assert on non-deterministic output).
+ *
+ * The stub delegates to `MockLlmProvider` - which is pure, reads no env, and
+ * makes no network call - so the deterministic output format the assertions
+ * below depend on is preserved exactly.
+ */
+function makeStubLlm() {
+  const deterministic = new MockLlmProvider();
+  return {
+    providerName: 'mock',
+    generate: jest.fn((params: Parameters<LlmProvider['generate']>[0]) =>
+      deterministic.generate(params),
+    ),
+  } as unknown as LlmService;
 }
 
 /** Happy-path transaction mocks: a MEMBER bot acting on unlocked content. */

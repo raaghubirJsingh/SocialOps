@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   NotFoundException,
@@ -15,6 +16,7 @@ import {
   ApiBearerAuth,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -155,6 +157,40 @@ export class SocialAccountsController {
       clientId,
       socialAccountId,
       dto as UpdateSocialAccountDto,
+    );
+  }
+
+  /**
+   * Disconnect a social account: deletes ONLY the 1:1 credential row and keeps
+   * the metadata. Requires OWNER/ADMIN, the verified organization context, and
+   * an in-scope client.
+   */
+  @Delete(':socialAccountId/connection')
+  @HttpCode(204)
+  @UseGuards(RoleGuard)
+  @RequireMinimumRole('ADMIN')
+  @ApiOperation({
+    summary: 'Disconnect a social account (removes the stored credential).',
+    description:
+      'Deletes only the 1:1 credential row; the SocialAccount metadata row is preserved and simply reports no connection afterwards. Local deletion only - no token is revoked at the platform in this version. Idempotent.',
+  })
+  @ApiNoContentResponse({ description: 'The stored credential was removed.' })
+  @ApiForbiddenResponse({ description: 'Requires OWNER or ADMIN.' })
+  @ApiNotFoundResponse({
+    description: 'Social account not found for this Client.',
+  })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token.' })
+  async disconnect(
+    @CurrentUser() user: JwtAccessPayload,
+    @CurrentOrganization() organization: RequestOrganizationContext,
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Param('socialAccountId', ParseUUIDPipe) socialAccountId: string,
+  ): Promise<void> {
+    await this.requireClientInScope(clientId, organization.id);
+    await this.socialAccountsService.disconnect(
+      clientId,
+      socialAccountId,
+      user.sub,
     );
   }
 
