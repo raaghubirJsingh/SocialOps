@@ -11,6 +11,7 @@ import {
   type SocialAccountFormSubmission,
 } from '@/components/social-accounts/social-account-form';
 import { SocialAccountList } from '@/components/social-accounts/social-account-list';
+import { OAuthConnectButtons } from '@/components/social-accounts/oauth-connect-buttons';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -25,10 +26,11 @@ import { useSession } from '@/hooks/use-session';
 import {
   useCreateSocialAccount,
   useSocialAccounts,
+  useStartOAuthConnect,
   useUpdateSocialAccount,
 } from '@/hooks/use-social-accounts';
 import { describeApiError } from '@/lib/api-error-messages';
-import type { SocialAccountDto } from '@/types/social-account';
+import type { SocialAccountDto, SocialPlatform } from '@/types/social-account';
 
 /**
  * Agency-side Social Accounts for one Client (Client Operations V1).
@@ -63,6 +65,18 @@ export default function AgencyClientSocialAccountsPage() {
   const accountsQuery = useSocialAccounts('agency', clientId);
   const createMutation = useCreateSocialAccount('agency', clientId);
   const updateMutation = useUpdateSocialAccount('agency', clientId);
+  const connectMutation = useStartOAuthConnect('agency', clientId);
+
+  /**
+   * OAuth requires a FULL-PAGE navigation: the authorization code is returned
+   * to the platform's own callback, which the backend then exchanges. A fetch
+   * or popup-less XHR can never complete a handshake, so we hand the browser
+   * to the authorize URL and leave the page.
+   */
+  const startConnect = async (platform: SocialPlatform) => {
+    const { authorizeUrl } = await connectMutation.mutateAsync(platform);
+    window.location.assign(authorizeUrl);
+  };
 
   const activeMembership = membershipsQuery.data?.memberships.find(
     (membership) => membership.organization.id === activeOrganizationId,
@@ -156,6 +170,18 @@ export default function AgencyClientSocialAccountsPage() {
       </header>
 
       <MetadataOnlyNotice />
+
+      {/* The backend requires OWNER/ADMIN on the connect route (RoleGuard +
+          @RequireMinimumRole('ADMIN')); canManage is the UI mirror of that. */}
+      {canManage && (
+        <OAuthConnectButtons
+          accounts={accountsQuery.data ?? []}
+          scope="agency"
+          clientId={clientId}
+          canConnect={canManage}
+          onStartConnect={startConnect}
+        />
+      )}
 
       {formState.mode !== 'closed' && canManage && (
         <Card>

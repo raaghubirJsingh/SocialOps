@@ -8,7 +8,9 @@ import { queryKeys } from '@/lib/query-keys';
 import { socialAccountApi } from '@/lib/social-account-api';
 import type {
   CreateSocialAccountRequest,
+  OAuthConnectResponse,
   SocialAccountDto,
+  SocialPlatform,
   UpdateSocialAccountRequest,
 } from '@/types/social-account';
 
@@ -90,5 +92,30 @@ export function useUpdateSocialAccount(
       queryClient.invalidateQueries({
         queryKey: queryKeys.socialAccounts(scope, activeOrganizationId, clientId),
       }),
+  });
+}
+
+/**
+ * Start an OAuth connect handshake (Decision 013).
+ *
+ * Returns ONLY the short-lived authorize URL - no credential, no token, and
+ * nothing that should ever be cached. The caller MUST hand the browser to that
+ * URL with a full-page redirect: an OAuth authorization code can only be
+ * obtained by navigating to the platform, never by a background fetch.
+ *
+ * Scope discipline matches the metadata hooks: the agency path relies on the
+ * globally attached `X-Organization-Id`, the client path on the explicit
+ * `X-Client-Id` binding.
+ */
+export function useStartOAuthConnect(
+  scope: SocialAccountScope,
+  clientId: string,
+) {
+  return useMutation<OAuthConnectResponse, Error, SocialPlatform>({
+    mutationFn: (platform) =>
+      scope === 'agency'
+        ? socialAccountApi.startOAuthConnectForClient(clientId, platform)
+        : socialAccountApi.startOAuthConnectMine(clientId, platform),
+    retry: 0,
   });
 }

@@ -10,6 +10,7 @@ import {
   type SocialAccountFormSubmission,
 } from '@/components/social-accounts/social-account-form';
 import { SocialAccountList } from '@/components/social-accounts/social-account-list';
+import { OAuthConnectButtons } from '@/components/social-accounts/oauth-connect-buttons';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -21,12 +22,13 @@ import {
 import {
   useCreateSocialAccount,
   useSocialAccounts,
+  useStartOAuthConnect,
   useUpdateSocialAccount,
 } from '@/hooks/use-social-accounts';
 import { useSession } from '@/hooks/use-session';
 import { describeApiError } from '@/lib/api-error-messages';
 import { loadBoundClientId } from '@/lib/client-session';
-import type { SocialAccountDto } from '@/types/social-account';
+import type { SocialAccountDto, SocialPlatform } from '@/types/social-account';
 
 /**
  * Client self-service: my social accounts (METADATA ONLY).
@@ -58,6 +60,18 @@ export default function ClientSocialAccountsPage() {
   const accountsQuery = useSocialAccounts('mine', clientId);
   const createMutation = useCreateSocialAccount('mine', clientId);
   const updateMutation = useUpdateSocialAccount('mine', clientId);
+  const connectMutation = useStartOAuthConnect('mine', clientId);
+
+  /**
+   * OAuth requires a FULL-PAGE navigation: the authorization code is returned
+   * to the platform's own callback, which the backend then exchanges. A fetch
+   * or popup-less XHR can never complete a handshake, so we hand the browser
+   * to the authorize URL and leave the page.
+   */
+  const startConnect = async (platform: SocialPlatform) => {
+    const { authorizeUrl } = await connectMutation.mutateAsync(platform);
+    window.location.assign(authorizeUrl);
+  };
 
   if (sessionLoading || !isAuthenticated) {
     return (
@@ -143,6 +157,14 @@ export default function ClientSocialAccountsPage() {
       </header>
 
       <MetadataOnlyNotice />
+
+      <OAuthConnectButtons
+        accounts={accountsQuery.data ?? []}
+        scope="mine"
+        clientId={clientId}
+        canConnect={Boolean(clientId)}
+        onStartConnect={startConnect}
+      />
 
       {formState.mode !== 'closed' && (
         <Card>
