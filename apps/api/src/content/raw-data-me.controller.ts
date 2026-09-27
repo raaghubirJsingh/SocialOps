@@ -145,7 +145,11 @@ export class RawDataMeController {
       client.id,
       body.contentType,
     );
-    return this.s3Service.createPresignedPutUrl(objectKey, body.contentType);
+    return this.s3Service.createPresignedPutUrl(
+      objectKey,
+      body.contentType,
+      body.contentLength,
+    );
   }
 
   @Post()

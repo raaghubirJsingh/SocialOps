@@ -6,7 +6,12 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+  type HeadObjectCommandOutput,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 import {
@@ -101,13 +106,22 @@ export class S3Service {
   /**
    * Mint a short-lived presigned PUT URL for `objectKey`.
    *
-   * Content type is pinned into the signed request, so the URL can only be
-   * used for exactly the negotiated upload. The presigner does not touch the
-   * object - no bytes flow through this process.
+   * TWO properties are pinned into the signature:
+   *
+   *   1. ContentType - the URL can only be used for exactly the negotiated type.
+   *   2. ContentLength - so S3 itself ENFORCES the declared size. Without this
+   *      a client could declare 1 KB in the DTO and still PUT 10 GB, because
+   *      the DTO only validates the DECLARED number; nothing downstream ever
+   *      saw the real body size. Pinning it makes an oversized upload fail at
+   *      the bucket.
+   *
+   * The presigner does not touch the object - no bytes flow through this
+   * process.
    */
   async createPresignedPutUrl(
     objectKey: string,
     contentType: AllowedUploadContentType,
+    contentLength: number,
   ): Promise<PresignedUploadResult> {
     const client = this.getClient();
     const bucket = this.getBucket();
@@ -117,12 +131,14 @@ export class S3Service {
       Bucket: bucket,
       Key: objectKey,
       ContentType: contentType,
+      // Part of the signature: S3 rejects a body whose length differs.
+      ContentLength: contentLength,
     });
 
     try {
       const uploadUrl = await getSignedUrl(client, command, { expiresIn });
       this.logger.debug(
-        `Minted presigned PUT URL (ttl=${expiresIn}s) for key ${objectKey}`,
+        `Minted presigned PUT URL (ttl=${expiresIn}s, len=${contentLength}) for key ${objectKey}`,
       );
       return { uploadUrl, objectKey, expiresIn };
     } catch (error) {
@@ -130,6 +146,65 @@ export class S3Service {
       this.logger.error(`Presigning failed for key ${objectKey}: ${message}`);
       throw new ServiceUnavailableException(
         'Unable to create an upload URL at this time',
+      );
+    }
+  }
+
+  /**
+   * Verify a stored object actually EXISTS and matches what the caller claims.
+   *
+   * This is provenance hardening for the intake record. Without it a caller
+   * could attach ANY well-formed tenant-prefixed key to a RawData row -
+   * including one that was never uploaded, or that is a different size - and
+   * the immutable provenance record would be a lie.
+   *
+   * HeadObject reads metadata only (no bytes flow through this process). The
+   * caller MUST pass the tenant-prefixed key it is about to persist so this
+   * cannot become a cross-tenant existence oracle on its own; prefix
+   * validation happens before/alongside this in the intake path.
+   */
+  async verifyUploadedObject(params: {
+    objectKey: string;
+    expectedContentType: AllowedUploadContentType;
+    expectedLength: number;
+  }): Promise<void> {
+    const client = this.getClient();
+    const bucket = this.getBucket();
+    const { objectKey, expectedContentType, expectedLength } = params;
+
+    let head: HeadObjectCommandOutput;
+    try {
+      head = await client.send(
+        new HeadObjectCommand({ Bucket: bucket, Key: objectKey }),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // 404/NoSuchKey is the common case: the client minted a URL and then
+      // never (or unsuccessfully) performed the PUT.
+      this.logger.warn(`Uploaded object not found: ${objectKey} (${message})`);
+      throw new BadRequestException(
+        'The uploaded file could not be found in storage. Please upload it again.',
+      );
+    }
+
+    const actualLength = head.ContentLength ?? 0;
+    if (actualLength !== expectedLength) {
+      this.logger.warn(
+        `Size mismatch for ${objectKey}: claimed ${expectedLength}, stored ${actualLength}`,
+      );
+      throw new BadRequestException(
+        'The uploaded file does not match the declared size. Please upload it again.',
+      );
+    }
+
+    // ContentType is metadata S3 echoes back; a mismatch means the browser
+    // PUT something other than what was negotiated.
+    if (head.ContentType && head.ContentType !== expectedContentType) {
+      this.logger.warn(
+        `Content-type mismatch for ${objectKey}: claimed ${expectedContentType}, stored ${head.ContentType}`,
+      );
+      throw new BadRequestException(
+        'The uploaded file type does not match the declared type. Please upload it again.',
       );
     }
   }

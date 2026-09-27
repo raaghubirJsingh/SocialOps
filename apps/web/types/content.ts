@@ -198,8 +198,12 @@ export interface InternalNoteDto {
 }
 
 /**
- * RawData intake. `contentHash` and `storageRef` are deliberately absent: the
- * hash is computed server-side and object storage is deferred (no file upload).
+ * RawData intake. `contentHash` is never sent - the server computes it.
+ *
+ * `storageRef` / `byteSize` / `mimeType` are only set when a file was actually
+ * uploaded through the presigned-PUT flow. The server re-validates the
+ * tenant prefix AND verifies the object exists at the declared size/type
+ * before persisting the immutable record.
  */
 export interface CreateRawDataRequest {
   source: RawDataSource;
@@ -209,4 +213,53 @@ export interface CreateRawDataRequest {
   extractedText?: string | null;
   metadata?: Record<string, unknown> | null;
   byteSize?: number | null;
+  storageRef?: string | null;
+}
+
+/* -------------------------------------------------------------------------
+ * Presigned upload (approved AGENTS.md §13 override, zero-buffer).
+ *
+ * The browser PUTs the bytes straight to object storage. The backend never
+ * sees file content - only metadata.
+ * ---------------------------------------------------------------------- */
+
+/** Mirrors the server allowlist in apps/api/src/s3/s3.constants.ts. */
+export const ALLOWED_UPLOAD_CONTENT_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+] as const;
+
+export type AllowedUploadContentType =
+  (typeof ALLOWED_UPLOAD_CONTENT_TYPES)[number];
+
+/** Hard ceiling per object; mirrors MAX_UPLOAD_BYTES on the server. */
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+export function isAllowedUploadContentType(
+  value: string,
+): value is AllowedUploadContentType {
+  return (ALLOWED_UPLOAD_CONTENT_TYPES as readonly string[]).includes(value);
+}
+
+/** Metadata-only request body for the presigned-PUT endpoint. */
+export interface PresignedUploadRequest {
+  filename: string;
+  contentType: AllowedUploadContentType;
+  contentLength: number;
+}
+
+export interface PresignedUploadResponse {
+  uploadUrl: string;
+  objectKey: string;
+  expiresIn: number;
+}
+
+/** What the browser needs to attach to the intake record. */
+export interface UploadedFileRef {
+  storageRef: string;
+  byteSize: number;
+  mimeType: AllowedUploadContentType;
+  originalFileName: string;
 }

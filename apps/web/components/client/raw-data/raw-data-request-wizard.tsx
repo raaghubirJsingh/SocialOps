@@ -47,15 +47,21 @@ const emptyResolver: Resolver<WizardValues> = async (values) => ({
 /**
  * Pack the wizard's validated values into a CreateRawDataRequest for the
  * backend. The structured brief fields are stored as metadata JSON; the main
- * text body (brief) is sent as extractedText. File-upload fields (mimeType,
- * originalFileName, byteSize) are left unset because V1 has no file upload.
+ * text body (brief) is sent as extractedText.
+ *
+ * `attachment` is the uploaded-file reference produced by the presigned-PUT
+ * flow. When present it is attached as storageRef + byteSize + mimeType +
+ * originalFileName; the server re-validates the tenant prefix and verifies the
+ * object actually exists at that size/type before persisting the record.
  *
  * Exported so the P1 simplified (text-first) flow can REUSE this exact packing
  * path instead of duplicating it - the submitted metadata vocabulary therefore
- * stays identical to the legacy wizard. No behaviour change: this keyword is
- * the only difference from the original declaration.
+ * stays identical to the legacy wizard.
  */
-export function packCreateRawDataRequest(values: Record<string, unknown>): CreateRawDataRequest {
+export function packCreateRawDataRequest(
+  values: Record<string, unknown>,
+  attachment?: UploadedFileRef | null,
+): CreateRawDataRequest {
   const metadata: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(values)) {
@@ -79,6 +85,14 @@ export function packCreateRawDataRequest(values: Record<string, unknown>): Creat
     source: 'CLIENT_FORM',
     extractedText: brief || undefined,
     metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+    ...(attachment
+      ? {
+          storageRef: attachment.storageRef,
+          byteSize: attachment.byteSize,
+          mimeType: attachment.mimeType,
+          originalFileName: attachment.originalFileName,
+        }
+      : {}),
   };
 }
 

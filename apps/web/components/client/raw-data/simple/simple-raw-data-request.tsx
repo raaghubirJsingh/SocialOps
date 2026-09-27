@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { packCreateRawDataRequest } from '@/components/client/raw-data/raw-data-request-wizard';
+import { RawDataDropzone } from '@/components/client/raw-data/raw-data-dropzone';
 import { StoryInputStep } from '@/components/client/raw-data/simple/story-input-step';
 import {
   UnderstandingStep,
@@ -12,6 +13,7 @@ import { SubmissionConfirmation } from '@/components/client/raw-data/submission-
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useSession } from '@/hooks/use-session';
 import { useSimpleRawDataDraft } from '@/hooks/use-simple-raw-data-draft';
+import { useRawDataUpload } from '@/hooks/use-raw-data';
 import { describeApiError } from '@/lib/api-error-messages';
 import { rawDataApi } from '@/lib/raw-data-api';
 import {
@@ -27,7 +29,7 @@ import {
   sanitizeOverrides,
   type Overrides,
 } from '@/lib/raw-data-request-state';
-import type { RawDataDto } from '@/types/content';
+import type { RawDataDto, UploadedFileRef } from '@/types/content';
 
 /**
  * P1 - simplified, text-first client request flow (web only).
@@ -52,6 +54,27 @@ import type { RawDataDto } from '@/types/content';
 export function SimpleRawDataRequest({ clientId }: { clientId: string }) {
   const { session, isLoading } = useSession();
   const { save, load, clear } = useSimpleRawDataDraft(clientId);
+
+  // Optional raw-media attachments. Uploaded files are held in component
+  // state (NOT the localStorage draft) and are deliberately PRESERVED when a
+  // submit fails, so a transient error never costs the user their uploads.
+  const { uploadFile } = useRawDataUpload('mine', clientId);
+  const [attachments, setAttachments] = useState<UploadedFileRef[]>([]);
+  const [attachError, setAttachError] = useState<string | null>(null);
+
+  const handleUpload = useCallback(
+    async (file: File) => {
+      const ref = await uploadFile(file);
+      setAttachError(null);
+      setAttachments((current) => [...current, ref]);
+      return ref;
+    },
+    [uploadFile],
+  );
+
+  const removeAttachment = useCallback((storageRef: string) => {
+    setAttachments((current) => current.filter((f) => f.storageRef !== storageRef));
+  }, []);
 
   // Restore this flow's OWN draft key (never the legacy wizard key).
   //
@@ -162,10 +185,16 @@ export function SimpleRawDataRequest({ clientId }: { clientId: string }) {
       // Same packing path and payload shape as the legacy wizard: the story is
       // `extractedText`, composed values (derivation + R1 overrides) ride in
       // `metadata` under EXISTING keys. No API/contract change.
-      const request = packCreateRawDataRequest({
-        ...composeValues(derivation, overrides),
-        brief: trimmed,
-      });
+      const request = packCreateRawDataRequest(
+        {
+          ...composeValues(derivation, overrides),
+          brief: trimmed,
+        },
+        // Only the first attachment is recorded on the insert-only record; the
+        // endpoint carries a single storageRef. Additional files remain listed
+        // in the UI and are left for a future multi-asset endpoint.
+        attachments[0] ?? null,
+      );
       const result = await rawDataApi.createMine(clientId, request);
       setRecord(result);
       setSubmitted(true);
@@ -175,7 +204,7 @@ export function SimpleRawDataRequest({ clientId }: { clientId: string }) {
     } finally {
       setSubmitting(false);
     }
-  }, [clear, clientId, derivation, overrides, story]);
+  }, [attachments, clear, clientId, derivation, overrides, story]);
 
   const startOver = useCallback(() => {
     clear();
@@ -229,6 +258,28 @@ export function SimpleRawDataRequest({ clientId }: { clientId: string }) {
               submitting={submitting}
               notice={notice}
             />
+          )}
+
+          {/* Optional raw-media attachments. Uploads are optional - the
+              request is complete without them. A failed upload or a failed
+              submit NEVER clears the story text or the uploaded list. */}
+          {step === 1 && (
+            <div className="space-y-2 border-t border-white/10 pt-4">
+              <p className="text-sm font-medium text-slate-200">
+                Supporting files (optional)
+              </p>
+              <RawDataDropzone
+                onUpload={handleUpload}
+                uploaded={attachments}
+                onRemove={removeAttachment}
+                disabled={submitting}
+              />
+              {attachError && (
+                <p role="alert" className="text-xs text-red-300">
+                  {attachError}
+                </p>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>

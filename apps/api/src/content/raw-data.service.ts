@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -6,6 +7,7 @@ import {
 
 import { PrismaService } from '../prisma/prisma.service.js';
 import { S3Service } from '../s3/s3.service.js';
+import { isAllowedUploadContentType } from '../s3/s3.constants.js';
 import { RAW_DATA_SELECT } from './content.select.js';
 import { rawDataHashOf } from './content-hash.js';
 import type {
@@ -97,6 +99,32 @@ export class RawDataService {
         options.organizationId,
         clientId,
       );
+
+      // Existence + integrity proof BEFORE the immutable record is written.
+      // A well-formed key is cheap to forge, so the prefix check alone cannot
+      // prove anything was actually uploaded. The claim is only trusted once
+      // the bucket confirms the object exists at the declared size and type.
+      //
+      // `byteSize` and `mimeType` are optional on the DTO, but an object
+      // reference without them cannot be verified - so both are required
+      // whenever a storageRef is attached. Requiring them here is what stops
+      // an unverifiable claim from becoming permanent provenance.
+      if (dto.byteSize === undefined || dto.byteSize === null) {
+        throw new BadRequestException(
+          'byteSize is required when storageRef is supplied',
+        );
+      }
+      const contentType = dto.mimeType;
+      if (!contentType || !isAllowedUploadContentType(contentType)) {
+        throw new BadRequestException(
+          'A supported mimeType is required when storageRef is supplied',
+        );
+      }
+      await this.s3.verifyUploadedObject({
+        objectKey: dto.storageRef,
+        expectedContentType: contentType,
+        expectedLength: dto.byteSize,
+      });
     }
 
     return this.prisma.rawData.create({

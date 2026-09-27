@@ -3,9 +3,10 @@
  *
  * These read the P1 sources directly (the web jest environment is `node`, so
  * component rendering is not available; the existing suites use the same
- * module-source assertion style). They lock the APPROVED P1 shape:
+ * module-source assertion style). They lock the approved shape:
  *   - ONE primary free-text input on Screen 1, no second text field;
- *   - NO asset/upload affordance in P1 (assets are P3, gated by D2/D3/D4);
+ *   - a raw-media upload affordance via the presigned-PUT flow (the original
+ *     "no assets" decision was REVERSED for this phase);
  *   - submission reuses the existing packing helper + insert-only endpoint;
  *   - the simplified flow never touches the legacy draft key;
  *   - legacy wizard/fields are preserved (nothing physically deleted);
@@ -22,11 +23,8 @@ const read = (relativePath: string): string =>
 const count = (source: string, token: string): number => source.split(token).length - 1;
 
 const SIMPLE_DIR = 'components/client/raw-data/simple';
-const P1_FILES = [
-  `${SIMPLE_DIR}/story-input-step.tsx`,
-  `${SIMPLE_DIR}/understanding-step.tsx`,
-  `${SIMPLE_DIR}/simple-raw-data-request.tsx`,
-];
+const COMPONENT_DIR = 'components/client/raw-data';
+const LIB_DIR = 'lib';
 
 describe('P1 Screen 1 - one primary input', () => {
   it('renders exactly one free-text input and no other field controls', () => {
@@ -46,24 +44,39 @@ describe('P1 Screen 1 - one primary input', () => {
   });
 });
 
-describe('P1 ships no asset/upload affordance', () => {
-  it.each(P1_FILES)('%s contains no upload or storage surface', (file) => {
-    const source = read(file);
-    expect(source).not.toContain('type="file"');
-    expect(source).not.toContain('FormData');
-    expect(source).not.toContain('storageRef');
-    expect(source).not.toContain('uploadUrl');
-    expect(source).not.toContain('presigned');
-    expect(source).not.toMatch(/add photos/i);
-    expect(source).not.toMatch(/videos\/documents/i);
+describe('P1 ships a raw-media upload affordance', () => {
+  // The P1 "no assets" decision was REVERSED: raw-media intake now supports
+  // the presigned-PUT flow. These assertions are therefore POSITIVE - they
+  // prove the upload surface exists and is wired to the real hook, rather than
+  // proving it is absent.
+  it('the flow renders the dropzone', () => {
+    const source = read(`${SIMPLE_DIR}/simple-raw-data-request.tsx`);
+    expect(source).toContain('RawDataDropzone');
+    expect(source).toContain('useRawDataUpload');
   });
 
-  it.each(P1_FILES)('%s makes no direct network call', (file) => {
-    const source = read(file);
-    expect(source).not.toContain('fetch(');
-    expect(source).not.toContain('XMLHttpRequest');
-    expect(source).not.toContain('ai-tasks');
-    expect(source).not.toMatch(/openai|anthropic/i);
+  it('the dropzone exposes a real file input with the server allowlist', () => {
+    const source = read(`${COMPONENT_DIR}/raw-data-dropzone.tsx`);
+    expect(source).toContain('type="file"');
+    expect(source).toContain('ALLOWED_UPLOAD_CONTENT_TYPES');
+    // Pre-flight mirrors the server ceiling before any URL is minted.
+    expect(source).toContain('MAX_UPLOAD_BYTES');
+  });
+
+  it('the byte transfer bypasses apiFetch so no auth header leaks', () => {
+    const api = read(`${LIB_DIR}/raw-data-api.ts`);
+    expect(api).toContain('uploadFileBytes');
+    // The presigned PUT must use the global fetch, never apiFetch.
+    const putIndex = api.indexOf('export async function uploadFileBytes');
+    const putBody = api.slice(putIndex);
+    expect(putBody).toContain("method: 'PUT'");
+    expect(putBody).not.toContain('apiFetch');
+  });
+
+  it('the packing helper attaches the uploaded reference', () => {
+    const source = read(`${COMPONENT_DIR}/raw-data-request-wizard.tsx`);
+    expect(source).toContain('attachment');
+    expect(source).toContain('storageRef: attachment.storageRef');
   });
 });
 
@@ -173,8 +186,13 @@ describe('R1 correction persistence contracts', () => {
     expect(orchestrator).toContain('setOverrides');
     expect(orchestrator).toContain('values={composedValues}');
     expect(orchestrator).toMatch(
-      /packCreateRawDataRequest\(\{\s*\.\.\.composeValues\(derivation, overrides\)/,
+      // The call now takes a second argument (the optional uploaded-file
+      // attachment), so the assertion targets the composed values payload
+      // rather than the exact argument-list syntax.
+      /packCreateRawDataRequest\(\s*\{\s*\.\.\.composeValues\(derivation, overrides\)/,
     );
+    // The attachment is threaded through from the dropzone.
+    expect(orchestrator).toContain('attachments[0]');
   });
 
   it('persists overrides in the existing simple-flow draft key (no new key)', () => {

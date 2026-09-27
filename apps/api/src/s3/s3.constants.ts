@@ -20,6 +20,13 @@ export const ALLOWED_UPLOAD_CONTENT_TYPES = [
 
 export type AllowedUploadContentType = (typeof ALLOWED_UPLOAD_CONTENT_TYPES)[number];
 
+/** Narrowing guard mirroring the Zod enum on the server. */
+export function isAllowedUploadContentType(
+  value: string,
+): value is AllowedUploadContentType {
+  return (ALLOWED_UPLOAD_CONTENT_TYPES as readonly string[]).includes(value);
+}
+
 /**
  * Canonical object-key extension per allowed content type. The extension is
  * derived SERVER-side from the validated content type - the client-supplied

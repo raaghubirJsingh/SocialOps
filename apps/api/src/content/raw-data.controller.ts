@@ -109,7 +109,11 @@ export class RawDataController {
       clientId,
       body.contentType,
     );
-    return this.s3Service.createPresignedPutUrl(objectKey, body.contentType);
+    return this.s3Service.createPresignedPutUrl(
+      objectKey,
+      body.contentType,
+      body.contentLength,
+    );
   }
 
   @Post()
