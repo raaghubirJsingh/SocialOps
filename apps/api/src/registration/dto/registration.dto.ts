@@ -18,6 +18,15 @@ const resumeTokenSchema = z
   .min(1, 'resumeToken is required')
   .max(512, 'resumeToken is too long');
 
+/**
+ * Individual-vs-Business persona (a ClientType, never an AccountType -
+ * AGENTS.md §17.1). Captured once here and read later by the Client
+ * 1-Click activation so activation never re-asks it. Optional: a user who
+ * never states a persona keeps NULL and stays on the legacy activation
+ * path. It is never guessed by the server.
+ */
+const clientTypeSchema = z.enum(['INDIVIDUAL', 'BUSINESS']);
+
 /** POST /api/auth/registration/start */
 export const registrationStartSchema = z.object({
   fullName: z
@@ -37,6 +46,10 @@ export const registrationStartSchema = z.object({
   // is unresolved (L13). It MUST be non-null before User creation - the
   // password stage enforces that. Classification is never guessed.
   accountType: accountTypeSchema.nullable().optional(),
+  // Individual-vs-Business persona, collected once and reused later by the
+  // Client 1-Click activation. Optional: omitting it leaves NULL, which
+  // simply keeps the legacy activation path.
+  clientType: clientTypeSchema.nullable().optional(),
   // JSON snapshot of the accepted discovery conversation (L8). The server
   // stores it verbatim; it is never re-asked after this point.
   discoveryAnswers: z.record(z.unknown()).optional(),
@@ -81,6 +94,10 @@ export const registrationPasswordSchema = z.object({
   // sends it here so Account Creation can never guess. Optional because
   // the normal flow persists classification at /start.
   accountType: accountTypeSchema.nullable().optional(),
+  // Same forced-choice idea as accountType, for the persona: the resume
+  // path may carry it here so the Client 1-Click activation later has a
+  // verified value to read. Optional - never guessed.
+  clientType: clientTypeSchema.nullable().optional(),
   // NOTE: confirmPassword is UI-only and is NEVER sent (same contract as
   // the legacy register endpoint).
 });

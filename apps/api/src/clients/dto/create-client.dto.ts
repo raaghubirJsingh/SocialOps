@@ -36,7 +36,23 @@ export type CreateClientDto = z.infer<typeof createClientSchema>;
  * registering Individual/Business User becomes the Client owner through
  * the controlled activation flow). Internal Notes are not part of this
  * intake contract.
+ *
+ * 1-Click Activation: the four identity fields (type, name, directEmail,
+ * directPhone) are OPTIONAL here because the normal path reads them from
+ * the already-verified User record instead of the request body. They are
+ * still validated, and still REQUIRED by the service, whenever a User
+ * lacks verified registration data and falls back to the legacy
+ * mobile-OTP flow (see ClientOnboardingService.requireLegacyIntake).
+ * The Agency-side `createClientSchema` above is untouched and keeps
+ * requiring all four.
  */
-export const startOnboardingSchema = createClientSchema.omit({ notes: true });
+export const startOnboardingSchema = createClientSchema
+  .omit({ notes: true })
+  .extend({
+    type: z.enum(['INDIVIDUAL', 'BUSINESS']).nullish(),
+    name: z.string().min(1).max(200).nullish(),
+    directEmail: z.string().email().max(200).nullish(),
+    directPhone: z.string().min(5).max(50).nullish(),
+  });
 
 export type StartOnboardingDto = z.infer<typeof startOnboardingSchema>;

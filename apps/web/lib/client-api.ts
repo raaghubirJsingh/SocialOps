@@ -82,9 +82,15 @@ export const clientApi = {
 
   /**
    * Start self-registration onboarding. JWT required.
+   *
+   * 1-Click Activation: pass an empty object. The backend derives name,
+   * email, phone and persona from the authenticated, already-verified User
+   * record and returns an ACTIVE Client without any mobile OTP. The
+   * optional fields are only consumed by the legacy fallback for accounts
+   * that predate Registration Phase v1.0.
    */
   startOnboarding: (
-    data: StartOnboardingRequest,
+    data: StartOnboardingRequest = {},
   ): Promise<StartOnboardingResponse> =>
     apiFetch<StartOnboardingResponse>('/onboarding/start', {
       method: 'POST',
@@ -92,7 +98,9 @@ export const clientApi = {
     }),
 
   /**
-   * Activate onboarding with mobile verification token. JWT required.
+   * Activate onboarding with a mobile verification token. JWT required.
+   * Only reached on the legacy fallback path; the 1-Click path never needs
+   * a token, and invited clients keep using this endpoint unchanged.
    */
   activateOnboarding: (
     data: ActivateOnboardingRequest,

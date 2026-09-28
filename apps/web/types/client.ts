@@ -71,13 +71,10 @@ export type Industry =
   | 'Transportation & Logistics'
   | 'Other';
 
-export interface StartOnboardingRequest {
-  type: ClientType;
-  name: string;
+/** Optional detail fields shared by both client-creation contracts. */
+interface ClientOptionalDetails {
   description?: string;
   logoUrl?: string;
-  directEmail: string;
-  directPhone: string;
   primaryContactName?: string;
   primaryContactPhone?: string;
   website?: string;
@@ -90,25 +87,55 @@ export interface StartOnboardingRequest {
   industry?: Industry;
 }
 
+/**
+ * Self-registration onboarding (POST /api/onboarding/start).
+ *
+ * 1-Click Activation: all four identity fields are OPTIONAL because the
+ * normal path sends an empty body - the backend reads name, email, phone
+ * and persona from the already-verified User record. They are only used by
+ * the legacy mobile-OTP fallback for accounts that predate Registration
+ * Phase v1.0 verification.
+ */
+export interface StartOnboardingRequest extends ClientOptionalDetails {
+  type?: ClientType;
+  name?: string;
+  directEmail?: string;
+  directPhone?: string;
+}
+
+/**
+ * Mirrors the backend response of POST /api/onboarding/start.
+ *
+ * `mobileVerificationRequired` is FALSE for the 1-Click path, where the
+ * Client is returned already ACTIVE in `client`. It is TRUE only on the
+ * legacy fallback, where a verification code was issued and
+ * `mobileVerificationExpiresAt` is set.
+ */
 export interface StartOnboardingResponse {
   clientId: string;
   onboardingStatus: ClientOnboardingStatus;
   mobileVerificationRequired: boolean;
-  mobileVerificationExpiresAt: string;
+  mobileVerificationExpiresAt: string | null;
+  client: ClientDto | null;
 }
 
 /**
  * Agency-side Client creation (POST /api/clients).
  *
  * Mirrors the backend `createClientSchema`
- * (apps/api/src/clients/dto/create-client.dto.ts): the same intake shape
- * as self-registration onboarding (`StartOnboardingRequest`) plus the
- * Agency-only `notes` field. The created Client is PENDING and UNBOUND —
+ * (apps/api/src/clients/dto/create-client.dto.ts), which still REQUIRES
+ * type/name/directEmail/directPhone (only the self-registration schema
+ * relaxed those for 1-Click Activation) plus the Agency-only `notes` field.
+ * The created Client is PENDING and UNBOUND —
  * the creating Agency user NEVER becomes the owner; the ACTIVE
  * organization (from the verified `X-Organization-Id` header) becomes the
  * managing Agency.
  */
-export interface CreateClientRequest extends StartOnboardingRequest {
+export interface CreateClientRequest extends ClientOptionalDetails {
+  type: ClientType;
+  name: string;
+  directEmail: string;
+  directPhone: string;
   notes?: string;
 }
 

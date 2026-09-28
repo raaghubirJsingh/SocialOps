@@ -8,7 +8,7 @@ import {
 import * as argon2 from 'argon2';
 
 import { Prisma } from '@prisma/client';
-import type { PendingRegistration } from '@prisma/client';
+import type { ClientType, PendingRegistration } from '@prisma/client';
 
 import { OrganizationProvisioningService } from '../memberships/organization-provisioning.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -72,6 +72,8 @@ export interface StartRegistrationResult {
   maskedEmail: string;
   maskedPhone: string;
   accountType: AccountType | null;
+  /** Individual-vs-Business persona, when it was collected. */
+  clientType: ClientType | null;
   emailVerified: boolean;
   whatsappVerified: boolean;
   sendStatus: { email: ChannelSendStatus; whatsapp: ChannelSendStatus };
@@ -99,6 +101,7 @@ export interface ResumeSnapshotResponse {
   stage: 'verification' | 'password';
   expiresAt: string;
   accountType: AccountType | null;
+  clientType: ClientType | null;
   fullName: string;
   maskedEmail: string;
   maskedPhone: string;
@@ -174,6 +177,8 @@ export class RegistrationService {
           fullName: dto.fullName,
           phone: dto.phone, // canonical form (OPEN-2, normalized by DTO)
           accountType: dto.accountType ?? null, // may be null (L13)
+          // Persona carried to completion; may stay null (legacy fallback).
+          clientType: dto.clientType ?? null,
           // JSON snapshot (L8), cast to Prisma's InputJsonValue.
           discoveryAnswers: dto.discoveryAnswers as Prisma.InputJsonValue | undefined,
           resumeTokenHash: hashResumeToken(rawToken),
@@ -229,6 +234,7 @@ export class RegistrationService {
       maskedEmail: maskEmail(pending.email),
       maskedPhone: maskPhone(pending.phone),
       accountType: pending.accountType,
+      clientType: pending.clientType,
       emailVerified: Boolean(pending.emailVerifiedAt),
       whatsappVerified: Boolean(pending.whatsappVerifiedAt),
       sendStatus,
@@ -253,12 +259,15 @@ export class RegistrationService {
     const phoneChanged = dto.phone !== existing.phone;
     const accountType =
       dto.accountType !== undefined ? dto.accountType : existing.accountType;
+    const clientType =
+      dto.clientType !== undefined ? dto.clientType : existing.clientType;
 
     const updated = await this.prisma.pendingRegistration.update({
       where: { id: existing.id },
       data: {
         fullName: dto.fullName,
         accountType,
+        clientType,
         ...(dto.discoveryAnswers !== undefined
           ? {
               discoveryAnswers:
@@ -370,6 +379,18 @@ export class RegistrationService {
       });
     }
 
+    // Individual-vs-Business persona, same forced-choice treatment. It is
+    // NOT required (never guessed, never blocking): NULL simply means the
+    // Client activation later falls back to the legacy path. Persisted so
+    // the 1-Click activation never re-asks the persona (AGENTS.md §17.1).
+    const clientType = pending.clientType ?? dto.clientType ?? null;
+    if (!pending.clientType && dto.clientType) {
+      pending = await this.prisma.pendingRegistration.update({
+        where: { id: pending.id },
+        data: { clientType: dto.clientType },
+      });
+    }
+
     const passwordHash = await argon2.hash(dto.password, {
       type: argon2.argon2id,
       memoryCost: 2 ** 16,
@@ -389,6 +410,8 @@ export class RegistrationService {
             fullName: pending.fullName,
             phone: pending.phone, // canonical (OPEN-2)
             accountType, // non-null (L13)
+            // Persona captured once here; NULL = legacy activation path.
+            clientType,
             isActive: true, // verified via dual OTP, then active
             emailVerifiedAt: now, // email OTP evidence
             phoneVerifiedAt: now, // L9 permanent WhatsApp/phone evidence
@@ -451,6 +474,7 @@ export class RegistrationService {
       stage: bothVerified ? 'password' : 'verification',
       expiresAt: pending.expiresAt.toISOString(),
       accountType: pending.accountType,
+      clientType: pending.clientType,
       fullName: pending.fullName,
       maskedEmail: maskEmail(pending.email),
       maskedPhone: maskPhone(pending.phone),

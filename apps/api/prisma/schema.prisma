@@ -130,6 +130,14 @@ model User {
   fullName        String?
   phone           String?
   accountType     AccountType?
+  // ClientType (INDIVIDUAL | BUSINESS) captured at Registration Phase
+  // v1.0 completion. It is deliberately NOT an AccountType
+  // (AGENTS.md §17.1: "Individual vs Business is a ClientType, never an
+  // AccountType"). Read by the 1-Click Client activation flow so the
+  // self-registered activation never re-asks the persona.
+  // Nullable so pre-existing rows stay valid without a backfill; a NULL
+  // clientType simply keeps the legacy activation path.
+  clientType      ClientType?
   // AGENTS.md §17.2: new users are INACTIVE until email verification.
   // The default applies to future inserts only; existing rows keep
   // their current value (see 20260903220000 migration note).
@@ -336,6 +344,11 @@ model PendingRegistration {
   /// Null only while discovery classification is unresolved (L13).
   /// MUST be non-null before User creation; User.accountType is never null.
   accountType AccountType?
+  /// Individual-vs-Business persona, carried through the staged flow the
+  /// same way accountType is. May stay NULL (the persona was never
+  /// collected); the 1-Click activation falls back to the legacy path for
+  /// those users. Never guessed by the server.
+  clientType ClientType?
   /// JSON snapshot of the accepted discovery conversation (L8).
   discoveryAnswers   Json?
   emailVerifiedAt    DateTime?

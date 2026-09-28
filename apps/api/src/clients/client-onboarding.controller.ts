@@ -14,6 +14,7 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { ClientOnboardingService } from './client-onboarding.service.js';
 import { ClientInvitationService } from './client-invitation.service.js';
 import { startOnboardingSchema } from './dto/create-client.dto.js';
+import type { StartOnboardingDto } from './dto/create-client.dto.js';
 import { verifyTokenSchema } from './dto/client-common.dto.js';
 import { CurrentUser } from '../rbac/decorators/current-user.decorator.js';
 
@@ -27,8 +28,11 @@ import { CurrentUser } from '../rbac/decorators/current-user.decorator.js';
  *   - Agency invitation resolve: @PublicAuth (no user context needed).
  *   - Invitation acceptance: the invited User binds to the Client.
  *   - Self-registration start: a verified Individual/Business User begins
- *     Client onboarding (no invitation).
- *   - Activation: mobile-token consumption -> binding + PENDING -> ACTIVE.
+ *     Client onboarding (no invitation). With 1-Click Activation this also
+ *     completes the activation for a User whose phone was already verified
+ *     at registration, so no body is required.
+ *   - Activation: mobile-token consumption -> binding + PENDING -> ACTIVE
+ *     (unchanged; still the only path for invited clients).
  */
 @Controller()
 export class ClientOnboardingController {
@@ -61,7 +65,10 @@ export class ClientOnboardingController {
     @CurrentUser() user: JwtAccessPayload,
     @Body(new ZodValidationPipe(startOnboardingSchema)) dto: unknown,
   ) {
-    return this.onboardingService.startSelfRegistration(user, dto as never);
+    return this.onboardingService.startSelfRegistration(
+      user,
+      dto as StartOnboardingDto,
+    );
   }
 
   @Post('onboarding/activate')
