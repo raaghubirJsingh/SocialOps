@@ -1,3 +1,5 @@
+import { ServiceUnavailableException } from '@nestjs/common';
+
 import type { SocialPlatformValue } from '../../../social-accounts/constants/social-platforms.js';
 
 /** Token response normalized across platforms. */
@@ -58,9 +60,19 @@ export function requireClientConfig(platform: string): {
   const clientId = process.env[`${prefix}_CLIENT_ID`];
   const clientSecret = process.env[`${prefix}_CLIENT_SECRET`];
   if (!clientId || !clientSecret) {
-    throw new Error(
-      `OAuth is not configured for ${platform} (${prefix}_CLIENT_ID / ${prefix}_CLIENT_SECRET missing)`,
-    );
+    // Fail closed as a SERVICE issue, never as a client error: an unconfigured
+    // platform is a deployment fact, not an authorization outcome. The plain
+    // Error this replaced surfaced as a generic HTTP 500 with no code, so the
+    // UI could only render "Internal server error". The `platform` context is
+    // a non-secret platform name from the approved V1 set; the missing
+    // variable NAME is named so operators know exactly which env value to set,
+    // without exposing any secret value.
+    throw new ServiceUnavailableException({
+      code: 'OAUTH_PROVIDER_NOT_CONFIGURED',
+      message: `${platform} is not connected for OAuth. Please try again later.`,
+      platform,
+      detail: `OAUTH_PROVIDER_NOT_CONFIGURED: ${prefix}_CLIENT_ID / ${prefix}_CLIENT_SECRET missing.`,
+    });
   }
   return { clientId, clientSecret };
 }

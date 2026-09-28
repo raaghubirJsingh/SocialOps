@@ -1,7 +1,19 @@
+import 'reflect-metadata';
+
 import { jest } from '@jest/globals';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  Controller,
+  ForbiddenException,
+  Get,
+  INestApplication,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import request from 'supertest';
 
 import { SocialAccountsOAuthService } from './social-accounts-oauth.service.js';
+import { requireClientConfig } from './providers/oauth-provider.interface.js';
 
 const CLIENT_ID = '11111111-1111-4111-8111-111111111111';
 
@@ -49,6 +61,179 @@ function makeService(over: {
   );
   return { service, state, prisma };
 }
+
+/**
+ * Provider configuration (fail-closed contract).
+ *
+ * A platform that is not configured is a SERVICE issue, never an
+ * authorization outcome - so `requireClientConfig` must surface a typed
+ * `503 OAUTH_PROVIDER_NOT_CONFIGURED` the UI can name, instead of a plain
+ * `Error` that NestJS would turn into a generic `500 Internal server error`.
+ */
+describe('requireClientConfig', () => {
+  const touched = [
+    'INSTAGRAM_CLIENT_ID',
+    'INSTAGRAM_CLIENT_SECRET',
+    'FACEBOOK_CLIENT_ID',
+    'FACEBOOK_CLIENT_SECRET',
+    'YOUTUBE_CLIENT_ID',
+    'YOUTUBE_CLIENT_SECRET',
+  ];
+  const saved = new Map<string, string | undefined>();
+
+  function setEnv(vars: Record<string, string | undefined>) {
+    for (const [key, value] of Object.entries(vars)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+
+  beforeEach(() => {
+    saved.clear();
+    for (const key of touched) saved.set(key, process.env[key]);
+  });
+
+  afterEach(() => {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  it('fails closed with a typed 503 naming the platform and the missing variables', () => {
+    setEnv({
+      INSTAGRAM_CLIENT_ID: undefined,
+      INSTAGRAM_CLIENT_SECRET: undefined,
+    });
+
+    const err = (() => {
+      try {
+        requireClientConfig('INSTAGRAM');
+      } catch (e: unknown) {
+        return e;
+      }
+      return null;
+    })();
+
+    expect(err).toBeInstanceOf(ServiceUnavailableException);
+    const body = (err as { getResponse: () => Record<string, unknown> }).getResponse();
+    expect(body.code).toBe('OAUTH_PROVIDER_NOT_CONFIGURED');
+    // The non-secret platform name is preserved so the UI can name it.
+    expect(body.platform).toBe('INSTAGRAM');
+    // The missing VARIABLE NAMES (never their values) point the operator at
+    // the fix.
+    expect(String(body.detail)).toContain('INSTAGRAM_CLIENT_ID');
+    expect(String(body.detail)).toContain('INSTAGRAM_CLIENT_SECRET');
+    // No secret value can leak: the detail names keys, and the message holds
+    // no credential material.
+  });
+
+  it('fails when only one half of the credential pair is present', () => {
+    setEnv({
+      FACEBOOK_CLIENT_ID: 'some-id',
+      FACEBOOK_CLIENT_SECRET: undefined,
+    });
+
+    expect(() => requireClientConfig('FACEBOOK')).toThrow(
+      ServiceUnavailableException,
+    );
+  });
+
+  it('returns the pair when both values are configured', () => {
+    setEnv({
+      YOUTUBE_CLIENT_ID: 'test-youtube-client-id',
+      YOUTUBE_CLIENT_SECRET: 'test-youtube-client-secret',
+    });
+
+    expect(requireClientConfig('YOUTUBE')).toEqual({
+      clientId: 'test-youtube-client-id',
+      clientSecret: 'test-youtube-client-secret',
+    });
+  });
+});
+
+/**
+ * HTTP contract for the fail-closed path.
+ *
+ * The assertions above only prove the EXCEPTION OBJECT. This proves the
+ * serialized HTTP response the frontend actually receives: NestJS must not
+ * strip the custom `code` / `platform` on the way out, because
+ * `describeApiError` reads exactly those fields to name the platform in the
+ * UI. A stub controller stands in for the real route, so no PostgreSQL or
+ * Redis is involved.
+ */
+describe('missing provider credentials over HTTP', () => {
+  const touched = ['INSTAGRAM_CLIENT_ID', 'INSTAGRAM_CLIENT_SECRET'];
+  const saved = new Map<string, string | undefined>();
+  let app: INestApplication;
+
+  beforeAll(async () => {
+    @Controller('probe')
+    class ProbeController {
+      @Get('instagram')
+      instagram(): void {
+        requireClientConfig('INSTAGRAM');
+      }
+    }
+
+    const moduleRef = await Test.createTestingModule({
+      controllers: [ProbeController],
+    }).compile();
+
+    app = moduleRef.createNestApplication();
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app?.close();
+  });
+
+  beforeEach(() => {
+    saved.clear();
+    for (const key of touched) saved.set(key, process.env[key]);
+  });
+
+  afterEach(() => {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  it('answers 503 carrying the machine-readable code and platform', async () => {
+    // Keep a REAL credential value in the environment while the pair stays
+    // incomplete, so the no-leak check has something to catch. The previous
+    // assertion matched /client-secret/i against a body containing only the
+    // KEY name INSTAGRAM_CLIENT_SECRET (underscores), so it passed no matter
+    // what was leaked.
+    const secretValue = 'sentinel-instagram-client-secret-do-not-echo';
+    delete process.env.INSTAGRAM_CLIENT_ID;
+    process.env.INSTAGRAM_CLIENT_SECRET = secretValue;
+
+    const res = await request(app.getHttpServer()).get('/probe/instagram');
+
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe('OAUTH_PROVIDER_NOT_CONFIGURED');
+    expect(res.body.platform).toBe('INSTAGRAM');
+    // Names the missing KEYS, never any secret value.
+    expect(String(res.body.detail)).toContain('INSTAGRAM_CLIENT_ID');
+    expect(String(res.body.detail)).toContain('INSTAGRAM_CLIENT_SECRET');
+    // The configured secret VALUE must never appear anywhere in the payload.
+    expect(JSON.stringify(res.body)).not.toContain(secretValue);
+    expect(String(res.body.detail)).not.toContain(secretValue);
+    expect(String(res.body.message)).not.toContain(secretValue);
+  });
+
+  it('answers 200 once the credential pair is configured', async () => {
+    process.env.INSTAGRAM_CLIENT_ID = 'configured-id';
+    process.env.INSTAGRAM_CLIENT_SECRET = 'configured-secret';
+
+    const res = await request(app.getHttpServer()).get('/probe/instagram');
+
+    expect(res.status).toBe(200);
+    expect(res.body.code).toBeUndefined();
+  });
+});
 
 describe('SocialAccountsOAuthService.startConnectClient', () => {
   it('mints state when the Client has an ACTIVE managing relationship', async () => {

@@ -14,6 +14,14 @@ import { ApiError } from './api';
  * the caller must always surface the message and refetch - never assume the
  * optimistic state was correct.
  */
+
+/** Approved V1 platform labels, used only inside error copy. */
+const OAUTH_PLATFORM_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  INSTAGRAM: 'Instagram',
+  FACEBOOK: 'Facebook',
+  YOUTUBE: 'YouTube',
+});
+
 const CODE_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
   // social accounts
   DUPLICATE_SOCIAL_ACCOUNT:
@@ -45,6 +53,12 @@ const CODE_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
   // "request an agency" screen in the client UI, so do NOT promise one.
   CLIENT_NOT_MANAGED:
     'Connecting a social account requires an active Service Provider relationship. Once an agency is connected to this workspace, you can authorise Instagram, Facebook or YouTube.',
+  // Platform OAuth credentials are deployment configuration, not client data.
+  // A missing pair leaves the handshake unstartable for that platform only;
+  // other platforms are unaffected. The backend includes the non-secret
+  // platform name so the UI can name it.
+  OAUTH_PROVIDER_NOT_CONFIGURED:
+    'This platform is not connected for OAuth yet. Please try again later.',
   // Phase 2 AI dispatch errors
   AI_USER_REQUIRED: 'The selected assignee must be an AI employee.',
   AI_EMPLOYEE_NOT_MEMBER:
@@ -65,9 +79,28 @@ function codeOf(error: ApiError): string | null {
   return typeof code === 'string' && code.length > 0 ? code : null;
 }
 
+function platformOf(error: ApiError): string | null {
+  const body = error.body;
+  if (!body || typeof body !== 'object') return null;
+  const platform = (body as Record<string, unknown>).platform;
+  return typeof platform === 'string' && platform.length > 0 ? platform : null;
+}
+
+/** Platform-specific wording for `OAUTH_PROVIDER_NOT_CONFIGURED`. */
+function missingProviderMessage(error: ApiError): string | null {
+  if (codeOf(error) !== 'OAUTH_PROVIDER_NOT_CONFIGURED') return null;
+  const label = platformOf(error);
+  const named = label ? OAUTH_PLATFORM_LABELS[label] : undefined;
+  return named
+    ? `${named} is not connected for OAuth yet. Please try again later.`
+    : CODE_MESSAGES.OAUTH_PROVIDER_NOT_CONFIGURED;
+}
+
 /** Resolves the most specific available message for a failed request. */
 export function describeApiError(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
+    const missingProvider = missingProviderMessage(error);
+    if (missingProvider) return missingProvider;
     const code = codeOf(error);
     if (code && CODE_MESSAGES[code]) return CODE_MESSAGES[code];
     if (STATUS_MESSAGES[error.status]) return STATUS_MESSAGES[error.status];

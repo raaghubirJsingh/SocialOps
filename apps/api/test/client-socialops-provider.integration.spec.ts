@@ -26,6 +26,7 @@ import {
   INestApplication,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -285,7 +286,17 @@ describe('a self-registered Client can drive the OAuth flow', () => {
     const err = await oauth
       .completeConnect('INSTAGRAM', 'authorization-code', payload)
       .catch((e: unknown) => e);
-    expect(String((err as Error).message)).toMatch(/not configured/i);
+    // A missing credential pair is a SERVICE failure, never an authorization
+    // one, so it surfaces as a typed 503 carrying the machine-readable code
+    // the UI names. Assert the typed contract, not prose: the human-readable
+    // copy is owned by the frontend and may change.
+    expect(err).toBeInstanceOf(ServiceUnavailableException);
+    const body = (err as ServiceUnavailableException).getResponse() as Record<
+      string,
+      unknown
+    >;
+    expect(body.code).toBe('OAUTH_PROVIDER_NOT_CONFIGURED');
+    expect(body.platform).toBe('INSTAGRAM');
     expect(err).not.toBeInstanceOf(ForbiddenException);
     expect(err).not.toBeInstanceOf(NotFoundException);
   });
