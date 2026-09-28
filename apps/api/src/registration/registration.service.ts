@@ -12,6 +12,7 @@ import type { ClientType, PendingRegistration } from '@prisma/client';
 
 import { OrganizationProvisioningService } from '../memberships/organization-provisioning.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { deriveClientType } from './client-persona.js';
 
 import type { AccountType } from '../auth/dto/account-type.js';
 import type {
@@ -177,8 +178,11 @@ export class RegistrationService {
           fullName: dto.fullName,
           phone: dto.phone, // canonical form (OPEN-2, normalized by DTO)
           accountType: dto.accountType ?? null, // may be null (L13)
-          // Persona carried to completion; may stay null (legacy fallback).
-          clientType: dto.clientType ?? null,
+          // Persona: an explicit choice always wins; otherwise derive it from
+          // the discovery answers the user just gave. Ambiguous answers leave
+          // it null (never guessed), and the Client activation falls back.
+          clientType:
+            dto.clientType ?? deriveClientType(dto.discoveryAnswers),
           // JSON snapshot (L8), cast to Prisma's InputJsonValue.
           discoveryAnswers: dto.discoveryAnswers as Prisma.InputJsonValue | undefined,
           resumeTokenHash: hashResumeToken(rawToken),
@@ -260,7 +264,12 @@ export class RegistrationService {
     const accountType =
       dto.accountType !== undefined ? dto.accountType : existing.accountType;
     const clientType =
-      dto.clientType !== undefined ? dto.clientType : existing.clientType;
+      dto.clientType !== undefined
+        ? dto.clientType
+        : (existing.clientType ??
+          deriveClientType(
+            dto.discoveryAnswers ?? existing.discoveryAnswers,
+          ));
 
     const updated = await this.prisma.pendingRegistration.update({
       where: { id: existing.id },
@@ -383,11 +392,17 @@ export class RegistrationService {
     // NOT required (never guessed, never blocking): NULL simply means the
     // Client activation later falls back to the legacy path. Persisted so
     // the 1-Click activation never re-asks the persona (AGENTS.md §17.1).
-    const clientType = pending.clientType ?? dto.clientType ?? null;
-    if (!pending.clientType && dto.clientType) {
+    // An explicit choice wins; otherwise derive it from the stored
+    // discovery answers, and fall back to one supplied on this request.
+    const clientType =
+      pending.clientType ??
+      deriveClientType(pending.discoveryAnswers) ??
+      dto.clientType ??
+      null;
+    if (!pending.clientType && clientType) {
       pending = await this.prisma.pendingRegistration.update({
         where: { id: pending.id },
-        data: { clientType: dto.clientType },
+        data: { clientType },
       });
     }
 

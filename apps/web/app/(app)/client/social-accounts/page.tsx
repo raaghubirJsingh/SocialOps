@@ -42,8 +42,11 @@ import type { SocialAccountDto, SocialPlatform } from '@/types/social-account';
  * binding (and onboarding ACTIVE) on every request, so a forged value cannot
  * reach another client's data.
  *
- * As the owner, the client may always manage its own records (no role gate),
- * and the page carries no OAuth affordance of any kind.
+ * As the owner, the client may always manage its own records (no role gate).
+ * The page DOES render the approved OAuth connect affordances (Decision 013);
+ * the connect route re-verifies the X-Client-Id binding server-side and
+ * additionally requires an ACTIVE managing Agency, so an unmanaged client
+ * is refused there with CLIENT_NOT_MANAGED.
  */
 type FormState =
   | { mode: 'closed' }

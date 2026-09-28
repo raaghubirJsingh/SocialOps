@@ -778,6 +778,199 @@ Registration Phase v1.0:
 
 
 
+## Decision 016 — Platform Service Provider Auto-Attachment (Implementation Approval)
+
+Status: FINAL
+Approved: 2026-09-28 (explicit approval in session; implementation already
+completed and verified under this gate)
+
+This entry is the separate approval gate that Decision 012 §8/§9 expressly
+required before any change to Client onboarding, the ClientAgencyRelationship
+contract, or the OAuth callback's tenant re-verification. Decision 012 recorded
+direction only; this entry records the approved implementation contract.
+
+### 1. Automatic attachment of first-time self-registered Clients
+
+- A Client created through self-registration (1-Click or legacy intake) is
+  automatically attached to the single platform-owned SOCIALOPS
+  Service-Provider Organization during activation.
+- The provider is resolved ONLY by `Organization.kind = 'SOCIALOPS'`, never by
+  a caller-supplied organization id. Client-supplied tenant context is never
+  authoritative (AGENTS.md §6-§7).
+- Exactly one SOCIALOPS Organization may exist. This is enforced in the
+  database by `Organization_one_socialops_idx` (partial unique index, migration
+  `20260919000000_add_organization_kind`), not by application convention.
+- If `Organization.slug` (globally unique, schema.prisma:215) is already held by
+  a non-platform Organization, provisioning fails with a controlled
+  `500 SERVICE_PROVIDER_UNAVAILABLE`. The existing Organization is NEVER
+  silently reused, renamed, or modified, and the raw database error is never
+  surfaced to the caller.
+- The platform Organization is created with `discoveryOptIn = false` and is
+  provisioned automatically; it is never user-selectable.
+
+### 2. ACTIVE PLATFORM relationship on both activation paths
+
+- `ClientAgencyRelationship` is the existing relationship model; no new
+  relationship type is introduced.
+- Activation creates `status = ACTIVE`, `initiatedBy = PLATFORM`, with
+  `startedAt` set.
+- Attachment is applied on BOTH activation paths:
+  - the 1-Click path (`POST /api/onboarding/start`), and
+  - the legacy intake + mobile-token path (`POST /api/onboarding/activate`).
+  Both perform the Client write and the relationship write inside a single
+  `prisma.$transaction`; a failure rolls the activation and the relationship
+  back together, so a Client is never left ACTIVE without a provider.
+- Attachment is idempotent. A Client that already has ANY ACTIVE relationship
+  is left untouched.
+- Concurrency: a uniqueness conflict (P2002) on the one-ACTIVE-per-client
+  partial unique index is resolved by re-reading and adopting the winning
+  relationship, so concurrent activations converge on exactly one provider. A
+  conflict that no ACTIVE relationship can explain is rethrown, never
+  swallowed.
+- The one-ACTIVE-Agency invariant is UNCHANGED (AGENTS.md §7; Decision 011 D6;
+  Decision 012 §2). No state-machine transition, index, or constraint was
+  modified.
+- `Client.ownerUserId` binding and ClientAccessGuard behavior are UNCHANGED.
+
+
+### 3. OAuth authorization for Client-owned social accounts
+
+This is an explicit, deliberate AMENDMENT to Decision 013 §5. It is recorded
+here because 013 §5 named a proof that the CLIENT persona can never satisfy.
+
+- The callback route is public BY NECESSITY and is marked `@PublicAuth()` +
+  `@Public()`: the browser arrives from the platform with no Bearer token and no
+  `X-Organization-Id`. These decorators skip ONLY the JWT check and ONLY the
+  organization-context requirement respectively; no role or membership check is
+  bypassed for any other route. (Before this change the route was unreachable,
+  returning 401 before the controller ran.)
+- Callback-time re-verification is now SOURCE-DEPENDENT, re-read from
+  PostgreSQL on every callback:
+  - `source = 'AGENCY'` (UNCHANGED): the acting User's OrganizationMembership is
+    re-proven, exactly as Decision 013 §5 required.
+  - `source = 'CLIENT'` (AMENDED): the acting User must still OWN the Client
+    named in the verified state. Client ownership is the authorized fact for
+    this persona.
+- The amendment is required, not preferential: a self-registered Client owner is
+  intentionally never an Organization member (AGENTS.md §6 — Workspace access is
+  mediated through Organization membership, and a client owner has none; cf.
+  §17.3 for employees). OrganizationMembership therefore could never be
+  satisfied for the CLIENT persona, so Decision 013 §6's authorized client-side
+  connect parity could not actually complete.
+- The CLIENT proof is not weaker than the ACTIVE relationship it supplements:
+  both facts are re-proved on every callback, and
+  `assertClientRelationshipActive` (the ACTIVE relationship re-proof) still runs
+  for BOTH sources.
+- PRESERVED UNCHANGED from Decision 013: the HMAC-signed state with a dedicated
+  `OAUTH_STATE_SECRET`; the Redis `SET NX` single-use nonce consumed by atomic
+  `DEL`; constant-time signature comparison; the `aud` and `exp` checks; the
+  platform-match re-check; the uniform 403 with no existence leak; the
+  server-derived (non-open) redirect destination; the uniform
+  `CLIENT_NOT_MANAGED` refusal for an unmanaged Client; tenant context still
+  resolved only from the ACTIVE relationship and never from request input
+  (Decision 013 §6).
+- No encryption, key-management, storage, or token-handling decision is
+  changed. Decision 013 §2/§3/§4/§8 remain fully operative.
+
+### 4. Preservation of existing Agency-managed relationships
+
+- A Client with an existing ACTIVE external-Agency relationship is NEVER
+  reassigned to SocialOps. Attachment returns early on ANY active relationship.
+- An Agency-invited Client already holds its ACTIVE Agency relationship from
+  Client creation, so activation is a no-op for it. Verified by test.
+- Termination, request, accept/reject, and the silent-replacement 409 remain
+  unchanged. Engaging an external Agency for a self-registered Client is an
+  explicit terminate-then-re-engage, per Decision 012 §2.
+- Existing Agency isolation and cross-Agency non-leakage are untouched.
+
+
+### 5. SOCIALOPS is never exposed as an external Agency
+
+- The discovery catalog query filters `kind = 'AGENCY'`. The query filter is the
+  authority; `discoveryOptIn = false` alone would be a single mutable value, not
+  a guarantee.
+- The platform Organization cannot be published through any write path: opt-in
+  (Agency self-service) and SOCIALOPS_ADMIN approval both refuse it with
+  `403 PLATFORM_ORGANIZATION_NOT_DISCOVERABLE`.
+- The fail-closed `assertDiscoverable` gate additionally requires
+  `kind = 'AGENCY'`, so stray flag writes cannot expose it.
+- This implements Decision 012 §6 ("not eligible for external Agency discovery").
+  No existing Agency discovery behavior is changed.
+
+### 6. Prisma enum migration for PLATFORM
+
+- Migration `20260930090000_add_platform_client_agency_flow` is created and
+  reviewed. It is purely additive:
+  `ALTER TYPE "ClientAgencyFlow" ADD VALUE IF NOT EXISTS 'PLATFORM';`
+- Rationale: `initiatedBy` must be truthful. `CLIENT` is wrong (the user never
+  asked) and `AGENCY` is wrong (SocialOps is explicitly not an external Agency
+  tenant, Decision 012 §1).
+- No rows are created or modified; no table is rewritten. PostgreSQL 12+ is
+  required for `ADD VALUE` inside a transaction (project uses PostgreSQL 17).
+- STATUS: **CREATED, NOT APPLIED.** No migration has been applied to the
+  development database, and no development data was modified. Application is a
+  separate step requiring explicit approval (AGENTS.md §15).
+- PRE-APPLICATION PREREQUISITES: (a) confirm no existing Organization holds
+  `slug = 'socialops'`; (b) apply the migration BEFORE deploying code, because
+  `prisma generate` reads `schema.prisma` at postinstall and the client would
+  otherwise advertise `PLATFORM` before the database has it.
+
+
+### 7. Verification recorded
+
+- API unit: 336/336 (40 suites). New: provider 11, discovery 6.
+- Integration: this module 18/18; all client-module integration specs 48/48.
+- Web unit: 109/109. API lint 0 errors. API typecheck clean.
+- Integration tests ran only against a positively verified, separate,
+  disposable test database; the spec refuses to run unless the database name
+  ends in `_test`/`_itest`. The development database was not used or modified.
+- KNOWN PRE-EXISTING FAILURES (not introduced by this decision, not addressed
+  by it): 4 failures in `registration.integration.spec.ts` and
+  `rbac.integration.spec.ts` arising from earlier uncommitted work (a stale
+  `PendingRegistration` field-list assertion, and expectations of the retired
+  `POST /api/auth/register` route). They are surfaced, not suppressed, and
+  require their own decision.
+- Full end-to-end OAuth token exchange is not verifiable without live Instagram
+  / Facebook / YouTube credentials; the tests prove the callback reaches the
+  exchange stage past authorization, not token persistence.
+
+### 8. Open product question — NOT resolved by this decision
+
+With automatic attachment, a first-time self-registered Client is bound to the
+SocialOps Service Provider. Decision 012 §2 requires explicit termination plus
+re-engagement to switch provider, and the API route
+`POST /api/client/me/agency-relationship/terminate` exists and is
+owner-authenticated — but **no client-facing UI exposes provider switching**. A
+self-registered Client therefore cannot practically move to an external Agency.
+
+The following options require explicit human selection and are deliberately NOT
+decided here:
+
+- (a) Ship as-is; self-registered Clients remain SocialOps-managed.
+- (b) Approve a client-facing switch-provider flow (terminate + request an
+  Agency), as a separately gated phase.
+- (c) Auto-terminate the SocialOps relationship when a Client requests an
+  Agency. NOTE: this would CONTRADICT Decision 012 §2's explicit-termination
+  rule and is not recommended; it would need its own amendment.
+
+Also unresolved and requiring a product decision: whether a
+`SERVICE_PROVIDER` account self-registering its own Client should also be
+auto-attached to SocialOps (current behavior: yes, the code path is shared);
+whether a Client whose SocialOps relationship was TERMINATED may re-attach
+automatically on a later activation; and whether the `CLIENT_NOT_MANAGED`
+user-facing copy should be revised now that self-registered Clients always have
+a provider.
+
+### 9. Scope boundary
+
+This decision does NOT authorize: token refresh, revocation or disconnect
+endpoints; publishing, distribution, or analytics; any platform outside the V1
+scope (AGENTS.md §2); a client-facing provider-switching UI; any change to
+OAuth encryption or key management; the Central Auth Proxy; CI or deployment
+changes; or a Git push. Each requires its own subsequent approval. Nothing has
+been committed or pushed.
+
+
 Do not change a FINAL decision without explicit user approval. When a new
 decision supersedes an existing one: mark the previous decision SUPERSEDED,
 record the new decision, and record the reason.

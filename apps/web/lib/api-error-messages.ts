@@ -39,6 +39,12 @@ const CODE_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
   // Phase 2 change-request limit (Scenario 1 max 2, HTTP 400)
   CHANGE_REQUEST_LIMIT_EXCEEDED:
     'You have used all change requests on this content (maximum 2).',
+  // Client-side OAuth connect requires an ACTIVE managing Agency
+  // (approved Decision 013). This is a tenant-scope boundary, not a
+  // permissions fault. State the requirement only: there is no self-serve
+  // "request an agency" screen in the client UI, so do NOT promise one.
+  CLIENT_NOT_MANAGED:
+    'Connecting a social account requires an active Service Provider relationship. Once an agency is connected to this workspace, you can authorise Instagram, Facebook or YouTube.',
   // Phase 2 AI dispatch errors
   AI_USER_REQUIRED: 'The selected assignee must be an AI employee.',
   AI_EMPLOYEE_NOT_MEMBER:

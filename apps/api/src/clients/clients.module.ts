@@ -17,6 +17,7 @@ import { ClientOnboardingService } from './client-onboarding.service.js';
 import { ClientStatusService } from './client-status.service.js';
 import { ClientsService } from './clients.service.js';
 import { MobileVerificationService } from './mobile-verification.service.js';
+import { SocialOpsProviderService } from './social-ops-provider.service.js';
 import { ClientAccessGuard } from './guards/client-access.guard.js';
 import { SocialOpsAdminGuard } from './guards/socialops-admin.guard.js';
 
@@ -47,6 +48,7 @@ import { SocialOpsAdminGuard } from './guards/socialops-admin.guard.js';
     ClientAgencyRelationshipService,
     ClientDiscoveryService,
     ClientInvitationService,
+    SocialOpsProviderService,
     ClientAccessGuard,
     SocialOpsAdminGuard,
   ],
@@ -59,6 +61,7 @@ import { SocialOpsAdminGuard } from './guards/socialops-admin.guard.js';
     ClientAgencyRelationshipService,
     ClientDiscoveryService,
     ClientInvitationService,
+    SocialOpsProviderService,
     ClientAccessGuard,
     SocialOpsAdminGuard,
   ],

@@ -13,7 +13,7 @@ import type { JwtAccessPayload } from '../auth/types/jwt-payload.type.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { ClientOnboardingService } from './client-onboarding.service.js';
 import { ClientInvitationService } from './client-invitation.service.js';
-import { startOnboardingSchema } from './dto/create-client.dto.js';
+import { startOnboardingBodySchema } from './dto/create-client.dto.js';
 import type { StartOnboardingDto } from './dto/create-client.dto.js';
 import { verifyTokenSchema } from './dto/client-common.dto.js';
 import { CurrentUser } from '../rbac/decorators/current-user.decorator.js';
@@ -58,16 +58,25 @@ export class ClientOnboardingController {
     return this.invitationService.acceptInvitation(token, user);
   }
 
+  /**
+   * Self-registration start / 1-Click activation.
+   *
+   * The body is optional and is validated by `startOnboardingBodySchema`,
+   * which accepts `{}`, an absent body, or any subset of the legacy intake
+   * fields. On the 1-Click path the payload is ignored entirely: the
+   * service derives name, email, phone and persona from the authenticated
+   * User record it reads from PostgreSQL, and never from client input.
+   */
   @Post('onboarding/start')
   @Public()
   @HttpCode(201)
   startSelfRegistration(
     @CurrentUser() user: JwtAccessPayload,
-    @Body(new ZodValidationPipe(startOnboardingSchema)) dto: unknown,
+    @Body(new ZodValidationPipe(startOnboardingBodySchema)) dto: unknown,
   ) {
     return this.onboardingService.startSelfRegistration(
       user,
-      dto as StartOnboardingDto,
+      (dto ?? {}) as StartOnboardingDto,
     );
   }
 

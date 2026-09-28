@@ -512,6 +512,11 @@ model ClientAgencyRelationship {
 enum ClientAgencyFlow {
   CLIENT
   AGENCY
+  /// Platform-initiated: the one SOCIALOPS Service-Provider Organization is
+  /// attached automatically at first Client activation (Decision 012). It is
+  /// distinct from AGENCY because SocialOps is platform-owned, never an
+  /// external Agency tenant.
+  PLATFORM
 }
 
 /// Invitation/acceptance token for Client onboarding (Agency-created path).

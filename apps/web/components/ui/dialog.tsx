@@ -11,6 +11,14 @@ interface DialogProps {
   onClose: () => void;
   children?: ReactNode;
   footer?: ReactNode;
+  /**
+   * When false the dialog is MANDATORY: Escape and backdrop clicks do not
+   * dismiss it, and the default "Close" button is not rendered. Use only
+   * where the user must complete or explicitly decline - never for a
+   * convenience overlay. Defaults to true so every existing caller keeps
+   * its current behaviour.
+   */
+  dismissible?: boolean;
 }
 
 /**
@@ -34,15 +42,16 @@ export function Dialog({
   onClose,
   children,
   footer,
+  dismissible = true,
 }: DialogProps) {
   useEffect(() => {
-    if (!open) return;
+    if (!open || !dismissible) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
+  }, [open, onClose, dismissible]);
 
   if (!open) return null;
 
@@ -50,13 +59,15 @@ export function Dialog({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
       role="presentation"
-      onClick={onClose}
+      // A mandatory dialog ignores backdrop clicks entirely, so the only
+      // way out is the explicit action in the footer.
+      onClick={dismissible ? onClose : undefined}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="surface-glass w-full max-w-lg rounded-2xl p-6"
+        className="surface-glass max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl p-6"
         onClick={(event) => event.stopPropagation()}
       >
         <h3 className="text-lg font-semibold text-slate-100">{title}</h3>
@@ -67,11 +78,12 @@ export function Dialog({
         {children && <div className="mt-4 space-y-4">{children}</div>}
 
         <div className="mt-6 flex justify-end gap-2">
-          {footer ?? (
-            <Button type="button" variant="secondary" onClick={onClose}>
-              Close
-            </Button>
-          )}
+          {footer ??
+            (dismissible ? (
+              <Button type="button" variant="secondary" onClick={onClose}>
+                Close
+              </Button>
+            ) : null)}
         </div>
       </div>
     </div>

@@ -44,8 +44,12 @@ import type { SocialAccountDto, SocialPlatform } from '@/types/social-account';
  *     OWNER or ADMIN - a UI convenience; the backend RoleGuard +
  *     @RequireMinimumRole('ADMIN') remain authoritative.
  *
- * METADATA ONLY: this page has no OAuth affordance of any kind, and the
- * metadata-only notice heads the section.
+ * OAUTH CONNECT: this page DOES render the approved OAuth connect affordances
+ * (Decision 013), shown only when the caller is OWNER/ADMIN - the same gate
+ * the backend RoleGuard enforces on the connect route. The connect start
+ * re-proves the ACTIVE ClientAgencyRelationship server-side, so the buttons
+ * never become a way around the checks above. The metadata-only notice still
+ * heads the section, because these rows are declared, not platform-verified.
  */
 type FormState =
   | { mode: 'closed' }

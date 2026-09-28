@@ -54,7 +54,22 @@ export class SocialAccountsOAuthService {
     private readonly crypto: TokenEncryptionService,
   ) {}
 
-  /** Resolve the ACTIVE managing organization for a client-side connect. */
+  /**
+   * Resolve the ACTIVE managing organization for a client-side connect.
+   *
+   * A self-registered Client is not an Organization member, so its tenant
+   * context can ONLY come from the ACTIVE ClientAgencyRelationship. An
+   * unmanaged Client therefore cannot mint an OAuth state, because the
+   * state carries `organizationId` and the callback re-proves membership +
+   * the ACTIVE relationship before any token is stored (approved Decision
+   * 013: "uniform 403 when the client is unmanaged").
+   *
+   * This is a deliberate authorization boundary - it is NOT relaxed here.
+   * The only change is a stable machine-readable `code`, so the UI can name
+   * the actual prerequisite instead of showing a generic "not allowed" that
+   * reads like a permissions bug. It leaks nothing: the caller already knows
+   * their own Client has no managing Agency.
+   */
   private async requireActiveManagingOrganization(
     clientId: string,
   ): Promise<string> {
@@ -63,9 +78,17 @@ export class SocialAccountsOAuthService {
       select: { organizationId: true },
     });
     if (!relationship) {
-      throw new ForbiddenException(
-        'Client is not actively managed by any agency.',
-      );
+      throw new ForbiddenException({
+        code: 'CLIENT_NOT_MANAGED',
+        // Kept verbatim in step with the frontend CLIENT_NOT_MANAGED copy
+        // (apps/web/lib/api-error-messages.ts) so an API client and the UI
+        // explain the same requirement. It deliberately states the
+        // prerequisite WITHOUT promising a self-serve "request an agency"
+        // step: no such client-facing workflow exists in the UI yet.
+        message:
+          'Connecting a social account requires an active Service Provider relationship. Once an agency is connected to this workspace, you can authorise Instagram, Facebook or YouTube.',
+        detail: 'CLIENT_NOT_MANAGED: no ACTIVE ClientAgencyRelationship.',
+      });
     }
     return relationship.organizationId;
   }
@@ -94,6 +117,62 @@ export class SocialAccountsOAuthService {
     const client =
       await this.clientsService.getClientForOrganization(clientId, organizationId);
     if (!client) throw new NotFoundException('Client not found');
+  }
+
+  /**
+   * Callback-time proof that the ACTING USER is still authorized for the
+   * tenant recorded in the verified state.
+   *
+   * The proof is source-dependent because the two personas are authorized by
+   * genuinely different facts - this is a fix for an authorization MISMATCH,
+   * not a relaxation of any check:
+   *
+   *  - AGENCY: the operator connects an account FOR the Organization, so an
+   *    active OrganizationMembership is the correct proof. UNCHANGED.
+   *  - CLIENT: the Client OWNER connects an account FOR THEIR OWN Client. A
+   *    client owner is intentionally never an Organization member
+   *    (AGENTS.md §6 - Workspace access is mediated through Organization
+   *    membership, and a client owner has none). Demanding membership here
+   *    therefore failed for EVERY client-side connect: both platform
+   *    Service-Provider Clients (Decision 012) and external-Agency Clients.
+   *
+   * The CLIENT proof is strictly stronger than the ACTIVE relationship it
+   * replaces, and every fact is re-read from PostgreSQL on each callback:
+   *   1. the actor must still OWN the Client named in the state, and
+   *   2. the organization must still be that Client's ACTIVE managing provider.
+   *
+   * A Client that was re-owned, terminated, or whose provider relationship
+   * changed mid-flow fails closed. `assertClientRelationshipActive` runs for
+   * BOTH sources and enforces the one-ACTIVE-Agency invariant unchanged.
+   */
+  private async assertActorAuthorizedForConnection(
+    payload: OAuthStatePayload,
+  ): Promise<void> {
+    if (payload.source === 'AGENCY') {
+      await this.assertMembershipActive(payload.sub, payload.organizationId);
+      await this.assertClientRelationshipActive(
+        payload.clientId,
+        payload.organizationId,
+      );
+      return;
+    }
+
+    // CLIENT source: ownership replaces membership. A single uniform 403 for
+    // "not the owner" and "no such Client" so the callback leaks no existence
+    // information.
+    const owned = await this.prisma.client.findFirst({
+      where: { id: payload.clientId, ownerUserId: payload.sub },
+      select: { id: true },
+    });
+    if (!owned) {
+      throw new ForbiddenException(
+        'Not authorized to connect social accounts for this Client',
+      );
+    }
+    await this.assertClientRelationshipActive(
+      payload.clientId,
+      payload.organizationId,
+    );
   }
 
   async startConnectAgency(
@@ -156,13 +235,10 @@ export class SocialAccountsOAuthService {
       throw new ForbiddenException('Invalid OAuth state');
     }
 
-    // Callback-time tenant re-verification (the callback route is public):
-    // the user must STILL be a member and the relationship STILL ACTIVE.
-    await this.assertMembershipActive(payload.sub, payload.organizationId);
-    await this.assertClientRelationshipActive(
-      payload.clientId,
-      payload.organizationId,
-    );
+    // Callback-time authorization re-verification (the callback route is
+    // public): the ACTING USER must still be authorized for the tenant named
+    // in the state, and the relationship must STILL be ACTIVE.
+    await this.assertActorAuthorizedForConnection(payload);
 
     const provider = getOAuthProvider(platform);
     const redirectUri = oauthRedirectUri(platform);

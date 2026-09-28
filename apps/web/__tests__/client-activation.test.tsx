@@ -20,13 +20,56 @@ describe('client activation flow', () => {
       '@/components/dashboard/client/client-activation-panel'
     );
     const src = mod.ClientActivationPanel.toString();
-    // A single button, a single request, and an EMPTY body: name, email,
-    // phone and persona all come from the verified User record server-side.
-    expect(src).toMatch(/startOnboarding\(\{\}\)/);
-    expect(src).toMatch(/Activate My Workspace/);
+    // A single button, a single request, and an EMPTY body on the normal
+    // path: name, email, phone and persona all come from the verified User
+    // record server-side. `type` is only ever sent when the account itself
+    // has to answer the persona question.
+    expect(src).toMatch(/startOnboarding/);
     expect(src).toMatch(/onActivated/);
     // Persist the binding hint so a refresh cannot lose the state.
     expect(src).toMatch(/saveBoundClientId/);
+  });
+
+  it('asks the persona only when the server reports it is missing', async () => {
+    const mod = await import(
+      '@/components/dashboard/client/client-activation-panel'
+    );
+    const src = mod.ClientActivationPanel.toString();
+    // The chooser is driven by the server's own `missing` field, never
+    // guessed client-side, and is gated on the agreement checkbox.
+    expect(src).toMatch(/activationMissingField/);
+    expect(src).toMatch(/personaRequired/);
+    // The button stays disabled until the persona is chosen.
+    expect(src).toMatch(/personaRequired && !persona/);
+  });
+
+  it('gates activation behind a mandatory T&C acceptance', async () => {
+    const mod = await import(
+      '@/components/dashboard/client/client-activation-panel'
+    );
+    const src = mod.ClientActivationPanel.toString();
+    // The welcome dialog is bound to panel state and cannot be dismissed.
+    expect(src).toMatch(/termsOpen/);
+    expect(src).toMatch(/dismissible=\{false\}/);
+    expect(src).toMatch(/I Agree & Activate Workspace/);
+    // The action stays disabled until the agreement checkbox is ticked,
+    // and the handler refuses to run without it.
+    // NOTE: assert on identifiers, not JSX attribute syntax - the
+    // transpiler rewrites `disabled={...}` into a plain `disabled:` prop,
+    // so matching the JSX form would never hit the compiled source.
+    expect(src).toMatch(/!agreed/);
+    expect(src).toMatch(/loading \|\| !agreed/);
+  });
+
+  it('renders the approved T&C copy from the single terms module', async () => {
+    const terms = await import('@/lib/client-terms');
+    expect(terms.CLIENT_TERMS_SECTIONS).toHaveLength(3);
+    const [data, lifecycle, liability] = terms.CLIENT_TERMS_SECTIONS;
+    // Verbatim anchors from the approved legal text.
+    expect(data.body).toContain('immutable provenance record');
+    expect(data.body).toContain('strict tenant isolation');
+    expect(lifecycle.body).toContain('Final Confirmation');
+    expect(liability.body).toContain('assumes absolutely no liability');
   });
 
   it('no longer collects name, email, phone or account type', async () => {

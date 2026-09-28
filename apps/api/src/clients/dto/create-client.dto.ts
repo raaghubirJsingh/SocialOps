@@ -56,3 +56,16 @@ export const startOnboardingSchema = createClientSchema
   });
 
 export type StartOnboardingDto = z.infer<typeof startOnboardingSchema>;
+
+/**
+ * Request-body schema for POST /api/onboarding/start.
+ *
+ * Identical to {@link startOnboardingSchema} except that it also accepts a
+ * completely ABSENT body: `safeParse(undefined)` fails against a bare
+ * object schema, so a bodyless POST (an old client, a proxy that strips
+ * the payload, or a `fetch` with no body) would be rejected with a 400
+ * even though 1-Click Activation needs no input at all. `.default({})`
+ * normalises that case to an empty object, guaranteeing the endpoint
+ * accepts `{}`, no body, or any subset of the legacy intake fields.
+ */
+export const startOnboardingBodySchema = startOnboardingSchema.default({});

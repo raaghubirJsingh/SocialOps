@@ -16,6 +16,8 @@ import {
 import type { Response } from 'express';
 
 import { isSocialPlatform } from '../../social-accounts/constants/social-platforms.js';
+import { Public } from '../../rbac/decorators/public.decorator.js';
+import { PublicAuth } from '../../rbac/decorators/public-auth.decorator.js';
 import { OAuthStateService } from './oauth-state.service.js';
 import type { OAuthStatePayload } from './oauth-state.service.js';
 import { SocialAccountsOAuthService } from './social-accounts-oauth.service.js';
@@ -50,6 +52,17 @@ export class SocialAccountOAuthCallbackController {
   ) {}
 
   @Get('callback/:platform')
+  // REQUIRED: the browser arrives from the platform carrying no Bearer token
+  // and no X-Organization-Id header. Without these the global JwtAuthGuard
+  // rejects the redirect with 401 before the controller ever runs, and the
+  // handshake can never complete. `@PublicAuth()` skips ONLY the JWT check
+  // (there is no session to present); `@Public()` skips ONLY the
+  // organization-context requirement (there is no organization header to
+  // send). The actual authorization controls are untouched: the HMAC-signed,
+  // single-use state, plus the callback-time ownership + ACTIVE-relationship
+  // re-verification performed in completeConnect().
+  @PublicAuth()
+  @Public()
   @ApiExcludeEndpoint() // browser-facing redirect; kept out of Swagger paths
   @ApiOkResponse({ description: '302 redirect to the frontend.' })
   /**

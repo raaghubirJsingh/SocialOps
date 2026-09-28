@@ -96,6 +96,24 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
+/**
+ * Release the auto-attached platform Service Provider (Decision 012).
+ *
+ * A self-registered Client is attached to the SocialOps Service Provider at
+ * activation, so engaging an external Agency is an explicit
+ * terminate-then-re-engage - never a silent replacement (one-ACTIVE-Agency
+ * invariant). Tests that set up an external Agency must therefore release the
+ * platform provider first, through the real client-facing route.
+ */
+async function releasePlatformProvider(accessToken: string, clientId: string) {
+  const res = await http
+    .post('/api/client/me/agency-relationship/terminate')
+    .set('Authorization', `Bearer ${accessToken}`)
+    .set('X-Client-Id', clientId)
+    .send({});
+  expect(res.status).toBe(201);
+}
+
 async function createPendingClient(ownerToken: string, orgId: string, tag: string) {
   const res = await http
     .post('/api/clients')
@@ -236,6 +254,7 @@ describe('L1 HTTP surface', () => {
     const raw = tokenFromLogs(start.logs, 'Mobile verification token');
     await http.post('/api/onboarding/activate').set('Authorization', `Bearer ${clientUser.accessToken}`).send({ token: raw });
     const admin = await seedOrgUser('hs-agency5', 'OWNER');
+    await releasePlatformProvider(clientUser.accessToken, clientId);
     await prisma.clientAgencyRelationship.create({
       data: { clientId, organizationId: admin.orgId, status: 'ACTIVE', initiatedBy: 'AGENCY' },
     });
@@ -272,6 +291,7 @@ describe('L1 HTTP surface', () => {
     const raw = tokenFromLogs(start.logs, 'Mobile verification token');
     await http.post('/api/onboarding/activate').set('Authorization', `Bearer ${clientUser.accessToken}`).send({ token: raw });
     await prisma.organization.update({ where: { id: agency.orgId }, data: { discoveryOptIn: true, discoveryApprovedAt: new Date() } });
+    await releasePlatformProvider(clientUser.accessToken, clientId);
     const req = await http
       .post('/api/client/me/agency-requests')
       .set('Authorization', `Bearer ${clientUser.accessToken}`)
@@ -308,6 +328,7 @@ describe('L1 HTTP surface', () => {
     const raw = tokenFromLogs(start.logs, 'Mobile verification token');
     await http.post('/api/onboarding/activate').set('Authorization', `Bearer ${clientUser.accessToken}`).send({ token: raw });
     await prisma.organization.update({ where: { id: agency.orgId }, data: { discoveryOptIn: true, discoveryApprovedAt: new Date() } });
+    await releasePlatformProvider(clientUser.accessToken, clientId);
 
     // Establish first ACTIVE relationship
     const req1 = await http

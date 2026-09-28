@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { ClientsService } from './clients.service.js';
 import type { StartOnboardingDto } from './dto/create-client.dto.js';
 import { MobileVerificationService } from './mobile-verification.service.js';
+import { SocialOpsProviderService } from './social-ops-provider.service.js';
 
 /**
  * Self-registration intake resolved from the ALREADY-VERIFIED User row.
@@ -80,6 +81,7 @@ export class ClientOnboardingService {
     private readonly prisma: PrismaService,
     private readonly clientsService: ClientsService,
     private readonly mobileVerification: MobileVerificationService,
+    private readonly socialOpsProvider: SocialOpsProviderService,
   ) {}
 
   /** Whether the Client has completed controlled onboarding. */
@@ -157,9 +159,35 @@ export class ClientOnboardingService {
       );
     }
 
+    // Persona resolution.
+    //
+    // Preference order: the account's own stored value first, then an
+    // explicit choice the caller is making right now. The second branch
+    // exists for accounts created BEFORE the persona was captured at
+    // registration (their PendingRegistration row is deleted on
+    // completion, so the original discovery answers are unrecoverable).
+    // It is an explicit user choice - never derived from `accountType`
+    // (AGENTS.md §17.1) - and it is persisted so the question can never be
+    // asked twice.
+    //
+    // The write targets `user.sub`, the subject of the verified JWT. No
+    // client-supplied identifier is involved, so this cannot touch another
+    // tenant's account.
+    let clientType = dbUser.clientType;
+    if (!clientType && dto.type) {
+      clientType = dto.type;
+      await this.prisma.user.update({
+        where: { id: user.sub },
+        data: { clientType },
+      });
+    }
+
     // Verified registration data, or null for a User that predates
     // Registration Phase v1.0 and must still complete the legacy intake.
-    const profile = this.resolveVerifiedProfile(dbUser);
+    const profile = this.resolveVerifiedProfile(dbUser, clientType);
+    // Diagnostic only: which verified field the User record lacks, so the
+    // legacy-fallback 400 can explain the real cause.
+    const missing = profile ? null : this.missingVerifiedField(dbUser);
 
     const existing = await this.prisma.client.findFirst({
       where: { ownerUserId: user.sub },
@@ -186,38 +214,70 @@ export class ClientOnboardingService {
     if (profile) {
       // 1-Click: the controlled binding happens HERE, on the same
       // self-registration path that has always owned it.
-      const client = await this.prisma.client.create({
-        data: {
-          ...profile,
-          ownerUserId: user.sub,
-          onboardingStatus: 'ACTIVE',
-          onboardingCompletedAt: new Date(),
-        },
+      //
+      // Client creation and platform-provider attachment share ONE
+      // transaction: either the Client is created AND has its Service
+      // Provider, or nothing is written. A failed activation therefore never
+      // leaves an orphan Client that cannot connect anything.
+      const client = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.client.create({
+          data: {
+            ...profile,
+            ownerUserId: user.sub,
+            onboardingStatus: 'ACTIVE',
+            onboardingCompletedAt: new Date(),
+          },
+        });
+        const providerOrganizationId =
+          await this.socialOpsProvider.attachIfUnmanaged(tx, created.id);
+        return { created, providerOrganizationId };
       });
       await this.clientsService.recordEvent(
-        client.id,
+        client.created.id,
         user.sub,
         'client.created',
-        { source: 'SELF_REGISTRATION', type: client.type },
+        { source: 'SELF_REGISTRATION', type: client.created.type },
       );
       await this.recordActivationEvents(
-        client,
+        client.created,
         user.sub,
         true,
         'SELF_REGISTRATION',
       );
+      if (client.providerOrganizationId) {
+        await this.clientsService.recordEvent(
+          client.created.id,
+          user.sub,
+          'agency.relationship.attached',
+          {
+            source: 'PLATFORM',
+            organizationId: client.providerOrganizationId,
+            initiatedBy: 'PLATFORM',
+          },
+        );
+      }
       return {
-        clientId: client.id,
-        onboardingStatus: client.onboardingStatus,
+        clientId: client.created.id,
+        onboardingStatus: client.created.onboardingStatus,
         mobileVerificationRequired: false,
         mobileVerificationExpiresAt: null,
-        client,
+        client: client.created,
       };
     }
 
     // Legacy fallback: original intake + mobile verification.
+    //
+    // The 1-Click path sends NO intake at all, so requiring the four
+    // fields here guaranteed an unavoidable 400 for any User whose record
+    // lacks a persona. That error blamed the payload for a data problem
+    // and left the client with no way forward. Instead: use the payload
+    // when the caller actually supplied intake, and otherwise report
+    // precisely what the account record is missing.
     const client = await this.prisma.client.create({
-      data: { ...this.requireLegacyIntake(dto), onboardingStatus: 'PENDING' },
+      data: {
+        ...this.legacyIntakeOrExplain(dto, missing),
+        onboardingStatus: 'PENDING',
+      },
     });
     await this.clientsService.recordEvent(
       client.id,
@@ -242,42 +302,107 @@ export class ClientOnboardingService {
    * inferred from `accountType` (AGENTS.md §17.1); a User without one just
    * keeps the legacy path.
    */
-  private resolveVerifiedProfile(user: {
-    email: string;
+  private resolveVerifiedProfile(
+    user: {
+      email: string;
+      fullName: string | null;
+      displayName: string | null;
+      phone: string | null;
+      clientType: ClientType | null;
+      phoneVerifiedAt: Date | null;
+    },
+    /** Persona resolved by the caller, if any; wins over the stored value. */
+    clientTypeOverride?: ClientType | null,
+  ): VerifiedOnboardingProfile | null {
+    const clientType = clientTypeOverride ?? user.clientType;
+    if (
+      !user.phoneVerifiedAt ||
+      !user.phone ||
+      !clientType ||
+      (user.fullName ?? user.displayName ?? '').trim().length === 0
+    ) {
+      return null;
+    }
+    return {
+      name: (user.fullName ?? user.displayName ?? '').trim(),
+      directEmail: user.email,
+      directPhone: user.phone,
+      type: clientType,
+    };
+  }
+
+  /**
+   * Name the first verified field this User record is missing, or null when
+   * everything the 1-Click path needs is present.
+   *
+   * Purely diagnostic: it turns the legacy-fallback 400 from an opaque
+   * "complete your profile" into a precise, actionable code. The values
+   * themselves are NEVER guessed here - `directPhone` and `type` are NOT
+   * NULL on Client, and the persona must never be derived from
+   * `accountType` (AGENTS.md §17.1), so a User missing one genuinely
+   * cannot be activated from the database alone.
+   */
+  private missingVerifiedField(user: {
     fullName: string | null;
     displayName: string | null;
     phone: string | null;
     clientType: ClientType | null;
     phoneVerifiedAt: Date | null;
-  }): VerifiedOnboardingProfile | null {
-    if (!user.phoneVerifiedAt) return null;
-    if (!user.phone) return null;
-    if (!user.clientType) return null;
-    const name = (user.fullName ?? user.displayName ?? '').trim();
-    if (name.length === 0) return null;
-    return {
-      name,
-      directEmail: user.email,
-      directPhone: user.phone,
-      type: user.clientType,
-    };
+  }): 'verifiedPhone' | 'phone' | 'clientType' | 'name' | null {
+    if (!user.phoneVerifiedAt) return 'verifiedPhone';
+    if (!user.phone) return 'phone';
+    if (!user.clientType) return 'clientType';
+    if ((user.fullName ?? user.displayName ?? '').trim().length === 0) {
+      return 'name';
+    }
+    return null;
   }
 
   /**
-   * Legacy-fallback intake guard. The 1-Click path needs no payload at all,
-   * so these four fields are enforced ONLY when we actually fall back -
-   * fail closed rather than persist a half-filled Client.
+   * Legacy-fallback intake resolution.
+   *
+   * The 1-Click path needs no payload at all, so the four identity fields
+   * are enforced ONLY when we actually fall back.
+   *
+   * `missing` is the verified field the User record lacked. When the
+   * caller supplied nothing (the 1-Click shape) we do NOT blame the
+   * payload with a 400: we surface a self-describing 409 that names the
+   * real gap, so the client can render the server's own words. When the
+   * caller DID send a partial payload, the original 400 stands because
+   * that really is a malformed request.
    */
-  private requireLegacyIntake(dto: StartOnboardingDto) {
+  private legacyIntakeOrExplain(
+    dto: StartOnboardingDto,
+    missing: 'verifiedPhone' | 'phone' | 'clientType' | 'name' | null = null,
+  ) {
     const { type, name, directEmail, directPhone, ...rest } = dto;
-    if (!type || !name || !directEmail || !directPhone) {
-      throw new BadRequestException({
-        code: 'ONBOARDING_INTAKE_REQUIRED',
-        detail:
-          'Client activation requires verified registration data; complete your profile to activate.',
+    const supplied = type && name && directEmail && directPhone;
+
+    if (supplied) {
+      return { ...rest, type, name, directEmail, directPhone };
+    }
+
+    if (!type && !name && !directEmail && !directPhone) {
+      // Nothing supplied at all: this is a 1-Click activation that the
+      // database cannot satisfy. Explain the real cause instead of
+      // returning a misleading validation error.
+      throw new ConflictException({
+        code: 'ONBOARDING_PROFILE_INCOMPLETE',
+        missing,
+        message: `Activation could not read the required details from your account record${
+          missing ? ` (missing: ${missing})` : ''
+        }. Re-verify your registration details, then try again.`,
+        detail: `ONBOARDING_PROFILE_INCOMPLETE: the account record is missing "${missing ?? 'required identity data'}".`,
       });
     }
-    return { ...rest, type, name, directEmail, directPhone };
+
+    throw new BadRequestException({
+      code: 'ONBOARDING_INTAKE_REQUIRED',
+      missing,
+      message:
+        'A partial onboarding payload was sent. All of type, name, directEmail and directPhone are required together.',
+      detail: 'ONBOARDING_INTAKE_REQUIRED: the supplied intake payload is incomplete.',
+    });
   }
 
   /**
@@ -306,21 +431,42 @@ export class ClientOnboardingService {
     source: 'SELF_REGISTRATION' | 'INVITATION',
   ): Promise<StartOnboardingResult> {
     const didBind = client.ownerUserId === null;
-    const updated = await this.prisma.client.update({
-      where: { id: client.id },
-      data: {
-        ...(didBind ? { ownerUserId } : {}),
-        onboardingStatus: 'ACTIVE',
-        onboardingCompletedAt: new Date(),
-      },
+    // Same single-transaction guarantee as the 1-Click path: the Client is
+    // never left ACTIVE without its Service Provider relationship.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.client.update({
+        where: { id: client.id },
+        data: {
+          ...(didBind ? { ownerUserId } : {}),
+          onboardingStatus: 'ACTIVE',
+          onboardingCompletedAt: new Date(),
+        },
+      });
+      const providerOrganizationId = await this.socialOpsProvider.attachIfUnmanaged(
+        tx,
+        row.id,
+      );
+      return { row, providerOrganizationId };
     });
-    await this.recordActivationEvents(updated, ownerUserId, didBind, source);
+    await this.recordActivationEvents(updated.row, ownerUserId, didBind, source);
+    if (updated.providerOrganizationId) {
+      await this.clientsService.recordEvent(
+        updated.row.id,
+        ownerUserId,
+        'agency.relationship.attached',
+        {
+          source: 'PLATFORM',
+          organizationId: updated.providerOrganizationId,
+          initiatedBy: 'PLATFORM',
+        },
+      );
+    }
     return {
-      clientId: updated.id,
-      onboardingStatus: updated.onboardingStatus,
+      clientId: updated.row.id,
+      onboardingStatus: updated.row.onboardingStatus,
       mobileVerificationRequired: false,
       mobileVerificationExpiresAt: null,
-      client: updated,
+      client: updated.row,
     };
   }
 
@@ -426,13 +572,25 @@ export class ClientOnboardingService {
       throw new ForbiddenException('Client is bound to another User');
     }
 
-    const updated = await this.prisma.client.update({
-      where: { id: client.id },
-      data: {
-        ...(bind ? { ownerUserId: user.sub } : {}),
-        onboardingStatus: 'ACTIVE',
-        onboardingCompletedAt: new Date(),
-      },
+    // Same single-transaction guarantee as the 1-Click and resume paths: a
+    // Client is never left ACTIVE without its Service Provider relationship.
+    // The activation and the relationship roll back together.
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.client.update({
+        where: { id: client.id },
+        data: {
+          ...(bind ? { ownerUserId: user.sub } : {}),
+          onboardingStatus: 'ACTIVE',
+          onboardingCompletedAt: new Date(),
+        },
+      });
+      // A no-op when the Client already has an ACTIVE relationship, which is
+      // always the case for an Agency-invited Client (the relationship is
+      // created together with the Client). Such a Client is therefore never
+      // reassigned to the platform provider.
+      const providerOrganizationId =
+        await this.socialOpsProvider.attachIfUnmanaged(tx, updated.id);
+      return { updated, providerOrganizationId };
     });
     if (bind) {
       await this.clientsService.recordEvent(
@@ -445,6 +603,18 @@ export class ClientOnboardingService {
     await this.clientsService.recordEvent(client.id, user.sub, 'client.activated', {
       source: bind ? 'SELF_REGISTRATION' : 'INVITATION',
     });
-    return updated;
+    if (result.providerOrganizationId) {
+      await this.clientsService.recordEvent(
+        client.id,
+        user.sub,
+        'agency.relationship.attached',
+        {
+          source: 'PLATFORM',
+          organizationId: result.providerOrganizationId,
+          initiatedBy: 'PLATFORM',
+        },
+      );
+    }
+    return result.updated;
   }
 }

@@ -81,13 +81,16 @@ export const clientApi = {
     }),
 
   /**
-   * Start self-registration onboarding. JWT required.
+   * Start self-registration onboarding AND perform 1-Click activation.
+   * JWT required.
    *
-   * 1-Click Activation: pass an empty object. The backend derives name,
-   * email, phone and persona from the authenticated, already-verified User
-   * record and returns an ACTIVE Client without any mobile OTP. The
-   * optional fields are only consumed by the legacy fallback for accounts
-   * that predate Registration Phase v1.0.
+   * This is the endpoint the client welcome T&C gate calls. Pass an empty
+   * object: the backend derives name, email, phone and persona from the
+   * authenticated, already-verified User record and returns an ACTIVE
+   * Client with no mobile OTP. The optional fields are only consumed by
+   * the legacy fallback for accounts that predate Registration Phase v1.0
+   * (in which case `mobileVerificationRequired` comes back true and a
+   * code must be submitted to `activateOnboarding`).
    */
   startOnboarding: (
     data: StartOnboardingRequest = {},
@@ -98,9 +101,12 @@ export const clientApi = {
     }),
 
   /**
-   * Activate onboarding with a mobile verification token. JWT required.
-   * Only reached on the legacy fallback path; the 1-Click path never needs
-   * a token, and invited clients keep using this endpoint unchanged.
+   * Consume a mobile verification token to complete activation.
+   * JWT required.
+   *
+   * NOT the 1-Click path: this endpoint requires a `token`, so it cannot
+   * be used by the welcome T&C gate. It serves the legacy fallback and the
+   * invitation flow, both of which still require their mobile token.
    */
   activateOnboarding: (
     data: ActivateOnboardingRequest,

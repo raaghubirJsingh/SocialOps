@@ -133,6 +133,16 @@ async function linkAgency(
     where: { id: agency.orgId },
     data: { discoveryOptIn: true, discoveryApprovedAt: new Date() },
   });
+  // The client is auto-attached to the SocialOps Service Provider at
+  // activation (Decision 012). Engaging an external Agency is therefore an
+  // explicit terminate-then-re-engage, never a silent replacement: release
+  // the platform provider through the real client-facing route first.
+  const released = await http
+    .post('/api/client/me/agency-relationship/terminate')
+    .set('Authorization', `Bearer ${client.accessToken}`)
+    .set('X-Client-Id', client.clientId)
+    .send({});
+  expect(released.status).toBe(201);
   const requested = await http
     .post('/api/client/me/agency-requests')
     .set('Authorization', `Bearer ${client.accessToken}`)

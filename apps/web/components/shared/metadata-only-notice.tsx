@@ -3,11 +3,18 @@ import { cn } from '@/lib/cn';
 /**
  * Metadata-only notice for Social Accounts (Client Operations V1).
  *
- * Required by the approved descope (docs/APPROVED_DECISIONS.md Decision 008):
- * SocialAccount rows are DECLARED by the client/agency and are NOT verified
- * against the platform, and no OAuth connection exists in V1. This notice is
- * rendered on both the list and the form so the UI can never imply that an
- * account is "connected".
+ * The metadata half of the original descope still holds and is the point of
+ * this notice: SocialAccount rows are DECLARED by the client/agency and are
+ * NOT verified against the platform, and no password, access token or
+ * refresh token is ever collected, stored, or displayed here.
+ *
+ * It previously also claimed "Connecting an account (OAuth) is not part of
+ * this phase", citing Decision 008. That sentence is STALE: Decision 013
+ * approved the Social Account OAuth handshake as an explicit change to
+ * previously deferred scope, and the connect buttons are rendered on the
+ * very pages that show this notice. Leaving it produced a page that denied
+ * OAuth existed while offering three OAuth buttons. The statement is
+ * removed; the metadata-only and token-handling disclosures are preserved.
  */
 export function MetadataOnlyNotice({ className }: { className?: string }) {
   return (
@@ -21,8 +28,9 @@ export function MetadataOnlyNotice({ className }: { className?: string }) {
       <span className="font-medium text-slate-300">Recorded metadata only.</span>{' '}
       These details are declared by the client or agency and are{' '}
       <span className="text-slate-300">not verified against the platform</span>.
-      Connecting an account (OAuth) is not part of this phase, so no password,
-      access token, or refresh token is ever collected or stored here.
+      Authorising a platform is handled separately from this record, and no
+      password, access token, or refresh token is ever collected, stored, or
+      shown here.
     </p>
   );
 }
