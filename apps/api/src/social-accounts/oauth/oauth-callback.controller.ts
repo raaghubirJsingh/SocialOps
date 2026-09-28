@@ -51,20 +51,6 @@ export class SocialAccountOAuthCallbackController {
     private readonly state: OAuthStateService,
   ) {}
 
-  @Get('callback/:platform')
-  // REQUIRED: the browser arrives from the platform carrying no Bearer token
-  // and no X-Organization-Id header. Without these the global JwtAuthGuard
-  // rejects the redirect with 401 before the controller ever runs, and the
-  // handshake can never complete. `@PublicAuth()` skips ONLY the JWT check
-  // (there is no session to present); `@Public()` skips ONLY the
-  // organization-context requirement (there is no organization header to
-  // send). The actual authorization controls are untouched: the HMAC-signed,
-  // single-use state, plus the callback-time ownership + ACTIVE-relationship
-  // re-verification performed in completeConnect().
-  @PublicAuth()
-  @Public()
-  @ApiExcludeEndpoint() // browser-facing redirect; kept out of Swagger paths
-  @ApiOkResponse({ description: '302 redirect to the frontend.' })
   /**
    * Resolve where to send the browser after the handshake (Design A).
    *
@@ -87,6 +73,25 @@ export class SocialAccountOAuthCallbackController {
       : `/client/social-accounts?clientId=${encodeURIComponent(payload.clientId)}`;
   }
 
+  // The route + access decorators MUST sit immediately above `callback`.
+  // They previously sat above `destinationFor`, which is declared first, so
+  // TypeScript bound them to `destinationFor` and Nest served the callback
+  // URL with that method (returning "/" as a 200) while `callback` was never
+  // routed. Keep this block adjacent to its target member.
+  @Get('callback/:platform')
+  // REQUIRED: the browser arrives from the platform carrying no Bearer token
+  // and no X-Organization-Id header. Without these the global JwtAuthGuard
+  // rejects the redirect with 401 before the controller ever runs, and the
+  // handshake can never complete. `@PublicAuth()` skips ONLY the JWT check
+  // (there is no session to present); `@Public()` skips ONLY the
+  // organization-context requirement (there is no organization header to
+  // send). The actual authorization controls are untouched: the HMAC-signed,
+  // single-use state, plus the callback-time ownership + ACTIVE-relationship
+  // re-verification performed in completeConnect().
+  @PublicAuth()
+  @Public()
+  @ApiExcludeEndpoint() // browser-facing redirect; kept out of Swagger paths
+  @ApiOkResponse({ description: '302 redirect to the frontend.' })
   async callback(
     @Param('platform') rawPlatform: string,
     @Query('code') code: string | undefined,
