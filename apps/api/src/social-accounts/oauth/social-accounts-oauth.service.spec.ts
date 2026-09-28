@@ -5,6 +5,14 @@ import { SocialAccountsOAuthService } from './social-accounts-oauth.service.js';
 
 const CLIENT_ID = '11111111-1111-4111-8111-111111111111';
 
+// Test-only platform credentials so the REAL provider adapter can build a URL.
+// These are literals in a test file, never the developer's environment.
+process.env.INSTAGRAM_CLIENT_ID ??= 'test-instagram-client-id';
+process.env.INSTAGRAM_CLIENT_SECRET ??= 'test-instagram-client-secret';
+process.env.FACEBOOK_CLIENT_ID ??= 'test-facebook-client-id';
+process.env.FACEBOOK_CLIENT_SECRET ??= 'test-facebook-client-secret';
+process.env.OAUTH_REDIRECT_BASE_URL ??= 'http://localhost:4000';
+
 /**
  * Client-side connect start (no database required).
  *
@@ -46,10 +54,7 @@ describe('SocialAccountsOAuthService.startConnectClient', () => {
   it('mints state when the Client has an ACTIVE managing relationship', async () => {
     const { service, state } = makeService();
     const res = await service.startConnectClient(CLIENT_ID, 'INSTAGRAM');
-    expect(res).toEqual({
-      authorizeUrl: 'state.signed.payload',
-      expiresIn: 600,
-    });
+    expect(res.expiresIn).toBe(600);
     expect(state.mint).toHaveBeenCalledWith({
       sub: 'user-1',
       organizationId: 'org-1',
@@ -57,6 +62,53 @@ describe('SocialAccountsOAuthService.startConnectClient', () => {
       platform: 'INSTAGRAM',
       source: 'CLIENT',
     });
+  });
+
+  it('returns the PROVIDER authorization URL, never the bare signed state', async () => {
+    const { service } = makeService();
+    const res = await service.startConnectClient(CLIENT_ID, 'INSTAGRAM');
+
+    // Regression pin: the response is a NAVIGATION target. Returning the
+    // state string here made the browser leave for a base64url value instead
+    // of the platform.
+    expect(res.authorizeUrl).not.toBe('state.signed.payload');
+
+    const url = new URL(res.authorizeUrl);
+    expect(`${url.origin}${url.pathname}`).toBe(
+      'https://www.facebook.com/v21.0/dialog/oauth',
+    );
+    expect(url.searchParams.get('response_type')).toBe('code');
+    expect(url.searchParams.get('client_id')).toBe('test-instagram-client-id');
+  });
+
+  it('binds the signed state into the provider URL as the CSRF parameter', async () => {
+    const { service, state } = makeService();
+    const res = await service.startConnectClient(CLIENT_ID, 'INSTAGRAM');
+
+    // The same state the service minted is the one the provider will echo
+    // back, so the callback can verify it.
+    const url = new URL(res.authorizeUrl);
+    expect(url.searchParams.get('state')).toBe('state.signed.payload');
+    expect(state.mint).toHaveBeenCalledTimes(1);
+  });
+
+  it('points redirect_uri at this API callback for the same platform', async () => {
+    const { service } = makeService();
+    const res = await service.startConnectClient(CLIENT_ID, 'INSTAGRAM');
+    const url = new URL(res.authorizeUrl);
+    expect(url.searchParams.get('redirect_uri')).toBe(
+      'http://localhost:4000/api/social-accounts/callback/INSTAGRAM',
+    );
+  });
+
+  it('builds the Facebook authorize URL for the Facebook platform', async () => {
+    const { service } = makeService();
+    const res = await service.startConnectClient(CLIENT_ID, 'FACEBOOK');
+    const url = new URL(res.authorizeUrl);
+    expect(url.searchParams.get('client_id')).toBe('test-facebook-client-id');
+    expect(url.searchParams.get('redirect_uri')).toBe(
+      'http://localhost:4000/api/social-accounts/callback/FACEBOOK',
+    );
   });
 
   it('refuses an unmanaged Client with a machine-readable CLIENT_NOT_MANAGED', async () => {

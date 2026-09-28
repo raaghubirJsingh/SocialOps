@@ -183,14 +183,24 @@ export class SocialAccountsOAuthService {
   ): Promise<{ authorizeUrl: string; expiresIn: number }> {
     // ACTIVE relationship proof (uniform 404 otherwise).
     await this.assertClientRelationshipActive(clientId, organizationId);
-    const authorizeUrl = await this.state.mint({
+    const state = await this.state.mint({
       sub: user.sub,
       organizationId,
       clientId,
       platform,
       source: 'AGENCY',
     });
-    return { authorizeUrl, expiresIn: 600 };
+    // The browser must leave for the PLATFORM's own authorization endpoint.
+    // Returning the signed state here would send the user to a base64url
+    // string instead of the provider, so the URL is built here with the state
+    // bound in as the CSRF parameter.
+    return {
+      authorizeUrl: getOAuthProvider(platform).buildAuthorizeUrl(
+        oauthRedirectUri(platform),
+        state,
+      ),
+      expiresIn: 600,
+    };
   }
 
   async startConnectClient(
@@ -207,7 +217,7 @@ export class SocialAccountsOAuthService {
     if (!client?.ownerUserId) {
       throw new ForbiddenException('Client binding is incomplete');
     }
-    const authorizeUrl = await this.state.mint({
+    const state = await this.state.mint({
       // The client OWNER user id - never a client-supplied value.
       sub: client.ownerUserId,
       organizationId,
@@ -215,7 +225,18 @@ export class SocialAccountsOAuthService {
       platform,
       source: 'CLIENT',
     });
-    return { authorizeUrl, expiresIn: 600 };
+    // The browser must leave for the PLATFORM's own authorization endpoint.
+    // Returning the signed state here would send the user to a base64url
+    // string instead of the provider, so the URL is built here with the state
+    // bound in as the CSRF parameter. Every check above still runs first, and
+    // an unconfigured platform fails closed inside buildAuthorizeUrl.
+    return {
+      authorizeUrl: getOAuthProvider(platform).buildAuthorizeUrl(
+        oauthRedirectUri(platform),
+        state,
+      ),
+      expiresIn: 600,
+    };
   }
 
   /**
