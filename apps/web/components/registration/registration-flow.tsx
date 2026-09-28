@@ -161,6 +161,22 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
   // so a previous answer is never carried into the next input.
   const identitySubStep = identityFieldFor(conversation.stage);
 
+  /**
+   * Rule 7 progress.
+   *
+   * The identity wizard asks exactly THREE questions in a fixed order, one
+   * input at a time. The state machine already guarantees that (see
+   * `identity-name` -> `identity-phone` -> `identity-email` in
+   * lib/registration-conversation.ts); surfacing the position makes the
+   * sequence legible and signals that nothing else is being asked, which is
+   * the "hyper-focused, one thing at a time" intent.
+   */
+  const IDENTITY_STEPS = ['fullName', 'phone', 'email'] as const;
+  const IDENTITY_STEP_LABELS = ['Name', 'WhatsApp', 'Email'] as const;
+  const identityStepIndex = identitySubStep
+    ? IDENTITY_STEPS.indexOf(identitySubStep)
+    : -1;
+
   const [otpInputs, setOtpInputs] = useState<{ EMAIL: string; WHATSAPP: string }>({
     EMAIL: '',
     WHATSAPP: '',
@@ -484,8 +500,12 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
               <p
                 className={
                   m.role === 'user'
-                    ? 'max-w-[85%] whitespace-pre-line rounded-2xl bg-blue-600 px-4 py-2 text-sm text-white'
-                    : 'max-w-[85%] whitespace-pre-line rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-2 text-sm text-slate-100'
+                    ? 'max-w-[85%] whitespace-pre-line rounded-2xl bg-blue-600 px-4 py-2.5 text-sm leading-relaxed text-white shadow-sm'
+                    : // Bot bubbles use `surface-panel`: a sharp 1px border and
+                      // a flat fill instead of backdrop blur. Blur is reserved
+                      // for the single glass modal (APP-SIDE BLUR BUDGET), and
+                      // a panel keeps the text edge crisp and readable.
+                      'surface-panel max-w-[85%] whitespace-pre-line rounded-2xl px-4 py-2.5 text-sm leading-relaxed text-slate-100'
                 }
               >
                 {m.text}
@@ -507,7 +527,7 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
           the user can still legitimately finish. */}
       {dead && !inIdentityWizard && (
         <div className="space-y-2">
-          <Button type="button" onClick={restart}>
+          <Button type="button" className="hover:-translate-y-1" onClick={restart}>
             फिर से शुरू करें (Start again)
           </Button>
         </div>
@@ -521,7 +541,12 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
                 key={opt.id}
                 type="button"
                 variant="secondary"
-                className="justify-start text-left whitespace-normal"
+                // Tactile feedback: a small upward lift on hover with a
+                // matching transition, mirroring the landing cards. The
+                // Button base already supplies `transition-all duration-200`
+                // and `active:scale-[0.98]`, so hover and press read as one
+                // continuous motion.
+                className="h-auto justify-start whitespace-normal rounded-xl px-4 py-3 text-left text-sm hover:-translate-y-1 hover:border-blue-500/40 hover:bg-white/[0.06]"
                 disabled={busy}
                 onClick={() => {
                   if (stage === 'forced-choice') {
@@ -549,37 +574,83 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
           fallback mask the Name input entirely. */}
       {inIdentityWizard && (
         <form
-          className="space-y-3"
+          className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
             void submitIdentityFieldAndAdvance(identityDraft);
           }}
         >
+          {/* Step position for the one-question-at-a-time wizard. Purely
+              presentational; the state machine still owns the order. */}
+          <div className="surface-panel rounded-xl px-4 py-3">
+            <div className="flex items-center justify-between text-xs font-medium">
+              <span className="text-slate-300">
+                Step {identityStepIndex + 1} of {IDENTITY_STEPS.length}
+              </span>
+              <span className="text-blue-300">
+                {IDENTITY_STEP_LABELS[identityStepIndex]}
+              </span>
+            </div>
+            <div
+              className="mt-2.5 flex gap-1.5"
+              role="progressbar"
+              aria-valuemin={1}
+              aria-valuemax={IDENTITY_STEPS.length}
+              aria-valuenow={identityStepIndex + 1}
+              aria-label="Registration progress"
+            >
+              {IDENTITY_STEPS.map((step, i) => (
+                <span
+                  key={step}
+                  className={
+                    i <= identityStepIndex
+                      ? 'h-1.5 flex-1 rounded-full bg-blue-500'
+                      : 'h-1.5 flex-1 rounded-full bg-white/10'
+                  }
+                />
+              ))}
+            </div>
+          </div>
+
           {identitySubStep === 'fullName' && (
             <div className="space-y-1.5">
-              <Label htmlFor="reg-name">Name</Label>
+              <Label
+                htmlFor="reg-name"
+                className="text-sm font-medium text-slate-200"
+              >
+                Name
+              </Label>
               <Input
                 id="reg-name"
+                className="h-12 text-base"
                 value={identityDraft}
                 onChange={(e) => setIdentityDraft(e.target.value)}
                 placeholder="आपका पूरा नाम"
                 autoComplete="name"
+                autoFocus
               />
             </div>
           )}
 
           {identitySubStep === 'phone' && (
             <div className="space-y-1.5">
-              <Label htmlFor="reg-phone">WhatsApp mobile</Label>
+              <Label
+                htmlFor="reg-phone"
+                className="text-sm font-medium text-slate-200"
+              >
+                WhatsApp mobile
+              </Label>
               <Input
                 id="reg-phone"
+                className="h-12 text-base"
                 value={identityDraft}
                 onChange={(e) => setIdentityDraft(e.target.value)}
                 placeholder="9876543210 / +919876543210"
                 inputMode="tel"
                 autoComplete="tel"
+                autoFocus
               />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs leading-relaxed text-slate-400">
                 यह WhatsApp से जुड़ा नंबर होना चाहिए। (Must be a WhatsApp-connected
                 number.)
               </p>
@@ -588,22 +659,38 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
 
           {identitySubStep === 'email' && (
             <div className="space-y-1.5">
-              <Label htmlFor="reg-email">Email address</Label>
+              <Label
+                htmlFor="reg-email"
+                className="text-sm font-medium text-slate-200"
+              >
+                Email address
+              </Label>
               <Input
                 id="reg-email"
+                className="h-12 text-base"
                 type="email"
                 value={identityDraft}
                 onChange={(e) => setIdentityDraft(e.target.value)}
                 placeholder="you@example.com"
                 autoComplete="email"
+                autoFocus
               />
             </div>
           )}
 
           {identityError && (
-            <p className="text-xs text-red-300">{identityError}</p>
+            <p
+              role="alert"
+              className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-xs text-red-300"
+            >
+              {identityError}
+            </p>
           )}
-          <Button type="submit" disabled={busy} className="w-full">
+          <Button
+            type="submit"
+            disabled={busy}
+            className="h-11 w-full rounded-xl hover:-translate-y-1"
+          >
             {busy
               ? 'भेज रहे हैं…'
               : identitySubStep === 'email'
@@ -617,7 +704,7 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
           {channelRows.map((row) => (
             <div
               key={row.id}
-              className="space-y-2 rounded-lg border border-white/10 bg-slate-900/50 p-3"
+              className="surface-panel space-y-2 rounded-xl p-4"
             >
               <div className="flex items-center justify-between text-sm">
                 <span className="font-medium text-slate-100">{row.label}</span>
@@ -649,6 +736,7 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
                   />
                   <Button
                     type="button"
+                    className="hover:-translate-y-1"
                     disabled={busy || lockSeconds > 0}
                     onClick={() => void verifyChannel(row.id)}
                   >
@@ -721,7 +809,11 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
           {passwordError && (
             <p className="text-xs text-red-300">{passwordError}</p>
           )}
-          <Button type="submit" disabled={busy} className="w-full">
+          <Button
+            type="submit"
+            disabled={busy}
+            className="h-11 w-full rounded-xl hover:-translate-y-1"
+          >
             {busy ? 'बना रहे हैं…' : 'Account बनाएँ (Create account)'}
           </Button>
         </form>
@@ -732,7 +824,7 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
           <p className="text-sm text-slate-300">
             आपका account तैयार है। (Your account is ready - sign in to continue.)
           </p>
-          <Button asChild className="w-full">
+          <Button asChild className="h-11 w-full rounded-xl hover:-translate-y-1">
             <Link href="/login">Sign in</Link>
           </Button>
         </div>

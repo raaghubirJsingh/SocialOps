@@ -29,34 +29,37 @@ export const metadata: Metadata = {
  * issues no tokens until the email is verified (and only at /login).
  */
 export default function EmployeeRegisterPage() {
-    return (
-    <div className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 p-6 text-slate-100">
-      {/* Ambient backdrop - the same layered-glow recipe as the landing hero and
-          the login/register pages, so the single glass auth card below has
+  return (
+    <div className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 p-4 text-slate-100 sm:p-6">
+      {/* Ambient backdrop - the same layered-glow recipe as the landing hero
+          and the register page, so the single glass auth modal below has
           something colourful to blur (see the APP-SIDE BLUR BUDGET in
           globals.css). Decorative only. */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
         <div className="absolute inset-x-0 top-0 h-[28rem] bg-[radial-gradient(ellipse_at_top,rgb(37_99_235/0.16),transparent_60%)]" />
-        <div className="absolute -top-24 left-1/2 h-72 w-[42rem] -translate-x-1/2 rounded-full bg-blue-600/15 blur-3xl" />
+        <div className="absolute inset-0 bg-grid-faint" />
         <div className="absolute inset-0 bg-auth-gradient-animate" />
+        <div className="absolute inset-0 bg-registration-focus-glow" />
       </div>
 
       <div className="relative w-full max-w-sm">
-        <div className="mb-8 text-center">
+        <div className="mb-6 text-center">
           <Link
             href="/"
             className="inline-block rounded text-2xl font-bold tracking-tight transition-opacity duration-200 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
           >
             Social<span className="text-blue-400">Ops</span>
           </Link>
-          <p className="mt-2 text-sm text-slate-400">
+          <p className="mt-1.5 text-sm font-medium text-slate-300">
             Create your employee account
           </p>
         </div>
-        <Card surface="glass" className="rounded-2xl">
-          <CardHeader>
-            <CardTitle>Create your employee account</CardTitle>
-            <CardDescription>
+        <Card surface="glass" className="rounded-3xl">
+          <CardHeader className="space-y-1.5">
+            <CardTitle className="text-xl font-semibold tracking-tight text-slate-50">
+              Create your employee account
+            </CardTitle>
+            <CardDescription className="text-sm leading-relaxed text-slate-300">
               Enter your details. We will email you a verification link
               before you can sign in.
             </CardDescription>
@@ -69,7 +72,7 @@ export default function EmployeeRegisterPage() {
           Already have an account?{' '}
           <Link
             href="/login"
-            className="rounded text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
+            className="rounded font-medium text-blue-400 transition-colors duration-200 hover:text-blue-300 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
           >
             Sign in
           </Link>

@@ -86,6 +86,43 @@ html {
   }
 }
 
+/*
+ * Slow focus glow for the registration modal.
+ *
+ * The auth gradient above is anchored at the TOP of the viewport, which is
+ * where the card's header sits - so it frames the title but does not
+ * actually point at the field the user has to fill in. This utility is
+ * anchored LOW and centred (the identity input always renders around the
+ * middle/lower third of the modal), and drifts slowly between two
+ * positions so the eye is drawn to the input without competing with it.
+ *
+ * Deliberately low-opacity and slow (26s) to match the "subtle" rule, and
+ * it is a background layer only - never stacked on a `surface-*` utility,
+ * which would violate the one-surface rule documented below.
+ */
+@utility bg-registration-focus-glow {
+  background-image: radial-gradient(
+    ellipse 62% 46% at 50% 56%,
+    rgb(59 130 246 / 0.16) 0%,
+    rgb(37 99 235 / 0.07) 38%,
+    transparent 72%
+  );
+  background-size: 150% 150%;
+  animation: registration-focus-pulse 26s ease-in-out infinite;
+}
+
+@keyframes registration-focus-pulse {
+  0%,
+  100% {
+    background-position: 50% 38%;
+    opacity: 0.7;
+  }
+  50% {
+    background-position: 50% 62%;
+    opacity: 1;
+  }
+}
+
 /* ---------------------------------------------------------------------------
  * Landing surface utilities (Modern SaaS visual language).
  *
