@@ -20,6 +20,13 @@ export interface ActiveUserFactoryInput {
   accountType: AccountType | null;
   phone?: string;
   password?: string;
+  /**
+   * AI Employee Fleet opt-in (Phase 2 / Decision 010). Defaults to false so every
+   * existing caller keeps creating an ordinary human user. `skillSpecialization`
+   * is only persisted when the user is a bot, mirroring the approved schema.
+   */
+  isBot?: boolean;
+  skillSpecialization?: string | null;
 }
 
 export async function createActiveUser(
@@ -41,6 +48,17 @@ export async function createActiveUser(
       isActive: true,
       emailVerifiedAt: new Date(),
       phoneVerifiedAt: input.phone ? new Date() : null,
+      // An AI Employee is a first-class User that additionally carries
+      // isBot = true. It still authenticates normally; the accountType stays as
+      // the caller supplied it because an AI employee is NOT a Client or a
+      // Service Provider (it is only ever a MEMBER of the agency's
+      // Organization, per AIAgentService).
+      ...(input.isBot
+        ? {
+            isBot: true,
+            skillSpecialization: input.skillSpecialization ?? null,
+          }
+        : {}),
     },
   });
 }
