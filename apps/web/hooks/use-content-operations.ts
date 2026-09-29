@@ -14,7 +14,14 @@
  *   - no optimistic updates (status / locks / counters are server-owned, so
  *     mutations invalidate on settle and the server response is the truth);
  *   - boundary preserved: agency-only data (internal notes) is fetched only
- *     by agency hooks and never by client hooks (AGENTS.md §7).
+ *     by agency hooks and never by client hooks (AGENTS.md §7);
+ *   - every AGENCY query key carries `activeOrganizationId`, per the
+ *     organization-scoped convention in `lib/query-keys.ts` and use-content.ts.
+ *     Without it, a session that switches organizations would read the previous
+ *     tenant's cached row before any refetch resolves. Mutation invalidations
+ *     MUST use the identical key or `invalidateQueries` prefix-matches nothing.
+ *     Client-scope keys are deliberately NOT organization-scoped: a Client owner
+ *     is not an Organization member, so the tenant key is the bound clientId.
  */
 'use client';
 
@@ -23,6 +30,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useActiveOrganization } from '@/hooks/use-active-organization';
 import { useSession } from '@/hooks/use-session';
 import { contentApi } from '@/lib/content-api';
+import { queryKeys } from '@/lib/query-keys';
 import type {
   ChangeRequestDto,
   ConfirmFinalRequest,
@@ -62,7 +70,10 @@ export function useAgencyContent(clientId: string, contentId: string) {
   const { isAuthenticated, isLoading } = useSession();
   const enabled = opsEnabled(isLoading, isAuthenticated, activeOrganizationId, true, clientId, contentId);
   return useQuery<ContentDto>({
-    queryKey: ['content', 'detail', 'agency', clientId, contentId],
+    // The shared factory already carries the active organization id, so this key
+    // is the SAME entry use-content.ts writes for the production detail page and
+    // switching organizations can never surface the previous tenant's row.
+    queryKey: queryKeys.contentDetail('agency', activeOrganizationId, clientId, contentId),
     queryFn: () => contentApi.getForClient(clientId, contentId),
     enabled,
     retry: 0,
@@ -74,7 +85,9 @@ export function useAgencyInternalNotes(clientId: string, contentId: string) {
   const { isAuthenticated, isLoading } = useSession();
   const enabled = opsEnabled(isLoading, isAuthenticated, activeOrganizationId, true, clientId, contentId);
   return useQuery<InternalNoteDto[]>({
-    queryKey: ['content', 'internal-notes', 'agency', clientId, contentId],
+    // Agency-only data: the organization id is part of the key so a session that
+    // switches organizations never reads another tenant's notes from cache.
+    queryKey: ['content', 'internal-notes', 'agency', activeOrganizationId, clientId, contentId],
     queryFn: () => contentApi.internalNotesForClient(clientId, contentId),
     enabled,
     retry: 0,
@@ -86,7 +99,11 @@ export function useAgencyRevisions(clientId: string, contentId: string) {
   const { isAuthenticated, isLoading } = useSession();
   const enabled = opsEnabled(isLoading, isAuthenticated, activeOrganizationId, true, clientId, contentId);
   return useQuery<ContentRevisionDto[]>({
-    queryKey: ['content', 'revisions', 'agency', clientId, contentId],
+    // Scoped inline rather than via queryKeys.contentRevisions: that factory takes
+    // no organizationId (query-keys.ts:30-34), so using it here would leave this
+    // agency revision cache shared across organizations. The key SHAPE matches
+    // the factory's ordering so the two stay recognisable.
+    queryKey: ['content', 'revisions', 'agency', activeOrganizationId, clientId, contentId],
     queryFn: () => contentApi.revisionsForClient(clientId, contentId),
     enabled,
     retry: 0,
@@ -95,22 +112,26 @@ export function useAgencyRevisions(clientId: string, contentId: string) {
 
 export function useProcessAiTask(clientId: string, contentId: string) {
   const queryClient = useQueryClient();
+  const { activeOrganizationId } = useActiveOrganization();
   return useMutation<ContentRevisionDto | InternalNoteDto, Error, ProcessAiTaskRequest>({
     mutationFn: (body) => contentApi.processAiTaskForClient(clientId, contentId, body),
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ['content', 'detail', 'agency', clientId, contentId] });
-      void queryClient.invalidateQueries({ queryKey: ['content', 'revisions', 'agency', clientId, contentId] });
-      void queryClient.invalidateQueries({ queryKey: ['content', 'internal-notes', 'agency', clientId, contentId] });
+      // These MUST stay identical to the query keys above, otherwise
+      // invalidateQueries prefix-matches nothing and the UI serves stale data.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.contentDetail('agency', activeOrganizationId, clientId, contentId) });
+      void queryClient.invalidateQueries({ queryKey: ['content', 'revisions', 'agency', activeOrganizationId, clientId, contentId] });
+      void queryClient.invalidateQueries({ queryKey: ['content', 'internal-notes', 'agency', activeOrganizationId, clientId, contentId] });
     },
   });
 }
 
 export function useTransitionAgencyContent(clientId: string, contentId: string) {
   const queryClient = useQueryClient();
+  const { activeOrganizationId } = useActiveOrganization();
   return useMutation<ContentDto, Error, { to: 'UNDER_CLIENT_REVIEW'; note?: string }>({
     mutationFn: ({ to, note }) => contentApi.transitionForClient(clientId, contentId, { to, note }),
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ['content', 'detail', 'agency', clientId, contentId] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.contentDetail('agency', activeOrganizationId, clientId, contentId) });
     },
   });
 }
