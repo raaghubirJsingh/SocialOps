@@ -59,6 +59,31 @@ if (!process.env.JWT_REFRESH_SECRET)
 // secret). Without it every connect start is correctly refused.
 if (!process.env.OAUTH_STATE_SECRET)
   process.env.OAUTH_STATE_SECRET = 'integration-provider-oauth-state-32';
+// Test-only placeholders so the REAL provider adapter can BUILD an authorize URL.
+// buildAuthorizeUrl() only concatenates a string - it performs NO network call - so
+// literals are sufficient and no real credential is ever used. Same convention as
+// the sibling unit spec (social-accounts-oauth.service.spec.ts:20-23). These are
+// literals in a test file, never the developer's environment.
+//
+// The one test that asserts OAUTH_PROVIDER_NOT_CONFIGURED deletes this pair again
+// in its own body (and restores it in a finally block), so it still proves the
+// fail-closed path and still performs no exchange.
+process.env.INSTAGRAM_CLIENT_ID ??= 'test-instagram-client-id';
+process.env.INSTAGRAM_CLIENT_SECRET ??= 'test-instagram-client-secret';
+
+/**
+ * `startConnectClient()` returns the FULL provider authorizeUrl; the signed
+ * state token the platform echoes back to the callback is its `state` query
+ * parameter. `OAuthStateService.verify()` expects that token, not the URL.
+ *
+ * Parsed exactly as a real callback would read it, mirroring the sibling unit
+ * spec (social-accounts-oauth.service.spec.ts:275-276).
+ */
+function stateFrom(authorizeUrl: string): string {
+  const value = new URL(authorizeUrl).searchParams.get('state');
+  if (!value) throw new Error('authorizeUrl carried no state parameter');
+  return value;
+}
 if (!process.env.JWT_ACCESS_TTL) process.env.JWT_ACCESS_TTL = '900';
 if (!process.env.JWT_REFRESH_TTL) process.env.JWT_REFRESH_TTL = '604800';
 process.env.AUTH_DEV_AUTO_VERIFY_REGISTER = 'false';
@@ -271,11 +296,11 @@ describe('a self-registered Client can drive the OAuth flow', () => {
 
     // Real signed state, minted through the normal client-side start path,
     // then verified through the real HMAC path the controller uses.
-    const { authorizeUrl: state } = await oauth.startConnectClient(
+    const { authorizeUrl } = await oauth.startConnectClient(
       clientId,
       'INSTAGRAM',
     );
-    const payload = await stateSvc.verify(state);
+    const payload = await stateSvc.verify(stateFrom(authorizeUrl));
     expect(payload.clientId).toBe(clientId);
     expect(payload.source).toBe('CLIENT');
 
@@ -283,9 +308,27 @@ describe('a self-registered Client can drive the OAuth flow', () => {
     // re-check PASSED. The exchange then fails only because no live Instagram
     // credential exists in tests - a provider-configuration error, not an
     // authorization error. (Token persistence is connector-layer scope.)
-    const err = await oauth
-      .completeConnect('INSTAGRAM', 'authorization-code', payload)
-      .catch((e: unknown) => e);
+    //
+    // The placeholder pair seeded at module load is REMOVED here so this test
+    // still exercises the genuine unconfigured path. That also guarantees
+    // requireClientConfig() throws before any exchange network call is attempted.
+    const savedId = process.env.INSTAGRAM_CLIENT_ID;
+    const savedSecret = process.env.INSTAGRAM_CLIENT_SECRET;
+    delete process.env.INSTAGRAM_CLIENT_ID;
+    delete process.env.INSTAGRAM_CLIENT_SECRET;
+    let err: unknown;
+    try {
+      err = await oauth
+        .completeConnect('INSTAGRAM', 'authorization-code', payload)
+        .catch((e: unknown) => e);
+    } finally {
+      // Restore in a finally block so a failing assertion can never leave the
+      // module-level pair missing for the tests that follow.
+      if (savedId !== undefined) process.env.INSTAGRAM_CLIENT_ID = savedId;
+      if (savedSecret !== undefined) {
+        process.env.INSTAGRAM_CLIENT_SECRET = savedSecret;
+      }
+    }
     // A missing credential pair is a SERVICE failure, never an authorization
     // one, so it surfaces as a typed 503 carrying the machine-readable code
     // the UI names. Assert the typed contract, not prose: the human-readable
@@ -304,25 +347,28 @@ describe('a self-registered Client can drive the OAuth flow', () => {
   it('rejects a tampered OAuth state', async () => {
     const user = await selfRegisteringClient('tampered');
     const res = await activate(user.accessToken);
-    const { authorizeUrl: state } = await app
+    const { authorizeUrl } = await app
       .get(SocialAccountsOAuthService)
       .startConnectClient(res.body.clientId as string, 'INSTAGRAM');
 
     // The HMAC must not validate: tampering is rejected before any
     // authorization decision is reached.
     await expect(
-      app.get(OAuthStateService).verify(`${state}tampered`),
+      app
+        .get(OAuthStateService)
+        .verify(`${stateFrom(authorizeUrl)}tampered`),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('rejects a replayed OAuth state', async () => {
     const user = await selfRegisteringClient('replayed');
     const res = await activate(user.accessToken);
-    const { authorizeUrl: state } = await app
+    const { authorizeUrl } = await app
       .get(SocialAccountsOAuthService)
       .startConnectClient(res.body.clientId as string, 'INSTAGRAM');
 
     const stateSvc = app.get(OAuthStateService);
+    const state = stateFrom(authorizeUrl);
     await expect(stateSvc.verify(state)).resolves.toBeDefined();
     // Single use: the nonce is consumed on first verification.
     await expect(stateSvc.verify(state)).rejects.toBeInstanceOf(
