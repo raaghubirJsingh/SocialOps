@@ -31,7 +31,7 @@ env:
   GITLEAKS_VERSION: "8.30.1" # Pinned Gitleaks OSS release (verified stable, non-prerelease)
   # Ephemeral, throwaway dev/test placeholder connection strings for this CI run only.
   # Never real credentials; never point at any live environment (AGENTS.md section 8/12).
-  DATABASE_URL: postgresql://socialops:socialops_dev@localhost:5432/socialops
+  DATABASE_URL: postgresql://socialops:socialops_dev@localhost:5432/socialops_test
   REDIS_URL: redis://localhost:6379
   # Stage B6 authentication (JWT + Argon2id). Throwaway dev placeholders only.
   # Never real secrets; never point at any live environment.
@@ -79,11 +79,11 @@ jobs:
         env:
           POSTGRES_USER: socialops
           POSTGRES_PASSWORD: socialops_dev
-          POSTGRES_DB: socialops
+          POSTGRES_DB: socialops_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U socialops -d socialops"
+          --health-cmd "pg_isready -U socialops -d socialops_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
