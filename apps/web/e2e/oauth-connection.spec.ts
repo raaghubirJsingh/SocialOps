@@ -205,7 +205,14 @@ test.describe('connection affordances from hasCredential', () => {
       .first()
       .click();
     // The section nav on the detail page is where social accounts live.
-    await page.getByRole('link', { name: /social accounts/i }).first().click();
+    // Scope to that nav explicitly: an unscoped /social accounts/i ALSO matches
+    // the sidebar's Client-scope "Social Accounts" link (sidebar.tsx
+    // CLIENT_NAV_ITEMS), which renders before <main>, so `.first()` navigated to
+    // the wrong route and detached this element mid-click.
+    await page
+      .getByRole('navigation', { name: 'Client sections' })
+      .getByRole('link', { name: 'Social accounts', exact: true })
+      .click();
 
     await expect(
       page.getByRole('heading', { name: 'Social accounts' }),
