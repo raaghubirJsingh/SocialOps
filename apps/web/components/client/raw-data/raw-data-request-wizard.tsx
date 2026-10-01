@@ -22,7 +22,7 @@ import { useRawDataDraft } from '@/hooks/use-raw-data-draft';
 import { useSession } from '@/hooks/use-session';
 import { describeApiError } from '@/lib/api-error-messages';
 import { rawDataApi } from '@/lib/raw-data-api';
-import type { CreateRawDataRequest, RawDataDto } from '@/types/content';
+import type { CreateRawDataRequest, RawDataDto, UploadedFileRef } from '@/types/content';
 import {
   RAW_DATA_REQUEST_DEFAULTS,
   WIZARD_STEPS,
