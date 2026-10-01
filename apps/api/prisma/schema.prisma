@@ -653,11 +653,34 @@ enum ContentStatus {
   DRAFT
   IN_REVIEW
   CHANGES_REQUESTED
+  /// LEGACY (retired from the Phase 2 pipeline by the approved Phase 2 content
+  /// lifecycle decision, Decision 017).
+  ///
+  /// Retained as a database value for two reasons:
+  ///   1. PostgreSQL cannot drop an enum value once it exists;
+  ///   2. "ContentStatusEvent" audit history recorded under V1 remains truthful
+  ///      and is never rewritten (AGENTS.md §11).
+  ///
+  /// It is NOT an active Phase 2 status: the Phase 2 pipeline reaches
+  /// FINAL_CONFIRMED instead. The constraint
+  /// "Content_approved_requires_final_confirmation" is deliberately preserved
+  /// as a guard, and any pre-existing APPROVED row was converted to
+  /// FINAL_CONFIRMED by migration 20260930100000_phase2_content_lifecycle.
+  ///
+  /// SCOPE BOUNDARY: the V1 endpoint POST /api/client/me/content/:contentId/
+  /// final-confirmation and ContentStatusService.confirmFinal() are preserved
+  /// unchanged and can still produce an APPROVED row. Retiring that V1 door is
+  /// NOT authorized by Decision 017 and requires its own approval.
   APPROVED
   ARCHIVED
-  // Unified Content & AI Foundation (Phase 1): additional workflow states
-  // for the 3-scenario content pipeline. These extend the existing status
-  // machine without replacing it.
+  // Phase 2 workflow states. These REPLACE the V1 approval path:
+  //   DRAFT -> AWAITING_MANAGER_APPROVAL -> UNDER_CLIENT_REVIEW
+  //        -> FINAL_CONFIRMED (terminal before the deferred Publishing phase)
+  // Client final confirmation PERMANENTLY LOCKS the item at FINAL_CONFIRMED.
+  // There is no edit path out of it: the confirmation triple is never cleared
+  // for such a row, and the ONLY permitted subsequent transition is ARCHIVED.
+  // The lock applies to every actor - human Manager edits, AI revision output,
+  // and Client Change Requests are all refused after final confirmation.
   AWAITING_MANAGER_APPROVAL
   UNDER_CLIENT_REVIEW
   FINAL_CONFIRMED
@@ -800,7 +823,14 @@ model Content {
   /// Nullable: Content may predate the agency tracking or exist without one.
   agencyId     String?       @db.Uuid
 
-  // --- Final Confirmation: the ONLY path to APPROVED ---------------------
+  // --- Final Confirmation: the confirmation triple ------------------------
+  // The ONLY path to the active terminal state, FINAL_CONFIRMED (Phase 2).
+  // All three are written atomically with a new immutable ContentRevision.
+  // The database enforces this for FINAL_CONFIRMED via
+  // "Content_final_confirmed_requires_final_confirmation"; the same triple is
+  // still guarded for the legacy APPROVED value by
+  // "Content_approved_requires_final_confirmation". Both constraints are
+  // preserved. The fields themselves are unchanged by the Phase 2 decision.
   finalConfirmedAt         DateTime?
   finalConfirmedByUserId   String?   @db.Uuid
   /// Points at the immutable snapshot the confirmer actually approved.

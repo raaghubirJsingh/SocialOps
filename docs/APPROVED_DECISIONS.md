@@ -971,6 +971,128 @@ changes; or a Git push. Each requires its own subsequent approval. Nothing has
 been committed or pushed.
 
 
+## Decision 017 — Phase 2 Content Lifecycle: Permanent Lock at Final Confirmation
+
+Status: FINAL
+Approved: 2026-09-30 (explicit approval in session)
+
+This entry records the approved Phase 2 content lifecycle. It governs the
+migration `20260930100000_phase2_content_lifecycle` and the behavior of the
+`Content` status machine after a Client grants final confirmation.
+
+### 1. Legacy APPROVED content
+
+- `APPROVED` is RETIRED from the Phase 2 pipeline as an active status. No Phase 2
+  code path produces it or transitions into it: it is not in the Phase 2
+  workflow states, and `FINAL_CONFIRMED` is the Phase 2 terminal confirmation
+  state instead.
+- SCOPE BOUNDARY (stated explicitly so this decision is not over-read): the
+  pre-existing V1 endpoint `POST /api/client/me/content/:contentId/
+  final-confirmation` and `ContentStatusService.confirmFinal()` are PRESERVED
+  UNCHANGED and can still produce an `APPROVED` row. Retiring that V1 door is a
+  separate, breaking API change that is NOT authorized by this entry and
+  requires its own explicit approval (AGENTS.md sections 14-15). Any row it
+  creates satisfies both CHECK constraints and is unaffected by the permanent
+  `FINAL_CONFIRMED` lock in section 3, which governs the Phase 2 pipeline only.
+- It is RETAINED as a `ContentStatus` enum value for two reasons: PostgreSQL
+  cannot drop an enum value once it exists, and `ContentStatusEvent` audit
+  history recorded under V1 remains truthful and is never rewritten
+  (AGENTS.md §11).
+- Its existing CHECK constraint
+  `Content_approved_requires_final_confirmation` is deliberately PRESERVED as a
+  guard; it is not dropped.
+- Any pre-existing `APPROVED` row is converted to `FINAL_CONFIRMED` by
+  migration `20260930100000_phase2_content_lifecycle`. The conversion is safe
+  because that CHECK has been enforced since
+  `20260916041416_client_operations_v1_metadata` and has never been weakened,
+  so every `APPROVED` row provably carries the complete triple.
+- The three confirmation fields on a converted row are DELIBERATELY NOT
+  REWRITTEN: the original confirmation timestamp and the revision the Client
+  actually approved remain truthful. `archivedAt` is not touched, so
+  `FINAL_CONFIRMED -> ARCHIVED` remains available. No `ContentStatusEvent` row
+  is rewritten.
+
+### 2. Required final-confirmation fields
+
+- A `FINAL_CONFIRMED` row must carry all three of `finalConfirmedAt`,
+  `finalConfirmedByUserId`, and `finalConfirmedRevisionId`.
+- This is enforced in the DATABASE by
+  `Content_final_confirmed_requires_final_confirmation` (migration
+  `20260930100000_phase2_content_lifecycle`), which is the one part of the
+  lock the database can prove on its own.
+- `ContentStatusService.confirmFinalLocked()` writes the triple ATOMICALLY
+  together with an immutable `ContentRevision` snapshot and the audit event, so
+  no state ever exists in which the status flips without the triple.
+- `FINAL_CONFIRMED` is reachable ONLY through that endpoint; the generic status
+  transition route refuses it as a target.
+
+### 3. Permanent lock after final confirmation
+
+- Client final confirmation PERMANENTLY LOCKS the item at `FINAL_CONFIRMED`.
+- There is NO edit path out of that status. `FINAL_CONFIRMED ->
+  AWAITING_MANAGER_APPROVAL` does not exist in the status machine and must not
+  be added.
+- The confirmation triple is NEVER cleared for a `FINAL_CONFIRMED` item.
+- The ONLY permitted subsequent status transition is `FINAL_CONFIRMED ->
+  ARCHIVED`, available to both AGENCY ADMIN and CLIENT OWNER.
+- Re-locking an already-locked item is refused (`409 CONTENT_LOCKED`), so an
+  immutable item is never silently re-snapshotted.
+
+### 4. Prohibited actions after final confirmation
+
+The lock applies to every actor. All three restrictions are enforced
+server-side in application code, not in the database, because the database
+cannot distinguish a human author from an AI author — both write through the
+same columns:
+
+- **Human Managers** — content edits are refused `409 CONTENT_LOCKED`
+  (`ContentService.update`, for the AGENCY_ADMIN route and the CLIENT_OWNER
+  route alike).
+- **AI Employees** — `outputType = 'revision'` is refused `409 CONTENT_LOCKED`
+  (`AIAgentService.processAiTask`). An `internal-note` output remains
+  PERMITTED: a note is insert-only agency-internal commentary that cannot
+  alter the confirmed artifact, and it is filtered to the authoring Agency.
+- **Clients** — a new Change Request is refused `400 CONTENT_IMMUTABLE`
+  (`ChangeRequestService.create`).
+
+All three are driven by the single shared predicate
+`IMMUTABLE_CONTENT_STATUSES` / `CHANGE_REQUEST_LOCKED_STATUSES` in
+`constants/content-transitions.ts`, so a future change to those sets affects
+every actor simultaneously and is covered by the colocated unit tests.
+
+### 5. Division of responsibility: migration vs. application
+
+- The migration handles **data conversion and database constraints only**:
+  the legacy `APPROVED` conversion, and the addition of
+  `Content_final_confirmed_requires_final_confirmation`.
+- Application logic enforces the **actor-level restrictions** in §4.
+- The migration contains no rule permitting edits after confirmation. The CHECK
+  neither permits nor forbids editing; it asserts triple completeness, which
+  is why a `FINAL_CONFIRMED` row can never have its triple cleared while
+  remaining `FINAL_CONFIRMED`.
+
+### 6. Verification
+
+- `test/content-lifecycle-constraints.integration.spec.ts` asserts both CHECK
+  constraints against a real PostgreSQL instance: valid and invalid
+  `FINAL_CONFIRMED` records, preservation of the legacy V1 constraint, refusal
+  to clear the triple while the row stays `FINAL_CONFIRMED`, and the
+  idempotency of the data conversion.
+- `content-operations-v2.integration.spec.ts` and the `src/content` unit tests
+  assert the actor-level rejections (human edit, AI revision, Client change
+  request) and the regression behavior of the wider status machine.
+
+### 7. Explicitly NOT authorized by this entry
+
+No scope expansion. This decision does NOT authorize: AI task persistence or a
+new AI task database model; an AI task queue or asynchronous infrastructure; AI
+Employee administration or management surfaces; AI permissions beyond the
+ordinary MEMBER role; platform-direct AI grants or explicit org-scoped grants
+from Decisions 011/012; autonomous AI approval, self-submission, or publishing;
+per-platform content variants; publishing, distribution, or analytics
+(AGENTS.md §13). It changes no unrelated lifecycle behavior, and no existing
+Client, authentication, RBAC, or tenant-isolation behavior is altered.
+
 Do not change a FINAL decision without explicit user approval. When a new
 decision supersedes an existing one: mark the previous decision SUPERSEDED,
 record the new decision, and record the reason.
