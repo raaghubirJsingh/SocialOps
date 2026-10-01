@@ -186,6 +186,16 @@ test.describe('connection affordances from hasCredential', () => {
     await page.route('**/api/clients*', (route) =>
       route.fulfill(json([client()])),
     );
+    // The DETAIL endpoint needs its own stub. Playwright's single '*' does not
+    // cross '/', so '**/api/clients*' matches ONLY the list route - a request for
+    // /api/clients/{id} escaped to Next.js, 404'd, and the detail page swapped to
+    // its error branch, unmounting the section nav mid-click ("element was
+    // detached from the DOM"). This glob matches /api/clients/{id} but NOT
+    // /api/clients/{id}/social-accounts (its '*' also stops at '/'), so it cannot
+    // shadow the stub below.
+    await page.route('**/api/clients/*', (route) =>
+      route.fulfill(json(client())),
+    );
     await page.route('**/api/clients/*/social-accounts*', (route) =>
       route.fulfill(json(rows)),
     );
