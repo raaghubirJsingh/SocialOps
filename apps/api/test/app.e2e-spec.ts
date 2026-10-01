@@ -29,14 +29,20 @@ describe('AppController (e2e)', () => {
     await app.init();
   });
 
-  it('/api/health (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/api/health')
-      .expect(200)
-      .expect({
-        status: 'ok',
-        service: 'socialops-api',
-      });
+  it('/api/health (GET)', async () => {
+    const res = await request(app.getHttpServer()).get('/api/health').expect(200);
+
+    // HealthService.check() returns { status, database, redis } - it is NOT the
+    // original { status, service } bootstrap shape, so an exact-body assertion on
+    // the old contract fails. Assert the real contract instead:
+    //   - HTTP 200 and the overall readiness status;
+    //   - PostgreSQL MUST be ok (this is stricter than the old assertion);
+    //   - the redis key must be PRESENT, but is not required to be 'ok',
+    //     because a degraded Redis is a legitimate local state (mirrors
+    //     rbac.integration.spec.ts:165).
+    expect(res.body.status).toBe('ok');
+    expect(res.body.database.status).toBe('ok');
+    expect(res.body.redis).toBeDefined();
   });
 
   it('/docs (GET) serves the Swagger UI', () => {
