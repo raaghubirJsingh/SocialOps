@@ -715,6 +715,10 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
     const names = model!.fields.map((f) => f.name).sort();
     expect(names).toEqual([
       'accountType',
+      // Added by the approved migration 20260928090000_add_user_client_type:
+      // the Individual-vs-Business persona is captured once at registration
+      // and read later by the 1-Click activation flow. Nullable and additive.
+      'clientType',
       'createdAt',
       'discoveryAnswers',
       'email',

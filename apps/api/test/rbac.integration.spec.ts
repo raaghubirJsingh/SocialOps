@@ -165,21 +165,24 @@ describe('RBAC foundation (real PostgreSQL + real JWT)', () => {
     // Redis is not asserted: degraded without Memurai is allowed.
   });
 
-  it('POST /api/auth/register remains accessible without organization context (201)', async () => {
-    // The register contract (AGENTS.md §17.2) requires accountType and
-    // fullName; register creates an UNVERIFIED user and returns a
-    // RegisterResult discriminator — never tokens.
-    const res = await http
-      .post('/api/auth/register')
-      .send({
-        accountType: 'SERVICE_PROVIDER',
-        fullName: 'RBAC Register Test',
-        email: testEmail('regress-register'),
-        password: 'RegisterMe123!',
-      });
+  it('the staged registration entry point remains accessible without organization context (201)', async () => {
+    // L11 retired POST /api/auth/register; the only public, unauthenticated,
+    // organization-context-free ACCOUNT-CREATING entry point is now
+    // POST /api/auth/registration/start. The security property under test is
+    // unchanged by the retirement: creating a registration REQUIRES neither a
+    // JWT nor an X-Organization-Id header, and the response is a
+    // verification-required discriminator that NEVER carries a session.
+    const email = testEmail('regress-register');
+    const res = await http.post('/api/auth/registration/start').send({
+      fullName: 'RBAC Register Test',
+      email,
+      phone: '+919876543210',
+    });
+
+    // 201 = the route was reachable with no Authorization and no
+    // X-Organization-Id header (a guard failure would be 401/400/403).
     expect(res.status).toBe(201);
-    expect(res.body.status).toBe('verification_required');
-    expect(res.body.email).toBe(testEmail('regress-register'));
+    // No session is ever issued at the start of registration.
     expect(res.body).not.toHaveProperty('accessToken');
     expect(res.body).not.toHaveProperty('refreshToken');
   });
@@ -187,17 +190,14 @@ describe('RBAC foundation (real PostgreSQL + real JWT)', () => {
   it('POST /api/auth/login remains accessible without organization context (200)', async () => {
     const email = testEmail('regress-login');
     const password = 'LoginMe123!';
-    await http.post('/api/auth/register').send({
-      accountType: 'SERVICE_PROVIDER',
-      fullName: 'RBAC Login Test',
+    // Legacy register is retired (L11): create the login fixture directly
+    // through the test-only factory, which produces the same Argon2id hash the
+    // normal AuthService.login path expects.
+    await createActiveUser(prisma, {
       email,
+      fullName: 'RBAC Login Test',
+      accountType: 'SERVICE_PROVIDER',
       password,
-    });
-
-    // Production path leaves the user INACTIVE/unverified; login requires both.
-    await prisma.user.update({
-      where: { email },
-      data: { isActive: true, emailVerifiedAt: new Date() },
     });
 
     const res = await http.post('/api/auth/login').send({ email, password });
@@ -217,23 +217,15 @@ describe('RBAC foundation (real PostgreSQL + real JWT)', () => {
     // With valid bearer + refresh token + NO X-Organization-Id -> 204
     // (logout is @Public() with respect to the org guard, and the JWT
     // has been verified by JwtAuthGuard).
-    // The register contract requires accountType/fullName; register does
-    // NOT return tokens, so the user must be marked verified directly and
-    // a session obtained via login before logout can be exercised.
-    const register = await http
-      .post('/api/auth/register')
-      .send({
-        accountType: 'SERVICE_PROVIDER',
-        fullName: 'RBAC Logout Test',
-        email: testEmail('regress-logout'),
-        password: 'LogoutMe123!',
-      });
-    expect(register.status).toBe(201);
-
-    await prisma.user.update({
-      where: { email: testEmail('regress-logout') },
-      data: { isActive: true, emailVerifiedAt: new Date() },
+    // Legacy register is retired (L11): the user fixture is created directly,
+    // because this test exercises GUARD ORDERING on logout, not registration.
+    await createActiveUser(prisma, {
+      email: testEmail('regress-logout'),
+      fullName: 'RBAC Logout Test',
+      accountType: 'SERVICE_PROVIDER',
+      password: 'LogoutMe123!',
     });
+
     const login = await http
       .post('/api/auth/login')
       .send({ email: testEmail('regress-logout'), password: 'LogoutMe123!' });
