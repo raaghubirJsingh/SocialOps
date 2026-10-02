@@ -1096,3 +1096,59 @@ Client, authentication, RBAC, or tenant-isolation behavior is altered.
 Do not change a FINAL decision without explicit user approval. When a new
 decision supersedes an existing one: mark the previous decision SUPERSEDED,
 record the new decision, and record the reason.
+
+
+## Decision 018 — CI Security Job Split (npm audit and Gitleaks Independence)
+
+Status: FINAL
+Approved: 2026-10-02 (explicit approval in session)
+
+### 1. Summary
+
+The single combined `security` job in `.github/workflows/ci.yml` ("Security (npm
+audit + Gitleaks)") is split into two independent jobs:
+
+- `security-npm-audit` — "Security (npm audit)": checkout, Node.js 22 setup,
+  `npm ci`, and `npm audit --audit-level=high`.
+- `security-gitleaks` — "Security (Gitleaks secret scan)": checkout, pinned
+  Gitleaks binary download with checksum verification, and the secret scan.
+
+Neither job declares `needs:`, so the two checks schedule and run in parallel
+and independently: a failure, a slow run, or a timeout in one no longer masks,
+cancels, or hides the result of the other. Previously a failing `npm audit`
+aborted the job before the Gitleaks scan ever executed.
+
+### 2. Preserved guarantees (explicitly unchanged)
+
+- **npm audit remains BLOCKING.** The command, its `--audit-level=high`
+  threshold, and its step-level `hashFiles('**/package-lock.json')` guard are
+  unchanged. No `continue-on-error`, no `|| true`, no non-blocking annotation,
+  and no relaxed audit level was introduced on either job. A non-zero exit from
+  `npm audit` still fails `security-npm-audit` and therefore fails the CI run.
+- **Gitleaks version pinning** is unchanged: `GITLEAKS_VERSION: "8.30.1"`
+  remains in the workflow-level `env` block and is consumed by the download
+  step.
+- **Checksum verification** is unchanged: the release `checksums.txt` is
+  downloaded and verified with
+  `grep ... | sha256sum -c -` under `set -euo pipefail`, so a corrupted or
+  substituted binary fails the step.
+- **Redaction** is unchanged: `--redact` is still passed, so any finding is
+  reported without printing secret material.
+- **Failure behavior** is unchanged: `--exit-code 1` is still passed, so any
+  detected secret fails the job and therefore the CI run.
+- The Gitleaks job was intentionally left WITHOUT `npm ci` and without the
+  Node.js setup steps, since it does not use npm. The scan surface
+  (`$GITHUB_WORKSPACE`) is unchanged, and `.gitignore` already excludes
+  `node_modules/`, so no scanned content is lost by omitting the install.
+- The other four CI jobs (`test-api`, `test-web`, `lint-typecheck`, `build`) are
+  UNCHANGED, as are the workflow `name`, triggers, `permissions`, `concurrency`,
+  and every `env` value.
+
+### 3. Scope boundary
+
+This decision does NOT change the set of locked security checks: npm audit,
+Dependabot, and Gitleaks all remain required (AGENTS.md sections 5.6 and 12). It
+adds no dependency, no paid or Advanced Security service, and no secret. It
+changes no authentication, authorization, RBAC, or tenant-isolation behavior, and
+no application code. This entry records a CI structural change only and does not
+authorize any further CI modification. Nothing has been committed or pushed.
