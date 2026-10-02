@@ -328,7 +328,7 @@ ACTIVE ClientAgencyRelationship with the Client.
 
 Still deferred and unchanged by this decision: OAuth, OAuth token storage and
 encryption (the Section 5.7 mechanism remains an OPEN decision),
-Instagram/Facebook/YouTube API integration, S3-compatible storage, the
+Instagram/Facebook/YouTube API integration; S3-compatible storage, the
 Publishing and Distribution engines, the Analytics engine, per-platform Content
 variants, and any employee-scoped content feature.
 
