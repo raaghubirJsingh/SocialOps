@@ -74,9 +74,12 @@ jobs:
         run: |
           set -euo pipefail
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_checksums.txt" -o gitleaks_checksums.txt
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o gitleaks.tar.gz
+          # The archive MUST keep the exact filename recorded in the checksums file:
+          # `sha256sum -c` resolves the file by that recorded name, so saving it under
+          # any other name (e.g. gitleaks.tar.gz) makes verification fail with a missing-file error.
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           grep "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" gitleaks_checksums.txt | sha256sum -c -
-          tar -xzf gitleaks.tar.gz
+          tar -xzf "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           ./gitleaks version
       - name: Gitleaks secret scan (full repository)
         run: ./gitleaks detect --source "$GITHUB_WORKSPACE" --redact --exit-code 1
