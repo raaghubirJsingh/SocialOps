@@ -145,7 +145,10 @@ Explicitly prohibited for V1:
 - Kubernetes
 - Multi-region infrastructure
 - A custom analytics warehouse
-- Complex AI automation before the core operational workflow is stable
+- Complex AI automation remains prohibited before the core operational
+  workflow is stable, except for the specifically approved AI Employee
+  Foundation/Fleet scope in Decision 010, subject to the restrictions in
+  Decision 017.
 
 Validated architectural components (for the overall system; not all are
 implemented in bootstrap):
@@ -508,13 +511,17 @@ bootstrap:
 - Central Auth Proxy
 - S3 integration (S3-compatible storage remains deferred until the Content
   phase)
-- Content module
+- Content module, except for the separately approved Client Operations V1
+  Content schema and backend workflows in Decisions 008 and 009, as governed
+  by Decision 017 and the scope note below.
 - Client business workflow (see note below)
 - Task module
 - Publishing engine
 - Distribution engine
 - Analytics engine
-- AI automation
+- AI automation, except for the specifically approved AI Employee
+  Foundation/Fleet backend scope in Decision 010, subject to Decision 017 and
+  the exclusions recorded in both decisions.
 - Revenue modules
 - Advanced dashboards
 
@@ -525,6 +532,28 @@ onboarding (self-registration and invitation paths), Agency<->Client relationshi
 management, field-change governance, Agency discovery, and SOCIALOPS_ADMIN-scoped
 Client operations. It does NOT authorize Task, Content, Publishing, Distribution,
 Analytics, or any other module still listed as deferred above.
+
+This restriction describes the scope of the Client Module V1 carve-out only.
+Content and AI are covered, if at all, solely by the separate and limited
+approvals in Decisions 008, 009, 010, and 017.
+
+Note on the approved Client Operations V1 Content and AI backend scope:
+Decisions 008 and 009 approve the specified Client Operations V1 schema and
+backend workflows: the Content lifecycle, immutable revisions and status
+events, Final Confirmation, and insert-only RawData intake limited to text and
+structured metadata. Decision 010 approves the AI Employee Foundation/Fleet
+backend scope it records, including organization-scoped AI-member discovery
+and Agency-dispatched AI tasks that produce an audited Content revision or
+agency-scoped internal note. Decision 017 governs the later lifecycle lock
+and preserves its stated restrictions.
+
+These approvals do NOT authorize S3-compatible storage or media uploads,
+frontend pages or UI, per-platform Content variants, publishing, distribution,
+analytics, AI Employee administration, AI task persistence or queues,
+autonomous AI approval or publishing, or expanded AI permissions. Those
+features remain deferred unless separately approved. The AI Employee scope
+does not alter the human Employee Module V1 scope or authorize employee-scoped
+Content.
 
 Note on Employee Module V1: "Employee Module V1" (referred to in application
 code as "Phase 1/2/3," governed by docs/APPROVED_DECISIONS.md Decision 007) is
