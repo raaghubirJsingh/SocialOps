@@ -1152,3 +1152,187 @@ adds no dependency, no paid or Advanced Security service, and no secret. It
 changes no authentication, authorization, RBAC, or tenant-isolation behavior, and
 no application code. This entry records a CI structural change only and does not
 authorize any further CI modification. Nothing has been committed or pushed.
+
+## Decision 019 — Unfixable Tooling-Only npm audit Findings (Accepted Risk, Gate Preserved)
+
+Status: FINAL
+Approved: 2026-10-04
+
+### 1. Summary
+
+This entry RECORDS a verified, temporary risk acceptance. It changes no rule, no
+CI workflow, and no dependency. Eight (8) high-severity `npm audit` findings
+remain after the verified Jest 30 migration (`d96ac96`), reduced from the prior
+total of 35. Both root chains were investigated and confirmed to be
+non-remediable under the current approved constraints.
+
+Current audit state (verified against the committed lockfile):
+
+    {"info":0,"low":0,"moderate":0,"high":8,"critical":0,"total":8}
+
+The 8 findings resolve to exactly 2 unique upstream advisories across 2 chains.
+
+### 2. Verified findings and dependency chains
+
+**Chain A — Next ESLint toolchain (5 findings)**
+
+    eslint-config-next@16.3.8
+      -> @next/eslint-plugin-next@16.3.8   (exact pin "16.3.8")
+        -> fast-glob@3.3.1                  (exact pin "3.3.1")
+          -> micromatch@4.0.8               ("^4.0.4")
+            -> braces@3.0.3                  ("^3.0.3")   <- GHSA-vfj7-8cjw-p6xm
+                                                          (CVE-2026-93687, CVSS 8.7)
+
+Advisory: `braces` vulnerable to stack-exhaustion denial of service through
+deeply nested patterns. Affected: `<= 3.0.3`. **Patched versions: None.**
+
+Retaining package: `@next/eslint-plugin-next@16.3.8`, which pins `fast-glob` to
+the exact literal `3.3.1`.
+
+**Chain B — Prisma CLI/config (3 findings)**
+
+    prisma@6.19.3
+      -> @prisma/config@6.19.3               (exact pin "6.19.3")
+        -> deepmerge-ts@7.1.5                (exact pin "7.1.5")  <- GHSA-ggr8-5vv4-36mx
+                                                             (CVE-2026-40345, CVSS 7.5)
+
+Advisory: `DeepmergeTS` has stack exhaustion when merging recursive object
+graphs. Affected: `< 8.0.0`. Patched: `8.0.0`.
+
+Retaining package: `@prisma/config@6.19.3`, which pins `deepmerge-ts` to the
+exact literal `7.1.5`.
+
+### 3. Verified non-reachability (both chains are tooling-only)
+
+Determined from the committed `package-lock.json` (not from package names):
+
+- The computed production install surface contains 229 packages. **Neither chain
+  appears in it.** Chain A is `dev: true` throughout; Chain B is
+  `devOptional: true` throughout. Neither is installed by a production
+  `npm ci --omit=dev` / `npm ci --omit=optional`.
+- `@prisma/client@6.19.3` declares **no dependencies at all**, so it cannot pull
+  `deepmerge-ts` into a running application.
+- `@prisma/config` is **never imported** by any file under `apps/api/src` or
+  `apps/api/test`, and **no `prisma.config.ts` exists** in the repository, so
+  the config loader is never invoked by this project.
+- `deepmerge-ts` has exactly one dependent in the tree: `@prisma/config`.
+- The `braces` advisory requires attacker-supplied deeply nested brace patterns
+  evaluated by `micromatch`; the `deepmerge-ts` advisory requires an
+  attacker-supplied recursive object graph. Neither input reaches either code
+  path in this repository, in development or in production.
+
+**Conclusion: production application code is unaffected by both chains.**
+
+### 4. Why no remediation is available (verified, not assumed)
+
+- **Chain A has no upstream fix at all.** `braces` 3.0.3 is simultaneously the
+  newest published release and the vulnerable one; the advisory records
+  `Patched versions: None`. No version of `micromatch` (latest 4.0.8) or
+  `fast-glob` avoids it.
+- **Chain A is already at the newest stable release.** `eslint-config-next`
+  16.3.8 is the highest stable 16.x; every later tag is a `16.4.0-canary.*`
+  prerelease. The `fixAvailable` value npm reports (`eslint-config-next@14.2.35`)
+  is a **major downgrade** that would regress the deliberate security upgrade
+  recorded in commit `5689a1c`; accepting it would be a security regression.
+- **Chain B has no stable fix either.** `@prisma/config@7.10.0` still pins
+  `deepmerge-ts@7.1.5`. The only version found that pins `deepmerge-ts@8.0.2`
+  is `@prisma/config@8.1.0-dev.7`, a **development prerelease** that is not a
+  supported release. The `fixAvailable` value npm reports (`prisma@6.12.0`) is a
+  downgrade that is itself inside the vulnerable range and would remediate
+  nothing.
+
+### 5. Decision
+
+The 8 findings are formally **ACCEPTED as a temporary, documented risk** on the
+basis that both chains are non-remediable upstream, tooling-only, and not
+reachable from production application code.
+
+This acceptance is granted **without any compensating control**, because the
+only available controls would each violate an existing locked constraint:
+downgrading Next.js or Prisma (security regression and prohibited by AGENTS.md
+Sections 3 and 14), adding `npm` `overrides`/`resolutions` (a dependency-graph
+change requiring separate approval), or adopting a prerelease dependency
+(prohibited by AGENTS.md Sections 3 and 14).
+
+### 6. Explicitly preserved (unchanged)
+
+- **`npm audit --audit-level=high` remains BLOCKING.** Exactly as recorded in
+  Decision 018: a non-zero exit still fails the `security-npm-audit` job and
+  therefore fails the CI run. **This acceptance does not make the gate pass,
+  does not make it non-blocking, and does not alter its exit behaviour.** The
+  CI audit job is expected to continue failing until the findings are removed.
+- No `continue-on-error`, no `|| true`, no non-blocking annotation, and no
+  relaxed audit level was introduced.
+- `.github/workflows/ci.yml` is **unchanged** by this decision.
+- No findings are suppressed, ignored, allow-listed, or excluded by any
+  mechanism.
+- No `npm` `overrides`/`resolutions` block was added.
+- No dependency was downgraded, upgraded, or otherwise modified by this decision.
+- Current approved versions are unchanged and remain: Next.js 16.3.8,
+  eslint-config-next 16.3.8, Prisma 6.19.3, Jest 30.5.2, @types/jest 30.0.0,
+  ts-jest 29.4.12, TypeScript 6.0.3.
+- The locked security-check set (AGENTS.md Sections 5.6 and 12) is unchanged:
+  npm audit, Dependabot, and Gitleaks all remain required.
+- No application code, authentication, authorization, RBAC, tenant-isolation,
+  architecture, or V1 scope (AGENTS.md Section 2) is changed.
+
+### 7. Scope boundary and what this decision does NOT authorize
+
+This entry is a **record of accepted risk only**. It does NOT authorize, now or
+in future:
+
+- any `npm` `overrides`, `resolutions`, or dependency-graph pinning;
+- any downgrade of Next.js, Prisma, or any other approved dependency;
+- any adoption of a prerelease, canary, dev, RC, or integration-tagged package;
+- any relaxation, suppression, or configuration change to the `npm audit` gate;
+- any change to `.github/workflows/ci.yml`.
+
+**Any future exception, override, downgrade, prerelease adoption, or policy
+change requires its own separate explicit human approval**, obtained through the
+normal PLAN -> approval -> ACT process. Nothing in this decision
+pre-authorizes any of those actions, and this decision must not be cited as
+precedent for them.
+
+### 8. Revisit trigger
+
+This acceptance MUST be revisited as soon as ANY of the following occurs:
+
+1. `braces` publishes a patched release (the advisory currently records
+   `Patched versions: None`).
+2. A stable (non-prerelease) Prisma or `@prisma/config` release pins
+   `deepmerge-ts >= 8.0.0`.
+3. A stable `eslint-config-next` / `@next/eslint-plugin-next` release
+   removes or replaces the `fast-glob` -> `micromatch` -> `braces` chain.
+4. `npm audit --audit-level=high` reports any finding **outside** these
+   two chains, or any finding that is NOT tooling-only. Any such finding is a
+   NEW risk and is NOT covered by this acceptance; it must be handled on its
+   own merits.
+5. Any change alters the production install surface such that either chain
+   could become runtime-reachable. The non-reachability finding in Section 3 would
+   then no longer hold and this acceptance would be void.
+
+Dependabot is already configured server-side for weekly npm updates, so an
+upstream fix will be surfaced automatically.
+
+### 9. AGENTS.md reconciliation
+
+**No AGENTS.md amendment is required.** AGENTS.md Section 5.6 (line 224) and
+Section 12 (lines 444-457) already lock `npm audit` as a required security
+check, and Decision 018 already records it as blocking. This entry records a
+finding; it changes no rule and contradicts nothing in AGENTS.md. Per Decision 001,
+any future edit to AGENTS.md requires a separate explicit re-approval, which this
+entry deliberately avoids triggering.
+
+### 10. Evidence basis
+
+This entry rests on a read-only investigation performed against the committed
+`package-lock.json` and the npm registry: the audit JSON, lockfile
+`dev`/`devOptional` flags for every affected package, the computed production
+install surface, the declared dependency sets of `@prisma/client` and
+`@prisma/config`, a repository-wide search for `@prisma/config` imports and
+`prisma.config.ts`, and registry inspection of available versions for `braces`,
+`micromatch`, `fast-glob`, `eslint-config-next`, `@next/eslint-plugin-next`,
+`deepmerge-ts`, `prisma`, and `@prisma/config`.
+
+No file was modified, no dependency installed or upgraded, and nothing was
+committed or pushed in producing this entry.
