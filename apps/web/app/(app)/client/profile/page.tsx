@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import { useState, type FormEvent } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Edit, Lock } from 'lucide-react';
 
@@ -46,21 +47,36 @@ export const EDITABLE_PROFILE_FIELDS: readonly FieldConfig[] = Object.freeze([
   },
 ]);
 
-const INDUSTRY_OPTIONS: SelectOption[] = [
+/**
+ * Client industry choices.
+ *
+ * Mirrors the backend's approved Client Module V1 industry contract EXACTLY
+ * (apps/api/src/clients/constants/industries.ts, ACT-1 D4): the backend
+ * rejects any INDUSTRY value outside that list with a 400
+ * `{code:'INVALID_FIELD_VALUE'}`. Keep this list in sync manually — a drift
+ * (e.g. "Fitness & Sports" vs the approved "Sports & Fitness") surfaces as a
+ * "Bad Request" on save. Order matches the backend. Exported so the contract
+ * can be pinned by test.
+ */
+export const INDUSTRY_OPTIONS: SelectOption[] = [
+  { value: 'Advertising & Marketing', label: 'Advertising & Marketing' },
+  { value: 'Automotive', label: 'Automotive' },
   { value: 'Beauty & Personal Care', label: 'Beauty & Personal Care' },
-  { value: 'Education & E-learning', label: 'Education & E-learning' },
+  { value: 'Education & Training', label: 'Education & Training' },
   { value: 'Entertainment & Media', label: 'Entertainment & Media' },
+  { value: 'Fashion & Apparel', label: 'Fashion & Apparel' },
   { value: 'Finance & Insurance', label: 'Finance & Insurance' },
-  { value: 'Fitness & Sports', label: 'Fitness & Sports' },
   { value: 'Food & Beverage', label: 'Food & Beverage' },
   { value: 'Healthcare & Wellness', label: 'Healthcare & Wellness' },
-  { value: 'Manufacturing & Logistics', label: 'Manufacturing & Logistics' },
-  { value: 'Non-Profit & NGO', label: 'Non-Profit & NGO' },
-  { value: 'Professional Services', label: 'Professional Services' },
-  { value: 'Real Estate & Property', label: 'Real Estate & Property' },
+  { value: 'Hospitality & Travel', label: 'Hospitality & Travel' },
+  { value: 'Manufacturing', label: 'Manufacturing' },
+  { value: 'Legal & Professional Services', label: 'Legal & Professional Services' },
+  { value: 'Nonprofit & Community', label: 'Nonprofit & Community' },
+  { value: 'Real Estate & Construction', label: 'Real Estate & Construction' },
   { value: 'Retail & E-commerce', label: 'Retail & E-commerce' },
+  { value: 'Sports & Fitness', label: 'Sports & Fitness' },
   { value: 'Technology & Software', label: 'Technology & Software' },
-  { value: 'Travel & Hospitality', label: 'Travel & Hospitality' },
+  { value: 'Transportation & Logistics', label: 'Transportation & Logistics' },
   { value: 'Other', label: 'Other' },
 ];
 
@@ -110,6 +126,34 @@ export default function ClientProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState<{ field: ClientField; expiresAt: string } | null>(null);
 
+  // Fail-safe: a MISSING client context must never fall through to the query's
+  // isPending "Loading..." branch. `useMyClient` ENABLES its query only when
+  // `clientId` is truthy, and a DISABLED TanStack query stays `isPending`
+  // forever — so an empty id here would hang the page with no way out. All
+  // hooks above are unconditional, so this early return is Rules-of-Hooks safe.
+  if (!clientId) {
+    return (
+      <div className="mx-auto max-w-3xl p-6">
+        <div role="alert" className="surface-panel space-y-4 rounded-lg p-6">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight text-slate-100">
+              Client context missing
+            </h1>
+            <p className="mt-1 text-sm text-slate-400">
+              We couldn&apos;t determine which client profile to open. This
+              usually happens when the link that opened this page omitted the
+              client id. Return to your dashboard and open your profile from
+              there.
+            </p>
+          </div>
+          <Button asChild>
+            <Link href="/dashboard">Back to dashboard</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   // Now we can safely use client
   if (!client) {
     return (
@@ -123,6 +167,9 @@ export default function ClientProfilePage() {
   const filledFields = EDITABLE_PROFILE_FIELDS.filter(
     (fieldConfig) => !isFieldEmpty(client, fieldConfig.field) && fieldConfig.field !== 'DIRECT_EMAIL',
   );
+
+  /** Set of values the backend accepts for INDUSTRY (incl. 'Other'). */
+  const approvedIndustries = new Set(INDUSTRY_OPTIONS.map((opt) => opt.value));
 
   /** True when the "Complete your profile" form has at least one field with a value. */
   const isFillDirty =
@@ -139,14 +186,24 @@ export default function ClientProfilePage() {
   /** True when the edit form has any field changed from its original value. */
   const isEditDirty = EDITABLE_PROFILE_FIELDS.some((fc) => {
     if (fc.field === 'DIRECT_EMAIL') return false;
+    if (fc.field === 'INDUSTRY') {
+      const current = (editValues[fc.field] ?? '').trim();
+      const otherDetail = (editValues['INDUSTRY_OTHER'] ?? '').trim();
+      const original = (getFieldValue(client, fc.field) ?? '').trim();
+      // 'Other' counts only when custom detail text is present; the value
+      // sent for it is the approved literal 'Other'.
+      if (current === 'Other') return otherDetail !== '' && 'Other' !== original;
+      if (current === '') return false; // untouched
+      // A value outside the approved list can never be saved — submitting
+      // it would 400, so it must not mark the form dirty either.
+      if (!approvedIndustries.has(current)) return false;
+      return current !== original;
+    }
     const current = editValues[fc.field];
     const original = getFieldValue(client, fc.field);
     if (current === undefined) return false; // untouched
     return current !== (original ?? '');
-  }) || (
-    editValues['INDUSTRY'] === 'Other' &&
-    (editValues['INDUSTRY_OTHER']?.trim() ?? '') !== ''
-  );
+  });
 
   const activeFieldConfig = EDITABLE_PROFILE_FIELDS.find((f) => f.field === activeField);
   const activeFieldValue = activeField ? getFieldValue(client, activeField) : null;
@@ -190,7 +247,9 @@ export default function ClientProfilePage() {
         const industry = fillValues['INDUSTRY']?.trim();
         const otherIndustry = fillValues['INDUSTRY_OTHER']?.trim();
         if (industry === 'Other' && otherIndustry) {
-          valuesToSave[field] = otherIndustry;
+          // 'Other' is the approved value; the free-text detail is NOT sent —
+          // the backend rejects any INDUSTRY outside its approved list (400).
+          valuesToSave[field] = 'Other';
         } else if (industry && industry !== 'Other') {
           valuesToSave[field] = industry;
         }
@@ -368,9 +427,11 @@ export default function ClientProfilePage() {
                 payload[field as ClientField] = value;
               }
 
-              // Handle INDUSTRY "Other" case: use the custom text value instead.
-              if (editValues['INDUSTRY'] === 'Other' && editValues['INDUSTRY_OTHER']) {
-                payload.INDUSTRY = editValues['INDUSTRY_OTHER'];
+              // Handle INDUSTRY "Other" case: send the approved 'Other' value.
+              // The free-text detail is NOT sent — the backend rejects any
+              // INDUSTRY outside its approved list (400).
+              if (editValues['INDUSTRY'] === 'Other' && (editValues['INDUSTRY_OTHER']?.trim() ?? '') !== '') {
+                payload.INDUSTRY = 'Other';
               }
 
               setIsLoading(true);

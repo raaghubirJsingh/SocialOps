@@ -117,6 +117,28 @@ describe('client activation flow', () => {
     expect(src).toMatch(/ClientActivationPanel/);
     expect(src).toMatch(/ClientOverview/);
   });
+
+  it('degrades instead of hanging when the client context is missing', () => {
+    const src = ClientPersonaSurface.toString();
+    // The empty-id branch MUST be checked BEFORE the pending spinner and MUST
+    // render a recovery surface: a DISABLED TanStack query stays `isPending`
+    // forever, so falling through would hang on "Loading your workspace…".
+    expect(src).toMatch(/!clientId/);
+    expect(src).toMatch(/MissingClientContext/);
+  });
+
+  it('routes the activation mutation through useMutation/onError/describeApiError', async () => {
+    const mod = await import(
+      '@/components/dashboard/client/client-activation-panel'
+    );
+    const src = mod.ClientActivationPanel.toString();
+    // A TanStack mutation owns the button state, so a failed or timed-out
+    // request can never wedge the button on "Activating…".
+    expect(src).toMatch(/useMutation/);
+    expect(src).toMatch(/onError/);
+    expect(src).toMatch(/describeApiError/);
+    expect(src).toMatch(/isPending/);
+  });
 });
 
 describe('profile governance contracts', () => {
@@ -135,5 +157,45 @@ describe('profile governance contracts', () => {
     // Governance hints live on the editable-field configs rendered per row.
     const hints = EDITABLE_PROFILE_FIELDS.map((f) => f.hint ?? '').join(' ');
     expect(hints.toLowerCase()).toMatch(/rate-limited/);
+  });
+
+  it('profile page shows a fallback (not an infinite loader) when the client context is missing', async () => {
+    const mod = await import('@/app/(app)/client/profile/page');
+    const src = mod.default.toString();
+    // The empty-id branch MUST be checked BEFORE the query's pending branch:
+    // `useMyClient` is DISABLED without an id, so it would stay `isPending`
+    // forever and hang on "Loading...".
+    expect(src).toMatch(/!clientId/);
+    expect(src).toMatch(/Client context missing/);
+  });
+
+  it('profile industry choices pin to the backend approved list (no drift)', async () => {
+    const mod = await import('@/app/(app)/client/profile/page');
+    const values = mod.INDUSTRY_OPTIONS.map((opt) => opt.value);
+    // Mirrors the backend's approved contract (ACT-1 D4) VALUE-FOR-VALUE.
+    // A drifted label here (e.g. "Fitness & Sports" vs the approved
+    // "Sports & Fitness") surfaces as a "Bad Request" (400
+    // INVALID_FIELD_VALUE) on save.
+    expect(values).toEqual([
+      'Advertising & Marketing',
+      'Automotive',
+      'Beauty & Personal Care',
+      'Education & Training',
+      'Entertainment & Media',
+      'Fashion & Apparel',
+      'Finance & Insurance',
+      'Food & Beverage',
+      'Healthcare & Wellness',
+      'Hospitality & Travel',
+      'Manufacturing',
+      'Legal & Professional Services',
+      'Nonprofit & Community',
+      'Real Estate & Construction',
+      'Retail & E-commerce',
+      'Sports & Fitness',
+      'Technology & Software',
+      'Transportation & Logistics',
+      'Other',
+    ]);
   });
 });
