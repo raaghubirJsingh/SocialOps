@@ -7,11 +7,15 @@ import { jest } from '@jest/globals';
 function makePrismaMock() {
   return {
     organizationMembership: {
-      // Typed as `jest.Mock<any, any>` so mockResolvedValue / mockResolvedValueOnce
-      // accept any argument. The PrismaService contract for findMany is
-      // already exercised in the integration tests against real PostgreSQL;
-      // here we only need a mock that the controller can call.
-      findMany: jest.fn() as jest.Mock<any>,
+      // Typed as `jest.fn<(...args: any[]) => Promise<unknown>>` so
+      // mockResolvedValue / mockResolvedValueOnce accept any argument. Jest 30's
+      // ResolveType<T> resolves to `never` unless the mock's return type is
+      // known to be Promise-like, so the return type must be declared
+      // explicitly. The rest-args tuple keeps `mock.calls[n][0]` indexable.
+      // The PrismaService contract for findMany is already exercised in the
+      // integration tests against real PostgreSQL; here we only need a mock
+      // that the controller can call.
+      findMany: jest.fn<(...args: any[]) => Promise<unknown>>(),
     },
   };
 }
