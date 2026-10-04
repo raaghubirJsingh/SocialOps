@@ -92,6 +92,12 @@ export function Sidebar() {
 
   const clientHrefs = new Set(CLIENT_NAV_ITEMS.map((item) => item.href));
 
+  // The `?clientId=` search parameter is preserved across client-route
+  // transitions so the client workspace keeps its context on every click. It
+  // is meaningful only to the CLIENT persona, so it is stamped onto that
+  // persona's links and deliberately never onto Agency/Employee links. The id
+  // is a UX lookup hint only, never an authorization input (AGENTS.md §7).
+  //
   // Longest-prefix active match: `/client/social-accounts` highlights
   // "Social accounts" and NOT also "My client" (`/client`).
   const activeHref = items.reduce<string | null>((best, item) => {
@@ -128,7 +134,7 @@ export function Sidebar() {
           {items.map((item) => {
             const isActive = item.href === activeHref;
             const href =
-              clientId && clientHrefs.has(item.href)
+              isClientAccount && clientId && clientHrefs.has(item.href)
                 ? `${item.href}?clientId=${clientId}`
                 : item.href;
             return (

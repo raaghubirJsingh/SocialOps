@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import { useMutation } from '@tanstack/react-query';
 import { Lock, ScrollText, ShieldCheck } from 'lucide-react';
 
 import { ClientOverview } from '@/components/dashboard/client/client-overview';
@@ -11,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { useMyClient } from '@/hooks/use-client-overview';
 import { useSession } from '@/hooks/use-session';
 import { ApiError } from '@/lib/api';
+import { describeApiError } from '@/lib/api-error-messages';
 import { clientApi } from '@/lib/client-api';
 import { saveBoundClientId } from '@/lib/client-session';
 import {
@@ -18,57 +21,18 @@ import {
   CLIENT_TERMS_SECTIONS,
   CLIENT_TERMS_TITLE,
 } from '@/lib/client-terms';
-import type { ClientType } from '@/types/client';
+import type {
+  ActivateOnboardingRequest,
+  ClientDto,
+  ClientType,
+  StartOnboardingRequest,
+  StartOnboardingResponse,
+} from '@/types/client';
 
 interface ClientActivationPanelProps {
   onActivated: () => void;
   /** True when a persisted binding exists but is still PENDING. */
   pending?: boolean;
-}
-
-/**
- * Turn an activation failure into text the client can actually act on.
- *
- * The server is the authority on WHY activation failed: it returns a
- * self-describing body (`message` for the human, `detail`/`code` for
- * diagnostics, plus a `missing` field naming the absent column). We show
- * those words verbatim inside the T&C modal instead of replacing them with
- * a generic banner, so a real "missing: clientType" reads as such instead
- * of a misleading "please complete your profile".
- *
- * The per-status fallbacks only apply when the server sent nothing usable
- * (e.g. a proxy or gateway error), so they never mask a real explanation.
- */
-function activationErrorMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    const body =
-      err.body && typeof err.body === 'object'
-        ? (err.body as {
-            message?: unknown;
-            detail?: unknown;
-            error?: unknown;
-          })
-        : null;
-
-    for (const key of ['message', 'detail', 'error'] as const) {
-      const value = body?.[key];
-      if (typeof value === 'string' && value.trim().length > 0) {
-        return value;
-      }
-    }
-
-    switch (err.status) {
-      case 409:
-        return 'A client profile is already linked to your account. Refresh the page to continue.';
-      case 400:
-        return 'The activation request was rejected as incomplete. Please try again.';
-      case 403:
-        return 'Activation is not available for this account yet. Your email must be verified first.';
-      default:
-        return err.message || 'Unable to activate your workspace. Please try again.';
-    }
-  }
-  return 'Unable to activate your workspace. Please try again.';
 }
 
 /**
@@ -121,7 +85,6 @@ export function ClientActivationPanel({
   const [token, setToken] = useState('');
   const [codeRequired, setCodeRequired] = useState(false);
   const [codeExpiresAt, setCodeExpiresAt] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Set when the server reports it cannot read the persona from the
   // account record. Accounts created before the persona was captured at
@@ -149,21 +112,24 @@ export function ClientActivationPanel({
   /**
    * 1-Click activation: no intake, no form, no second OTP.
    *
+   * Modelled as a TanStack `useMutation` so ONE `isPending` flag owns the
+   * button state. Unlike a hand-rolled try/finally, a rejected or timed-out
+   * request can never leave the button wedged on "Activating…": the query
+   * client always settles the mutation (success OR error).
+   *
    * `type` is sent ONLY when the account has to answer the persona
    * question itself (see `personaRequired`). It is a declaration about
    * the signed-in user's own workspace - never an identifier, and never
    * used to reach another account; the server binds everything to the JWT
    * subject and re-reads its own record.
    */
-  const handleActivate = async () => {
-    if (loading || !agreed) return;
-    if (personaRequired && !persona) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await clientApi.startOnboarding(
-        personaRequired && persona ? { type: persona } : {},
-      );
+  const activation = useMutation<
+    StartOnboardingResponse,
+    Error,
+    StartOnboardingRequest
+  >({
+    mutationFn: (payload) => clientApi.startOnboarding(payload),
+    onSuccess: (response) => {
       // Persist the binding hint NOW so a refresh cannot lose the state
       // (the backend keeps the client PENDING until the code is used).
       saveBoundClientId(response.clientId);
@@ -175,37 +141,61 @@ export function ClientActivationPanel({
         return;
       }
       onActivated();
-    } catch (err) {
+    },
+    onError: (err) => {
       if (activationMissingField(err) === 'clientType') {
         // The account has no persona on record and none we can derive.
         // Ask for it once, here, instead of failing again on retry.
         setPersonaRequired(true);
       }
-      setError(activationErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
+      // Standard, app-wide error copy (structured `code` → status → message),
+      // so a failure/timeout is surfaced instead of silently swallowing.
+      setError(
+        describeApiError(
+          err,
+          'Unable to activate your workspace. Please try again.',
+        ),
+      );
+    },
+  });
 
   /** Legacy fallback only: consume the issued mobile verification code. */
-  const handleVerifySubmit = async (event: FormEvent) => {
+  const verification = useMutation<
+    ClientDto,
+    Error,
+    ActivateOnboardingRequest
+  >({
+    mutationFn: (payload) => clientApi.activateOnboarding(payload),
+    onSuccess: (client) => {
+      saveBoundClientId(client.id);
+      onActivated();
+    },
+    onError: (err) => {
+      setError(
+        err instanceof ApiError && err.status === 403
+          ? 'This code is invalid, has already been used, or has expired.'
+          : 'Unable to verify the code. Please try again.',
+      );
+    },
+  });
+
+  // Single source of truth for BOTH controls: pending while either request is
+  // in flight, and cleared automatically by TanStack Query on settle — so the
+  // button can never get stuck.
+  const loading = activation.isPending || verification.isPending;
+
+  const handleActivate = () => {
+    if (loading || !agreed) return;
+    if (personaRequired && !persona) return;
+    setError(null);
+    activation.mutate(personaRequired && persona ? { type: persona } : {});
+  };
+
+  const handleVerifySubmit = (event: FormEvent) => {
     event.preventDefault();
     if (loading || !token.trim()) return;
     setError(null);
-    setLoading(true);
-    try {
-      const client = await clientApi.activateOnboarding({ token: token.trim() });
-      saveBoundClientId(client.id);
-      onActivated();
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 403) {
-        setError('This code is invalid, has already been used, or has expired.');
-      } else {
-        setError('Unable to verify the code. Please try again.');
-      }
-    } finally {
-      setLoading(false);
-    }
+    verification.mutate({ token: token.trim() });
   };
 
   return (
@@ -412,9 +402,39 @@ export function ClientActivationPanel({
 }
 
 /**
+ * Fail-safe for a lost client context.
+ *
+ * `useMyClient` ENABLES its query only when `clientId` is truthy, and a
+ * DISABLED TanStack query stays `isPending` forever. Rendering the pending
+ * branch for an empty id would therefore hang the dashboard on
+ * "Loading your workspace…" with no way out — so when the context is
+ * genuinely missing we render this recovery surface instead of a spinner.
+ */
+function MissingClientContext() {
+  return (
+    <section role="alert" className="surface-panel rounded-xl p-6">
+      <h3 className="text-lg font-semibold tracking-tight text-slate-100">
+        Client context missing
+      </h3>
+      <p className="mt-1 text-sm text-slate-400">
+        We couldn&apos;t determine which client workspace to open. This usually
+        happens when the link that opened this page omitted the client id. Open
+        your workspace again to re-establish the connection.
+      </p>
+      <div className="mt-4">
+        <Button asChild>
+          <Link href="/client">Open your workspace</Link>
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+/**
  * Decides what the client persona sees on the dashboard:
- *   - persisted binding + 200 → the normal overview;
- *   - persisted binding + 403 → the caller's own PENDING onboarding
+ *   - NO client id → the missing-context recovery surface (never a spinner);
+ *   - client id + 200 → the normal overview;
+ *   - client id + 403 → the caller's own PENDING onboarding
  *     (operational access is denied until activation completes) → the
  *     activation panel, never a dead end;
  *   - no binding at all → the dashboard renders the activation panel
@@ -428,6 +448,13 @@ export function ClientPersonaSurface({
   onActivated: () => void;
 }) {
   const clientQuery = useMyClient(clientId);
+
+  // Fail-safe FIRST: with no client id the query above is DISABLED and would
+  // report `isPending` forever (see MissingClientContext). Never let a missing
+  // context become an infinite "Loading your workspace…".
+  if (!clientId) {
+    return <MissingClientContext />;
+  }
 
   if (clientQuery.isPending) {
     return (

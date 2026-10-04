@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -72,6 +72,7 @@ function labelForAccountType(t: AccountType | null | undefined): string {
  */
 export default function DashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { isAuthenticated, isLoading: sessionLoading, session } = useSession();
 
@@ -169,7 +170,13 @@ export default function DashboardPage() {
   // persisted binding id it uses is a lookup hint only — ClientAccessGuard
   // re-verifies the binding on every request.
   if (isClientAccount) {
-    const boundClientId = loadBoundClientId();
+    // Resolve the client context from the URL hint FIRST — the sidebar and the
+    // dashboard shortcuts append `?clientId=` — then from the last
+    // server-verified binding. Either value is a LOOKUP HINT only: the backend
+    // re-verifies the User -> Client binding on every request (AGENTS.md §7).
+    // When BOTH are absent the workspace is simply not bound yet, and the
+    // activation panel below is the recovery path — never an infinite spinner.
+    const boundClientId = searchParams.get('clientId') ?? loadBoundClientId();
 
     return (
       <div className="mx-auto flex max-w-6xl flex-col gap-6">

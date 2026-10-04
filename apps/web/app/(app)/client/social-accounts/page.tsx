@@ -10,7 +10,6 @@ import {
   type SocialAccountFormSubmission,
 } from '@/components/social-accounts/social-account-form';
 import { SocialAccountList } from '@/components/social-accounts/social-account-list';
-import { OAuthConnectButtons } from '@/components/social-accounts/oauth-connect-buttons';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -23,13 +22,12 @@ import {
   useCreateSocialAccount,
   useSocialAccounts,
   useDisconnectSocialAccount,
-  useStartOAuthConnect,
   useUpdateSocialAccount,
 } from '@/hooks/use-social-accounts';
 import { useSession } from '@/hooks/use-session';
 import { describeApiError } from '@/lib/api-error-messages';
 import { loadBoundClientId } from '@/lib/client-session';
-import type { SocialAccountDto, SocialPlatform } from '@/types/social-account';
+import type { SocialAccountDto } from '@/types/social-account';
 
 /**
  * Client self-service: my social accounts (METADATA ONLY).
@@ -43,10 +41,9 @@ import type { SocialAccountDto, SocialPlatform } from '@/types/social-account';
  * reach another client's data.
  *
  * As the owner, the client may always manage its own records (no role gate).
- * The page DOES render the approved OAuth connect affordances (Decision 013);
- * the connect route re-verifies the X-Client-Id binding server-side and
- * additionally requires an ACTIVE managing Agency, so an unmanaged client
- * is refused there with CLIENT_NOT_MANAGED.
+ * OAuth connect affordances are deliberately absent: V1 is metadata-only
+ * (Decision 013 is deferred), so the only write path on this page is the
+ * manual "Add account" form below.
  */
 type FormState =
   | { mode: 'closed' }
@@ -64,13 +61,12 @@ export default function ClientSocialAccountsPage() {
   const accountsQuery = useSocialAccounts('mine', clientId);
   const createMutation = useCreateSocialAccount('mine', clientId);
   const updateMutation = useUpdateSocialAccount('mine', clientId);
-  const connectMutation = useStartOAuthConnect('mine', clientId);
   const disconnectMutation = useDisconnectSocialAccount('mine', clientId);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
 
   /**
    * Disconnect removes ONLY the stored credential; the metadata row is kept by
-   * the backend, so the list simply flips the row back to "Connect".
+   * the backend, so the list re-renders without the "Connected" badge.
    */
   const handleDisconnect = async (account: SocialAccountDto) => {
     setServerError(null);
@@ -87,17 +83,6 @@ export default function ClientSocialAccountsPage() {
     } finally {
       setDisconnectingId(null);
     }
-  };
-
-  /**
-   * OAuth requires a FULL-PAGE navigation: the authorization code is returned
-   * to the platform's own callback, which the backend then exchanges. A fetch
-   * or popup-less XHR can never complete a handshake, so we hand the browser
-   * to the authorize URL and leave the page.
-   */
-  const startConnect = async (platform: SocialPlatform) => {
-    const { authorizeUrl } = await connectMutation.mutateAsync(platform);
-    window.location.assign(authorizeUrl);
   };
 
   if (sessionLoading || !isAuthenticated) {
@@ -185,14 +170,6 @@ export default function ClientSocialAccountsPage() {
 
       <MetadataOnlyNotice />
 
-      <OAuthConnectButtons
-        accounts={accountsQuery.data ?? []}
-        scope="mine"
-        clientId={clientId}
-        canConnect={Boolean(clientId)}
-        onStartConnect={startConnect}
-      />
-
       {formState.mode !== 'closed' && (
         <Card>
           <CardHeader>
@@ -242,9 +219,6 @@ export default function ClientSocialAccountsPage() {
           onEdit={(account) => {
             setServerError(null);
             setFormState({ mode: 'edit', account });
-          }}
-          onStartConnect={(platform) => {
-            void startConnect(platform);
           }}
           onDisconnect={(account) => {
             void handleDisconnect(account);
