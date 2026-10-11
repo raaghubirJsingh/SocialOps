@@ -48,6 +48,29 @@ export class ClientsService {
     });
   }
 
+  async changeStatusWithAuditEvent(
+    clientId: string,
+    data: Prisma.ClientUpdateInput,
+    actorUserId: string | null,
+    details: Prisma.InputJsonValue,
+  ): Promise<Client> {
+    return this.prisma.$transaction(async (tx) => {
+      const client = await tx.client.update({
+        where: { id: clientId },
+        data,
+      });
+      await tx.clientEvent.create({
+        data: {
+          clientId,
+          actorUserId,
+          action: 'client.status.changed',
+          details,
+        },
+      });
+      return client;
+    });
+  }
+
   /**
    * Agency-side creation: the Client starts PENDING and UNBOUND — the
    * creating Agency User NEVER becomes the owner. The creating
@@ -67,27 +90,36 @@ export class ClientsService {
     creatorUserId: string,
     organizationId: string,
   ): Promise<Client> {
-    const client = await this.prisma.client.create({
-      data: {
-        ...data,
-        onboardingStatus: 'PENDING',
-      } as Prisma.ClientUncheckedCreateInput,
+    return this.prisma.$transaction(async (tx) => {
+      const client = await tx.client.create({
+        data: {
+          ...data,
+          onboardingStatus: 'PENDING',
+        } as Prisma.ClientUncheckedCreateInput,
+      });
+      await tx.clientAgencyRelationship.create({
+        data: {
+          clientId: client.id,
+          organizationId,
+          status: 'ACTIVE',
+          initiatedBy: 'AGENCY',
+          startedAt: new Date(),
+        },
+      });
+      await tx.clientEvent.create({
+        data: {
+          clientId: client.id,
+          actorUserId: creatorUserId,
+          action: 'client.created',
+          details: {
+            source: 'AGENCY',
+            type: client.type,
+            organizationId,
+          },
+        },
+      });
+      return client;
     });
-    await this.prisma.clientAgencyRelationship.create({
-      data: {
-        clientId: client.id,
-        organizationId,
-        status: 'ACTIVE',
-        initiatedBy: 'AGENCY',
-        startedAt: new Date(),
-      },
-    });
-    await this.recordEvent(client.id, creatorUserId, 'client.created', {
-      source: 'AGENCY',
-      type: client.type,
-      organizationId,
-    });
-    return client;
   }
 
   /** Agency-side list: ONLY Clients with an ACTIVE relationship to the org. */

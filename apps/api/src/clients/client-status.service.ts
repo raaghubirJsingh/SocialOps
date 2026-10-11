@@ -32,20 +32,20 @@ export class ClientStatusService {
         detail: `Client is already ${next}`,
       });
     }
-    const updated = await this.clientsService['prisma'].client.update({
-      where: { id: client.id },
-      data: {
+    return this.clientsService.changeStatusWithAuditEvent(
+      client.id,
+      {
         status: next,
         statusReason: reason ?? null,
         statusChangedAt: new Date(),
       },
-    });
-    await this.clientsService.recordEvent(
-      client.id,
       actorUserId,
-      'client.status.changed',
-      { from: client.status, to: next, authority, reason: reason ?? null },
+      {
+        from: client.status,
+        to: next,
+        authority,
+        reason: reason ?? null,
+      },
     );
-    return updated;
   }
 }

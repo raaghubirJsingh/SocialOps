@@ -27,12 +27,14 @@ function makeTxMock() {
     user: { findUnique: jest.fn() },
     organizationMembership: { findFirst: jest.fn() },
     content: { findFirst: jest.fn() },
+    $queryRaw: jest.fn(),
     contentRevision: { aggregate: jest.fn(), create: jest.fn() },
     internalNote: { create: jest.fn() },
   };
 }
 
 function makeService(tx: ReturnType<typeof makeTxMock>) {
+  const llm = makeStubLlm();
   const prisma = {
     user: tx.user,
     organizationMembership: tx.organizationMembership,
@@ -42,10 +44,8 @@ function makeService(tx: ReturnType<typeof makeTxMock>) {
     ),
   };
   return {
-    service: new AIAgentService(
-      prisma as unknown as PrismaService,
-      makeStubLlm(),
-    ),
+    service: new AIAgentService(prisma as unknown as PrismaService, llm),
+    llm,
   };
 }
 
@@ -181,6 +181,31 @@ describe('AIAgentService.processAiTask - final-confirmation lock', () => {
       ).resolves.toEqual({ id: 'note-1' });
     });
   }
+
+  it('rechecks the locked Content row after generation before creating a revision', async () => {
+    const tx = makeTxMock();
+    primeHappyPath(tx, ContentStatus.UNDER_CLIENT_REVIEW);
+    asMock(tx.content.findFirst).mockReset();
+    asMock(tx.content.findFirst)
+      .mockResolvedValueOnce({
+        id: CONTENT_ID,
+        title: 'Launch post',
+        body: 'Original body',
+        status: ContentStatus.UNDER_CLIENT_REVIEW,
+      })
+      .mockResolvedValueOnce({
+        status: ContentStatus.FINAL_CONFIRMED,
+      });
+    const { service, llm } = makeService(tx);
+
+    await expect(
+      service.processAiTask({ ...baseParams, outputType: 'revision' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(asMock(llm.generate)).toHaveBeenCalled();
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.contentRevision.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('AIAgentService.processAiTask - audit trail', () => {

@@ -20,6 +20,7 @@ const asMock = (fn: unknown) => fn as ReturnType<typeof jest.fn>;
 function makeTxMock() {
   return {
     content: { findFirst: jest.fn(), update: jest.fn() },
+    $queryRaw: jest.fn(),
     contentRevision: { aggregate: jest.fn(), create: jest.fn() },
     contentStatusEvent: { create: jest.fn() },
   };
@@ -292,6 +293,11 @@ describe('ContentStatusService.confirmFinalLocked - FINAL_CONFIRMED lock', () =>
       actorUserId: USER_ID,
       note: 'client locked it',
     });
+
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(
+      asMock(tx.$queryRaw).mock.invocationCallOrder[0],
+    ).toBeLessThan(asMock(tx.content.findFirst).mock.invocationCallOrder[0]);
 
     expect(tx.contentRevision.create).toHaveBeenCalledWith(
       expect.objectContaining({

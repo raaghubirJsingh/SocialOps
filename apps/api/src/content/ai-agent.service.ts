@@ -127,9 +127,28 @@ export class AIAgentService {
     });
 
     // Phase 3 - persist (transactional so the revision counter, authorId and
-    // contentHash write are atomic).
+    // contentHash write are atomic). Lock and recheck the Content row here:
+    // final confirmation may have happened during the external LLM call.
     return this.prisma.$transaction(async (tx) => {
       if (outputType === 'revision') {
+        await tx.$queryRaw`
+          SELECT "id" FROM "Content"
+          WHERE "id" = ${contentId}::uuid
+            AND "clientId" = ${clientId}::uuid
+          FOR UPDATE
+        `;
+        const current = await tx.content.findFirst({
+          where: { id: contentId, clientId },
+          select: { status: true },
+        });
+        if (!current) throw new NotFoundException('Content not found');
+        if (isContentImmutable(current.status)) {
+          throw new ConflictException({
+            code: 'CONTENT_LOCKED',
+            message: `Content is locked at ${current.status}; no new revision may be created`,
+          });
+        }
+
         const latest = await tx.contentRevision.aggregate({
           where: { contentId },
           _max: { revision: true },

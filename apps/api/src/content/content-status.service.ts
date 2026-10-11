@@ -252,6 +252,12 @@ export class ContentStatusService {
     const { clientId, contentId, actorUserId, note } = params;
 
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT "id" FROM "Content"
+        WHERE "id" = ${contentId}::uuid
+          AND "clientId" = ${clientId}::uuid
+        FOR UPDATE
+      `;
       const content = await tx.content.findFirst({
         where: { id: contentId, clientId },
       });
