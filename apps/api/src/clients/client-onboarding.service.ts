@@ -6,7 +6,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { Client, ClientType } from '@prisma/client';
+import type { Client, ClientType, Prisma } from '@prisma/client';
 
 import type { JwtAccessPayload } from '../auth/types/jwt-payload.type.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -230,38 +230,41 @@ export class ClientOnboardingService {
         });
         const providerOrganizationId =
           await this.socialOpsProvider.attachIfUnmanaged(tx, created.id);
-        return { created, providerOrganizationId };
-      });
-      await this.clientsService.recordEvent(
-        client.created.id,
-        user.sub,
-        'client.created',
-        { source: 'SELF_REGISTRATION', type: client.created.type },
-      );
-      await this.recordActivationEvents(
-        client.created,
-        user.sub,
-        true,
-        'SELF_REGISTRATION',
-      );
-      if (client.providerOrganizationId) {
         await this.clientsService.recordEvent(
-          client.created.id,
+          created.id,
           user.sub,
-          'agency.relationship.attached',
-          {
-            source: 'PLATFORM',
-            organizationId: client.providerOrganizationId,
-            initiatedBy: 'PLATFORM',
-          },
+          'client.created',
+          { source: 'SELF_REGISTRATION', type: created.type },
+          tx,
         );
-      }
+        await this.recordActivationEvents(
+          created,
+          user.sub,
+          true,
+          'SELF_REGISTRATION',
+          tx,
+        );
+        if (providerOrganizationId) {
+          await this.clientsService.recordEvent(
+            created.id,
+            user.sub,
+            'agency.relationship.attached',
+            {
+              source: 'PLATFORM',
+              organizationId: providerOrganizationId,
+              initiatedBy: 'PLATFORM',
+            },
+            tx,
+          );
+        }
+        return created;
+      });
       return {
-        clientId: client.created.id,
-        onboardingStatus: client.created.onboardingStatus,
+        clientId: client.id,
+        onboardingStatus: client.onboardingStatus,
         mobileVerificationRequired: false,
         mobileVerificationExpiresAt: null,
-        client: client.created,
+        client,
       };
     }
 
@@ -273,18 +276,22 @@ export class ClientOnboardingService {
     // and left the client with no way forward. Instead: use the payload
     // when the caller actually supplied intake, and otherwise report
     // precisely what the account record is missing.
-    const client = await this.prisma.client.create({
-      data: {
-        ...this.legacyIntakeOrExplain(dto, missing),
-        onboardingStatus: 'PENDING',
-      },
+    const client = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.client.create({
+        data: {
+          ...this.legacyIntakeOrExplain(dto, missing),
+          onboardingStatus: 'PENDING',
+        },
+      });
+      await this.clientsService.recordEvent(
+        created.id,
+        user.sub,
+        'client.created',
+        { source: 'SELF_REGISTRATION', type: created.type },
+        tx,
+      );
+      return created;
     });
-    await this.clientsService.recordEvent(
-      client.id,
-      user.sub,
-      'client.created',
-      { source: 'SELF_REGISTRATION', type: client.type },
-    );
     return this.issuePendingActivation(client, user.sub);
   }
 
@@ -446,27 +453,34 @@ export class ClientOnboardingService {
         tx,
         row.id,
       );
-      return { row, providerOrganizationId };
-    });
-    await this.recordActivationEvents(updated.row, ownerUserId, didBind, source);
-    if (updated.providerOrganizationId) {
-      await this.clientsService.recordEvent(
-        updated.row.id,
+      await this.recordActivationEvents(
+        row,
         ownerUserId,
-        'agency.relationship.attached',
-        {
-          source: 'PLATFORM',
-          organizationId: updated.providerOrganizationId,
-          initiatedBy: 'PLATFORM',
-        },
+        didBind,
+        source,
+        tx,
       );
-    }
+      if (providerOrganizationId) {
+        await this.clientsService.recordEvent(
+          row.id,
+          ownerUserId,
+          'agency.relationship.attached',
+          {
+            source: 'PLATFORM',
+            organizationId: providerOrganizationId,
+            initiatedBy: 'PLATFORM',
+          },
+          tx,
+        );
+      }
+      return row;
+    });
     return {
-      clientId: updated.row.id,
-      onboardingStatus: updated.row.onboardingStatus,
+      clientId: updated.id,
+      onboardingStatus: updated.onboardingStatus,
       mobileVerificationRequired: false,
       mobileVerificationExpiresAt: null,
-      client: updated.row,
+      client: updated,
     };
   }
 
@@ -480,6 +494,7 @@ export class ClientOnboardingService {
     actorUserId: string,
     didBind: boolean,
     source: 'SELF_REGISTRATION' | 'INVITATION',
+    transaction: Prisma.TransactionClient,
   ): Promise<void> {
     if (didBind) {
       await this.clientsService.recordEvent(
@@ -487,6 +502,7 @@ export class ClientOnboardingService {
         actorUserId,
         'client.bound',
         { ownerUserId: actorUserId, source },
+        transaction,
       );
     }
     await this.clientsService.recordEvent(
@@ -494,6 +510,7 @@ export class ClientOnboardingService {
       actorUserId,
       'client.activated',
       { source },
+      transaction,
     );
   }
 
@@ -537,45 +554,48 @@ export class ClientOnboardingService {
       );
     }
 
-    const consumed = await this.mobileVerification.resolveAndConsume(rawToken);
-    if (consumed.outcome !== 'CONSUMED') {
-      throw new ForbiddenException(
-        `Mobile verification failed (${consumed.outcome})`,
+    // Same single-transaction guarantee as the 1-Click and resume paths: a
+    // Client is never left ACTIVE without its consumed token, relationship,
+    // or audit events. Any failure rolls back the whole activation attempt.
+    const result = await this.prisma.$transaction(async (tx) => {
+      const consumed = await this.mobileVerification.resolveAndConsume(
+        rawToken,
+        tx,
       );
-    }
-
-    const client = await this.prisma.client.findUnique({
-      where: { id: consumed.clientId },
-    });
-    if (!client) throw new NotFoundException('Client not found');
-    if (client.onboardingStatus === 'ACTIVE') {
-      throw new ConflictException('Client is already onboarded');
-    }
-
-    let bind = false;
-    if (client.ownerUserId === null) {
-      // Self-registration path: the controlled binding happens HERE.
-      // CLIENT or SERVICE_PROVIDER may own their own Client (decision
-      // 21); employees (accountType = null) remain blocked.
-      if (
-        dbUser.accountType !== 'CLIENT' &&
-        dbUser.accountType !== 'SERVICE_PROVIDER'
-      ) {
+      if (consumed.outcome !== 'CONSUMED') {
         throw new ForbiddenException(
-          'Only Client or Service Provider accounts can become the Client owner',
+          `Mobile verification failed (${consumed.outcome})`,
         );
       }
-      bind = true;
-    } else if (client.ownerUserId !== user.sub) {
-      // Invitation path with a different User, or an unrelated User:
-      // never bind across owners.
-      throw new ForbiddenException('Client is bound to another User');
-    }
 
-    // Same single-transaction guarantee as the 1-Click and resume paths: a
-    // Client is never left ACTIVE without its Service Provider relationship.
-    // The activation and the relationship roll back together.
-    const result = await this.prisma.$transaction(async (tx) => {
+      const client = await tx.client.findUnique({
+        where: { id: consumed.clientId },
+      });
+      if (!client) throw new NotFoundException('Client not found');
+      if (client.onboardingStatus === 'ACTIVE') {
+        throw new ConflictException('Client is already onboarded');
+      }
+
+      let bind = false;
+      if (client.ownerUserId === null) {
+        // Self-registration path: the controlled binding happens HERE.
+        // CLIENT or SERVICE_PROVIDER may own their own Client (decision
+        // 21); employees (accountType = null) remain blocked.
+        if (
+          dbUser.accountType !== 'CLIENT' &&
+          dbUser.accountType !== 'SERVICE_PROVIDER'
+        ) {
+          throw new ForbiddenException(
+            'Only Client or Service Provider accounts can become the Client owner',
+          );
+        }
+        bind = true;
+      } else if (client.ownerUserId !== user.sub) {
+        // Invitation path with a different User, or an unrelated User:
+        // never bind across owners.
+        throw new ForbiddenException('Client is bound to another User');
+      }
+
       const updated = await tx.client.update({
         where: { id: client.id },
         data: {
@@ -590,31 +610,28 @@ export class ClientOnboardingService {
       // reassigned to the platform provider.
       const providerOrganizationId =
         await this.socialOpsProvider.attachIfUnmanaged(tx, updated.id);
-      return { updated, providerOrganizationId };
-    });
-    if (bind) {
-      await this.clientsService.recordEvent(
-        client.id,
+      await this.recordActivationEvents(
+        updated,
         user.sub,
-        'client.bound',
-        { ownerUserId: user.sub, source: 'SELF_REGISTRATION' },
+        bind,
+        bind ? 'SELF_REGISTRATION' : 'INVITATION',
+        tx,
       );
-    }
-    await this.clientsService.recordEvent(client.id, user.sub, 'client.activated', {
-      source: bind ? 'SELF_REGISTRATION' : 'INVITATION',
+      if (providerOrganizationId) {
+        await this.clientsService.recordEvent(
+          updated.id,
+          user.sub,
+          'agency.relationship.attached',
+          {
+            source: 'PLATFORM',
+            organizationId: providerOrganizationId,
+            initiatedBy: 'PLATFORM',
+          },
+          tx,
+        );
+      }
+      return updated;
     });
-    if (result.providerOrganizationId) {
-      await this.clientsService.recordEvent(
-        client.id,
-        user.sub,
-        'agency.relationship.attached',
-        {
-          source: 'PLATFORM',
-          organizationId: result.providerOrganizationId,
-          initiatedBy: 'PLATFORM',
-        },
-      );
-    }
-    return result.updated;
+    return result;
   }
 }

@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 
 import { isBootArtifactsAllowed } from '../auth/email-audit.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -119,12 +120,14 @@ export class MobileVerificationService {
    */
   async resolveAndConsume(
     rawToken: string,
+    transaction?: Prisma.TransactionClient,
   ): Promise<
     | { outcome: 'CONSUMED'; clientId: string }
     | { outcome: 'NOT_FOUND' | 'EXPIRED' | 'ALREADY_USED' }
   > {
     const tokenHash = sha256Hex(rawToken);
-    const record = await this.prisma.mobileVerificationToken.findUnique({
+    const prisma = transaction ?? this.prisma;
+    const record = await prisma.mobileVerificationToken.findUnique({
       where: { tokenHash },
     });
     if (!record) return { outcome: 'NOT_FOUND' };
@@ -132,7 +135,7 @@ export class MobileVerificationService {
     if (record.expiresAt.getTime() <= Date.now()) {
       return { outcome: 'EXPIRED' };
     }
-    await this.prisma.mobileVerificationToken.update({
+    await prisma.mobileVerificationToken.update({
       where: { id: record.id },
       data: { usedAt: new Date() },
     });

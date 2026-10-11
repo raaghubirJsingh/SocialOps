@@ -75,6 +75,29 @@ describe('ClientsService.changeStatusWithAuditEvent', () => {
   });
 });
 
+describe('ClientsService.recordEvent', () => {
+  it('writes through the supplied transaction when provided', async () => {
+    const { service, tx } = makeService();
+
+    await service.recordEvent(
+      CLIENT_ID,
+      USER_ID,
+      'client.activated',
+      { source: 'SELF_REGISTRATION' },
+      tx as never,
+    );
+
+    expect(tx.clientEvent.create).toHaveBeenCalledWith({
+      data: {
+        clientId: CLIENT_ID,
+        actorUserId: USER_ID,
+        action: 'client.activated',
+        details: { source: 'SELF_REGISTRATION' },
+      },
+    });
+  });
+});
+
 describe('ClientsService.createClientForOrganization', () => {
   const dto: CreateClientDto = {
     type: 'BUSINESS',

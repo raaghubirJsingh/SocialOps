@@ -217,5 +217,31 @@ describe('MobileVerificationService (D3)', () => {
         asMock(prisma.mobileVerificationToken.update),
       ).not.toHaveBeenCalled();
     });
+
+    describe('resolveAndConsume', () => {
+      it('uses the supplied transaction to consume the resolved token', async () => {
+        const transaction = makePrismaMock();
+        const record = makeRecord();
+        asMock(transaction.mobileVerificationToken.findUnique).mockResolvedValue(
+          record,
+        );
+
+        const result = await service.resolveAndConsume(
+          'raw-token',
+          transaction as never,
+        );
+
+        expect(result).toEqual({ outcome: 'CONSUMED', clientId: CLIENT_ID });
+        expect(
+          transaction.mobileVerificationToken.findUnique,
+        ).toHaveBeenCalledWith({ where: { tokenHash: sha256Hex('raw-token') } });
+        expect(transaction.mobileVerificationToken.update).toHaveBeenCalledWith({
+          where: { id: record.id },
+          data: { usedAt: expect.any(Date) },
+        });
+        expect(prisma.mobileVerificationToken.findUnique).not.toHaveBeenCalled();
+        expect(prisma.mobileVerificationToken.update).not.toHaveBeenCalled();
+      });
+    });
   });
 });

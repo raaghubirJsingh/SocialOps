@@ -42,8 +42,10 @@ export class ClientsService {
     actorUserId: string | null,
     action: string,
     details?: Prisma.InputJsonValue,
+    transaction?: Prisma.TransactionClient,
   ): Promise<void> {
-    await this.prisma.clientEvent.create({
+    const clientEvent = transaction?.clientEvent ?? this.prisma.clientEvent;
+    await clientEvent.create({
       data: { clientId, actorUserId, action, details },
     });
   }
