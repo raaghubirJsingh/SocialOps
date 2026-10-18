@@ -13,6 +13,7 @@ import { MembershipsModule } from './memberships/memberships.module.js';
 import { ClientsModule } from './clients/clients.module.js';
 import { SocialAccountsModule } from './social-accounts/social-accounts.module.js';
 import { ContentModule } from './content/content.module.js';
+import { ChangeRequestModule } from './change-requests/change-request.module.js';
 import { EmployeesModule } from './employees/employees.module.js';
 import { HealthModule } from './health/health.module.js';
 
@@ -27,6 +28,7 @@ import { HealthModule } from './health/health.module.js';
     ClientsModule,
     SocialAccountsModule,
     ContentModule,
+    ChangeRequestModule,
     EmployeesModule,
     HealthModule,
   ],

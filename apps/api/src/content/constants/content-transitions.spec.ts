@@ -41,6 +41,7 @@ describe('Client Operations V1 Content status machine (LOCKED)', () => {
       [
         ContentStatus.IN_REVIEW,
         ContentStatus.AWAITING_MANAGER_APPROVAL,
+        ContentStatus.UNDER_CLIENT_REVIEW,
         ContentStatus.ARCHIVED,
       ].sort(),
     );
@@ -91,6 +92,26 @@ describe('Client Operations V1 Content status machine (LOCKED)', () => {
         ContentStatus.DRAFT,
       ),
     ).toBe(false);
+  });
+
+  it('permits AGENCY_ADMIN for DRAFT -> UNDER_CLIENT_REVIEW (Decision 009)', () => {
+    expect(
+      mayActorPerform(
+        'AGENCY_ADMIN',
+        ContentStatus.DRAFT,
+        ContentStatus.UNDER_CLIENT_REVIEW,
+      ),
+    ).toBe(true);
+  });
+
+  it('permits AGENCY_ADMIN for UNDER_CLIENT_REVIEW -> AWAITING_MANAGER_APPROVAL (Decision 009)', () => {
+    expect(
+      mayActorPerform(
+        'AGENCY_ADMIN',
+        ContentStatus.UNDER_CLIENT_REVIEW,
+        ContentStatus.AWAITING_MANAGER_APPROVAL,
+      ),
+    ).toBe(true);
   });
 
   it('keeps review decisions client-owner only (D1)', () => {
@@ -167,7 +188,7 @@ describe('Phase 2 Unified Content & AI Foundation workflow (3 scenarios)', () =>
     ).toBe(true);
   });
 
-  it('lets only the client owner send the item back for revision', () => {
+  it('lets the agency admin send the item back for revision', () => {
     expect(
       mayActorPerform(
         'CLIENT_OWNER',
@@ -181,7 +202,7 @@ describe('Phase 2 Unified Content & AI Foundation workflow (3 scenarios)', () =>
         ContentStatus.UNDER_CLIENT_REVIEW,
         ContentStatus.AWAITING_MANAGER_APPROVAL,
       ),
-    ).toBe(false);
+    ).toBe(true);
     // The Agency may not self-approve into the client-review state either:
     // AWAITING_MANAGER_APPROVAL -> UNDER_CLIENT_REVIEW IS the manager approval.
     expect(

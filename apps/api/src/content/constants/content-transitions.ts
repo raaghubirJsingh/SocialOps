@@ -32,6 +32,7 @@ export const CONTENT_STATUS_TRANSITIONS: Readonly<
   [ContentStatus.DRAFT]: Object.freeze([
     ContentStatus.IN_REVIEW,
     ContentStatus.AWAITING_MANAGER_APPROVAL,
+    ContentStatus.UNDER_CLIENT_REVIEW,
     ContentStatus.ARCHIVED,
   ]),
   [ContentStatus.IN_REVIEW]: Object.freeze([
@@ -81,6 +82,7 @@ export const CONTENT_TRANSITION_AUTHORITY: Readonly<
     'CLIENT_OWNER',
   ] as const),
   // Phase 2 workflow transitions
+  'DRAFT->UNDER_CLIENT_REVIEW': Object.freeze(['AGENCY_ADMIN'] as const),
   'DRAFT->AWAITING_MANAGER_APPROVAL': Object.freeze(['AGENCY_ADMIN'] as const),
   'AWAITING_MANAGER_APPROVAL->UNDER_CLIENT_REVIEW': Object.freeze([
     'AGENCY_ADMIN',
@@ -91,6 +93,7 @@ export const CONTENT_TRANSITION_AUTHORITY: Readonly<
   ] as const),
   'UNDER_CLIENT_REVIEW->AWAITING_MANAGER_APPROVAL': Object.freeze([
     'CLIENT_OWNER',
+    'AGENCY_ADMIN',
   ] as const),
   'FINAL_CONFIRMED->ARCHIVED': Object.freeze([
     'AGENCY_ADMIN',
