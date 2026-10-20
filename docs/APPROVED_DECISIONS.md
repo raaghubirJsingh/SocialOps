@@ -481,6 +481,10 @@ migration change is authorized by this entry.
 
 ### 5. Super Admin
 
+Status: AMENDED BY Decision 020 (SUPERADMIN powers extended with a
+system-level, cross-tenant READ-ONLY capability plus step-up OTP login;
+the text below is preserved as the pre-amendment state).
+
 - SOCIALOPS_ADMIN remains global and organization-independent.
 - The existing two implemented powers remain: (a) Client status management,
   (b) Agency discovery approval.
@@ -744,6 +748,70 @@ AccountType value rename; `User.phoneVerifiedAt`; new
 `PendingRegistration` (email unique, resumeTokenHash unique,
 expiresAt index); new `RegistrationOtp` + `RegistrationOtpChannel`
 (cascade FK, composite index).
+
+## Decision 016 — Registration API Error Contract (Stable Codes, 409 Duplicate Email)
+
+Status: FINAL
+Supersedes: the HTTP 403 "Email already in use" wording recorded above
+(duplicate-email response is now HTTP 409 + stable code `EMAIL_IN_USE`).
+Approved: 2026-10-13 (explicit approval in session for the error contract)
+
+### Summary
+
+Adds stable machine-readable error codes to the registration API and
+changes the duplicate-email HTTP status from 403 to 409. The frontend keys
+on `code` instead of parsing human-readable message text, so copy changes
+never break a consumer. No registration steps, verification requirements,
+resume-token lifecycle, Prisma schema, or migrations are changed.
+
+### Duplicate email (HTTP 409 + `EMAIL_IN_USE`)
+
+- POST `/auth/registration/start` answers **409** with
+  `{ code: "EMAIL_IN_USE", message: "Email already in use" }` when the
+  email already belongs to a `User` (normal detection).
+- POST `/auth/registration/password` answers the **same 409 + same code**
+  for the Prisma `P2002` uniqueness race at `User.create` (completion
+  race).
+- POST `/auth/registration/start` answers the **same 409 + same code** for
+  the Prisma `P2002` uniqueness race at `PendingRegistration.create`
+  (concurrent identical `/start`).
+- All three paths are now indistinguishable, so the client can map any
+  duplicate-email answer to one copy block.
+- The previous HTTP 403 wording is superseded; the anti-enumeration
+  property is preserved (the response still states only that the email is
+  in use, never who holds it).
+
+### OTP error codes
+
+- OTP verification temporarily locked (3 wrong attempts -> 1-hour lock):
+  **HTTP 403** with `{ code: "OTP_LOCKED", message: "Verification temporarily locked", retryAfterSeconds }`.
+- OTP resend limit reached (max 3 successful resends per channel):
+  **HTTP 403** with `{ code: "OTP_RESEND_LIMIT", message: "Resend limit reached" }`.
+- Wrong/expired/used codes remain a uniform **403** with no `code`
+  (`"Invalid or expired code"`), unchanged.
+- HTTP statuses, retry timing, attempt limits, resend limits, and all
+  security behavior are preserved exactly as approved.
+
+### Frontend mapping
+
+- `lib/registration-error.ts` keys on the stable codes directly. `OTP_LOCKED`
+  renders a distinct temporary-lock line; `OTP_RESEND_LIMIT` renders the
+  generic line. Neither is mapped to the rate-limit line even though both
+  carry `retryAfterSeconds`, because the lock is a verification state, not
+  a request-budget state.
+- `lib/api-error-messages.ts` gains `OTP_LOCKED` / `OTP_RESEND_LIMIT` in
+  `CODE_MESSAGES` so the shared app-wide mapper also understands them.
+- No secrets, OTP values, resume tokens, or internal database errors are
+  ever exposed; the existing information-leak protections are unchanged.
+
+### Tests
+
+- Backend: `registration.integration.spec.ts` already asserts 409 +
+  `EMAIL_IN_USE` for the User-duplicate and password-completion race paths;
+  the `createNew` P2002 race is now covered by the same contract.
+- Frontend: `__tests__/registration-error.test.ts` adds cases for
+  `OTP_LOCKED` and `OTP_RESEND_LIMIT`, including the lock/retryAfterSeconds
+  not leaking as a rate-limit.
 
 ## Decision Management Rule
 ## Decision 015 — OTP Concurrency Remediation (RegistrationOtp Unique Constraint)
@@ -1332,7 +1400,247 @@ install surface, the declared dependency sets of `@prisma/client` and
 `@prisma/config`, a repository-wide search for `@prisma/config` imports and
 `prisma.config.ts`, and registry inspection of available versions for `braces`,
 `micromatch`, `fast-glob`, `eslint-config-next`, `@next/eslint-plugin-next`,
+
 `deepmerge-ts`, `prisma`, and `@prisma/config`.
 
 No file was modified, no dependency installed or upgraded, and nothing was
 committed or pushed in producing this entry.
+
+## Decision 020 — SuperAdmin Global Read-Only Visibility and Step-Up OTP Login
+
+Status: PROPOSED
+Approved: (pending human confirmation)
+
+### 1. Summary
+
+This entry GRANTS SocialOps a new system-level capability: a global
+SuperAdmin surface with cross-tenant READ-ONLY visibility, plus a mandatory
+step-up OTP login flow for SuperAdmin sessions. It is recorded here because
+cross-tenant access is otherwise prohibited (AGENTS.md Sections 6-7) and
+because Decision 012, Section 5 / D9 explicitly locked SUPERADMIN powers to
+exactly the two implemented ones and required that "any future power must
+receive its own explicit approval before implementation."
+
+This decision is an explicitly approved system-level operation under
+Decision 003 and AGENTS.md Sections 6-7. It is additive and scoped; it does
+not weaken any existing server-side guard, and normal agency/client routes
+are untouched.
+
+### 2. What this decision grants (READ-ONLY)
+
+SOCIALOPS_ADMIN (User.isSocialOpsAdmin) gains a system-level, cross-tenant
+READ-ONLY capability over:
+
+- Agencies / Organizations (including kind, isActive, discovery state)
+- Workspaces and OrganizationMemberships (role per organization)
+- Clients and ClientAgencyRelationships (including status and lifecycle)
+- Human employees (EmployeeProfile joined to its User)
+- AI members (User.isBot = true plus skillSpecialization)
+- Content summaries (status / scenario / tenant keys; see excluded fields)
+
+This AMENDS Decision 012, Section 5 / D9, which previously stated that
+"No additional Super Admin powers are granted by Decision 012." The text of
+Decision 012 Section 5 is preserved and marked as AMENDED BY this decision.
+
+### 3. What this decision does NOT grant
+
+- **Edit capability is NOT granted.** Phase 3 (any mutation of
+  Organization, Client, Membership, Employee, AI member, or Content through
+  the admin surface) requires its own separate, explicit decision.
+- **Tasks are OUT OF SCOPE.** There is no Task model in
+  apps/api/prisma/schema.prisma and the Task module remains deferred in
+  AGENTS.md Section 13. Any admin "what is running" view is limited to
+  Content and RawData; it must not imply a Task feature that does not exist.
+- No new social platform, no paid service, no new infrastructure.
+
+### 4. Fields excluded by default (secret / isolation / PII)
+
+Admin read responses MUST NOT include, under any circumstance:
+
+- `passwordHash`
+- every `tokenHash` and `codeHash` field (RefreshToken,
+  EmailVerificationToken, MobileVerificationToken, RegistrationOtp,
+  ClientInvitation)
+- `SocialAccountCredential` (and any OAuth access/refresh token)
+- `InternalNote.body` (STRICT AGENCY ISOLATION boundary)
+- `Client.notes`
+- `Content.body`
+- `User.phone`
+
+Exposing any of the above requires its own explicit approval; the default is
+deny, enforced server-side via explicit column allowlists.
+
+### 5. Mandatory audit (fail-closed)
+
+Every cross-tenant admin READ must write an `AdminAuditEvent` recording at
+minimum: who (actor admin user), what (action + entity type/id), when, the
+target tenant (organization id where applicable), and the step-up session
+that authorized it.
+
+Audit is **fail-closed**: if the audit insert fails, the read is DENIED.
+A cross-tenant read is never returned without a corresponding audit row.
+
+### 6. SuperAdmin login: step-up OTP, every time
+
+- SuperAdmin access requires a **fresh OTP on every login**, verified before
+  any access/refresh token is issued.
+- This is a SEPARATE admin login flow. The normal `POST /api/auth/login`
+  and the existing access-token shape remain UNCHANGED, and a normal login
+  can never satisfy an admin route.
+- OTP delivery in V1 is the existing gated dev-log mechanism (BOOT_ARTIFACTS),
+  EMAIL channel only. No paid service is approved. Mobile/SMS delivery is
+  DEFERRED until a provider is approved separately.
+
+### 7. Existing admin routes stay untouched
+
+The two existing SUPERADMIN operations remain where they are and are not
+refactored as part of this decision:
+
+- `POST /api/admin/clients/:id/status`
+- `POST /api/admin/agencies/:id/discovery/approve`
+
+### 8. Implementation remains gated (AGENTS.md Section 15)
+
+This entry records the CAPABILITY approval only. None of the following is
+authorized by this decision alone; each requires its own explicit human
+approval before any code is written:
+
+- new Prisma models (`AdminAuditEvent`, `AdminStepUpChallenge`,
+  `AdminStepUpSession`) and any migration
+- the admin module, guards, controllers, and services
+- the step-up OTP endpoints and auth code
+- the frontend `(admin)` route group and admin login UI
+
+No code, schema, migration, or dependency change accompanies this entry.
+
+### 9. Evidence basis
+
+This entry was produced from a read-only repository inspection: the Prisma
+model list, `apps/api/src/clients/guards/socialops-admin.guard.ts`,
+`apps/api/src/clients/client-admin.controller.ts`,
+`apps/api/src/auth/auth.service.ts` (login),
+`apps/api/src/auth/types/jwt-payload.type.ts` (JWT carries no admin claim),
+`apps/api/src/registration/otp.service.ts` and
+`registration/constants/registration.constants.ts` (OTP rules),
+`apps/api/src/registration/rate-limit.service.ts`,
+`apps/api/src/registration/providers/dev-console.provider.ts`, and the
+`ClientEvent` audit pattern. No file other than this one was modified.
+
+## Decision 021 — Social Account Global URL Uniqueness
+
+Status: Approved
+Approved: 2026-10-15
+
+### Summary
+
+SocialOps V1 enforces global uniqueness of normalized social profile URLs across all Clients and Service Provider Organizations. A normalized URL may be associated with only one SocialAccount record across the platform. A conflicting connection must return HTTP 409 with the stable error code `SOCIAL_ACCOUNT_URL_UNAVAILABLE`. The response must not disclose another tenant's identity or data.
+
+### URL identity and normalization
+
+The `normalizedUrl` key is derived using these eight rules, in order:
+
+1. Trim surrounding whitespace.
+2. Remove the URL scheme.
+3. Remove one leading `www.`, `m.`, or `mobile.` prefix when present, using literal dotted-prefix matching.
+4. Remove the URL fragment.
+5. Remove query parameters, except for `profile.php`, where the `id` parameter defines identity. Preserve distinct IDs; ignore other query parameters for this special case.
+6. Remove trailing slashes.
+7. Convert the entire normalized result to lowercase. This rule is approved for the V1 platforms: Instagram, Facebook, and YouTube. Reassess normalization before adding a platform whose profile paths are case-sensitive.
+8. Represent an empty normalized result as `NULL`, never an empty string.
+
+The stored `profileUrl` remains the trimmed user-provided value. The derived `normalizedUrl` is the database-enforced uniqueness key.
+
+### Error contract
+
+The implementation must use `SOCIAL_ACCOUNT_URL_UNAVAILABLE` for normalized-URL uniqueness conflicts and must not disclose which tenant already uses the URL. The codes `SOCIAL_ACCOUNT_URL_PLATFORM_MISMATCH` and `DUPLICATE_SOCIAL_ACCOUNT` must have documented, stable meanings consistent with their implemented behavior.
+
+### Verification requirements
+
+Add the missing URL-normalization parity integration test referenced by the existing implementation or migration comments. It must compare the TypeScript normalizer against the SQL normalization/backfill behavior using the existing normalization fixtures and fail on divergence.
+
+Verify duplicate detection, normalization edge cases, error-code behavior, and tenant privacy. Global uniqueness is an explicit product constraint; it does not weaken or replace server-side tenant isolation.
+
+This decision approves the product behavior and implementation requirements. It does not authorize applying the database migration.
+
+## Decision 022 — Content Request to Draft Provenance
+
+Status: Approved
+Approved: 2026-10-15
+
+### Summary
+
+A Content Request may have at most one linked draft. Enforce this invariant in both application logic and the database using the unique `Content.sourceRequestId` constraint. A duplicate draft attempt must return HTTP 409 with the stable error code `CONTENT_REQUEST_ALREADY_DRAFTED`, including when a database uniqueness conflict occurs under concurrent requests.
+
+### Provenance relationship and deletion behavior
+
+A draft created from a Content Request records its source using `Content.sourceRequestId`, referencing the corresponding RawData record.
+
+The relationship uses `ON DELETE SET NULL`. If a source request is deleted in a future authorized workflow, the draft remains, but its direct source reference becomes `NULL`. This behavior intentionally permits source deletion without deleting the draft. The resulting loss of the direct provenance link is accepted.
+
+This decision does not introduce or authorize a RawData deletion endpoint or deletion capability.
+
+### Eligible source type
+
+The draft-from-request workflow is restricted to RawData records whose source is `CLIENT_FORM`. Other source types—`CLIENT_UPLOAD`, `AGENCY_UPLOAD`, and `EXTERNAL_IMPORT`—are not eligible for this workflow in V1 and must not be treated as Content Requests by this endpoint. Preserve the established tenant-hiding behavior for ineligible or inaccessible records.
+
+### Verification requirements
+
+Verify that:
+
+- A Content Request can create one linked draft.
+- A second draft attempt returns `CONTENT_REQUEST_ALREADY_DRAFTED`.
+- Database uniqueness conflicts are translated to the same stable error code.
+- Requests and drafts remain isolated across tenants.
+- Non-`CLIENT_FORM` sources are rejected by the draft-from-request workflow.
+- The Prisma schema, migration SQL, foreign key, unique index, and application behavior agree.
+
+This decision approves the product behavior and implementation requirements. It does not authorize applying the database migration.
+
+## Decision 023 — Progressive Operational Gating (Backend Lifecycle Order)
+
+Status: Approved
+Approved: 2026-10-19 (explicit Act-mode approval in session for the backend
+business-rule amendment: onboarding gate + content social-account dependency)
+
+### Summary
+
+Enforces the approved operational lifecycle order at the API boundary:
+
+```
+Overview (onboarding ACTIVE) → Social accounts → Raw data → Content
+```
+
+Two additive server-side gates (no Prisma schema change, no migration):
+
+1. **Onboarding gate** — agency-side WRITES require
+   `client.onboardingStatus === 'ACTIVE'`. Failure is HTTP 403 with stable
+   code `CLIENT_NOT_ACTIVE`. Scope: social-account mutations
+   (POST/PATCH/DELETE connection), OAuth connect start + disconnect +
+   upload-url, content mutations, RawData mutations (POST + upload-url).
+   Reads stay open for PENDING clients.
+2. **Content social-account dependency** — Content CREATION requires at
+   least one `SocialAccount` row with `isActive: true` for that client.
+   Credential/`Connected` status is NOT required. Failure is HTTP 409 with
+   stable code `SOCIAL_ACCOUNT_REQUIRED`. Scope: agency `POST
+   /clients/:id/content` (both plain and from-request) + client `POST
+   /client/me/content`. Updates, transitions, revisions, change requests,
+   internal notes, AI dispatch, and RawData are never gated by this check.
+
+### Scope preserved
+
+- Authentication, tenant isolation (ACTIVE ClientAgencyRelationship /
+  owner binding), role guards, and uniform 404/403 scoping are unchanged;
+  both gates run AFTER the scope proof.
+- `Client.status` and owner-binding are NOT added as new requirements
+  beyond what already existed.
+- RawData stays outside the social-account dependency: intake is the input
+  Content drafts are built from.
+- Client-side operational access still requires onboarding ACTIVE via
+  `ClientAccessGuard` (unchanged); the OAuth callback re-proves onboarding
+  at completion time because it carries no guard of its own.
+
+### Error contract
+
+- `CLIENT_NOT_ACTIVE` (403) and `SOCIAL_ACCOUNT_REQUIRED` (409) are
+  tenant-blind: they name only the caller's own prerequisite.
+- Frontend `lib/api-error-messages.ts` maps both codes to user-facing copy.

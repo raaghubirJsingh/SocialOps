@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -6,6 +7,7 @@ import {
 import type { SocialPlatform } from '@prisma/client';
 
 import { ClientsService } from '../../clients/clients.service.js';
+import { OperationalGatingService } from '../../common/operational-gating.service.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { TokenEncryptionService } from '../../crypto/token-encryption.service.js';
 import type { JwtAccessPayload } from '../../auth/types/jwt-payload.type.js';
@@ -52,6 +54,7 @@ export class SocialAccountsOAuthService {
     private readonly clientsService: ClientsService,
     private readonly state: OAuthStateService,
     private readonly crypto: TokenEncryptionService,
+    private readonly gating: OperationalGatingService,
   ) {}
 
   /**
@@ -175,14 +178,49 @@ export class SocialAccountsOAuthService {
     );
   }
 
+  /**
+   * Prove a SocialAccount row exists inside the requested Client, and return it.
+   *
+   * TENANT DISCIPLINE: the lookup is ALWAYS scoped by `clientId` as well as `id`,
+   * so a row id belonging to another client (or another tenant entirely)
+   * resolves to the SAME uniform 404 as a row that does not exist at all - no
+   * existence leak, and client-supplied ownership is never trusted.
+   *
+   * `platform` is optional and is checked when supplied, so a row can never be
+   * connected against the WRONG provider (an Instagram row driven through the
+   * Facebook provider would mint a state whose platform disagrees with the row).
+   */
+  private async assertSocialAccountInScope(
+    socialAccountId: string,
+    clientId: string,
+    platform?: SocialPlatform,
+  ): Promise<{ id: string; platform: SocialPlatform }> {
+    const account = await this.prisma.socialAccount.findFirst({
+      where: { id: socialAccountId, clientId },
+      select: { id: true, platform: true },
+    });
+    if (!account) {
+      // Uniform 404 - identical to a non-existent row.
+      throw new NotFoundException('Social account not found');
+    }
+    if (platform && account.platform !== platform) {
+      throw new BadRequestException(
+        'The social account does not belong to the requested platform',
+      );
+    }
+    return account;
+  }
+
   async startConnectAgency(
     user: JwtAccessPayload,
     organizationId: string,
     clientId: string,
     platform: SocialPlatform,
   ): Promise<{ authorizeUrl: string; expiresIn: number }> {
-    // ACTIVE relationship proof (uniform 404 otherwise).
+    // ACTIVE relationship proof (uniform 404 otherwise), then the onboarding
+    // gate: writes stay closed while the client is still PENDING.
     await this.assertClientRelationshipActive(clientId, organizationId);
+    await this.gating.requireOnboardingActive(clientId);
     const state = await this.state.mint({
       sub: user.sub,
       organizationId,
@@ -197,6 +235,43 @@ export class SocialAccountsOAuthService {
     return {
       authorizeUrl: getOAuthProvider(platform).buildAuthorizeUrl(
         oauthRedirectUri(platform),
+        state,
+      ),
+      expiresIn: 600,
+    };
+  }
+
+  /**
+   * Row-scoped agency connect: connect ONE existing SocialAccount.
+   *
+   * The row is the authority for the platform - there is deliberately NO
+   * `:platform` segment on this route, so a caller cannot aim an Instagram row
+   * at the Facebook provider. Proof order mirrors the platform-scoped flow:
+   * ACTIVE relationship first, then the client-scoped row lookup, then mint.
+   */
+  async startConnectAgencyForAccount(
+    user: JwtAccessPayload,
+    organizationId: string,
+    clientId: string,
+    socialAccountId: string,
+  ): Promise<{ authorizeUrl: string; expiresIn: number }> {
+    await this.assertClientRelationshipActive(clientId, organizationId);
+    await this.gating.requireOnboardingActive(clientId);
+    const account = await this.assertSocialAccountInScope(
+      socialAccountId,
+      clientId,
+    );
+    const state = await this.state.mint({
+      sub: user.sub,
+      organizationId,
+      clientId,
+      platform: account.platform,
+      socialAccountId: account.id,
+      source: 'AGENCY',
+    });
+    return {
+      authorizeUrl: getOAuthProvider(account.platform).buildAuthorizeUrl(
+        oauthRedirectUri(account.platform),
         state,
       ),
       expiresIn: 600,
@@ -240,6 +315,47 @@ export class SocialAccountsOAuthService {
   }
 
   /**
+   * Row-scoped client connect: connect ONE of my own SocialAccounts.
+   *
+   * Identical proof order to `startConnectClient`, plus the client-scoped row
+   * lookup. The row supplies the platform, so there is no `:platform` segment to
+   * tamper with.
+   */
+  async startConnectClientForAccount(
+    clientId: string,
+    socialAccountId: string,
+  ): Promise<{ authorizeUrl: string; expiresIn: number }> {
+    const organizationId = await this.requireActiveManagingOrganization(clientId);
+    const client = await this.prisma.client.findUnique({
+      where: { id: clientId },
+      select: { ownerUserId: true },
+    });
+    if (!client?.ownerUserId) {
+      throw new ForbiddenException('Client binding is incomplete');
+    }
+    const account = await this.assertSocialAccountInScope(
+      socialAccountId,
+      clientId,
+    );
+    const state = await this.state.mint({
+      // The client OWNER user id - never a client-supplied value.
+      sub: client.ownerUserId,
+      organizationId,
+      clientId,
+      platform: account.platform,
+      socialAccountId: account.id,
+      source: 'CLIENT',
+    });
+    return {
+      authorizeUrl: getOAuthProvider(account.platform).buildAuthorizeUrl(
+        oauthRedirectUri(account.platform),
+        state,
+      ),
+      expiresIn: 600,
+    };
+  }
+
+  /**
    * Full handshake completion. Throws ONLY typed errors the callback
    * controller maps onto redirect error codes (the browser must never see a
    * stack trace, and never a token).
@@ -261,6 +377,28 @@ export class SocialAccountsOAuthService {
     // in the state, and the relationship must STILL be ACTIVE.
     await this.assertActorAuthorizedForConnection(payload);
 
+    // Onboarding re-proof: a state minted while ACTIVE must not complete when
+    // the client has since gone back to PENDING. Client-side states were
+    // minted under ClientAccessGuard (ACTIVE-only), but the callback itself
+    // carries no guard, so both sources re-prove here.
+    await this.gating.requireOnboardingActive(payload.clientId);
+
+    // ROW RE-PROOF (row-scoped connect only). A state minted minutes ago may
+    // name a row that has since been deleted or - impossible through the API,
+    // but a defence in depth worth keeping - moved. The lookup is scoped by the
+    // clientId that came out of the SIGNED state, never from the request, and a
+    // miss is the same uniform 404 as a row that never existed. Runs BEFORE the
+    // token exchange so an unowned row causes no outbound call at all.
+    const targetRowId = payload.socialAccountId
+      ? (
+          await this.assertSocialAccountInScope(
+            payload.socialAccountId,
+            payload.clientId,
+            platform,
+          )
+        ).id
+      : null;
+
     const provider = getOAuthProvider(platform);
     const redirectUri = oauthRedirectUri(platform);
     const exchanged = await provider.exchangeCode(code, redirectUri);
@@ -277,27 +415,50 @@ export class SocialAccountsOAuthService {
         : null;
 
     await this.prisma.$transaction(async (tx) => {
-      const account = await tx.socialAccount.upsert({
-        where: {
-          clientId_platform_platformAccountId: {
-            clientId: payload.clientId,
-            platform,
-            platformAccountId: profile.platformAccountId,
-          },
-        },
-        create: {
-          clientId: payload.clientId,
-          platform,
-          platformAccountId: profile.platformAccountId,
-          displayName: profile.displayName ?? null,
-          isActive: true,
-          createdByUserId: payload.sub,
-        },
-        update: {
-          displayName: profile.displayName ?? null,
-        },
-        select: { id: true },
-      });
+      // ROW-SCOPED PATH: UPDATE the existing SocialAccount. This is the whole
+      // point of carrying socialAccountId in the signed state - the composite
+      // upsert below could never match a row whose platformAccountId is still
+      // NULL, so it would silently CREATE A DUPLICATE row and leave the user's
+      // original card forever showing "Platform id not recorded".
+      //
+      // `platform` is deliberately NOT rewritten: it is immutable after
+      // creation (approved D10), and the row lookup above already proved it
+      // matches. Only the OAuth-discovered identity is adopted.
+      //
+      // A P2002 here means another row for this client+platform already holds
+      // this platformAccountId - the existing composite unique index is doing its
+      // job, and the transaction rolls back rather than stealing another row's
+      // identity.
+      const account = targetRowId
+        ? await tx.socialAccount.update({
+            where: { id: targetRowId },
+            data: {
+              platformAccountId: profile.platformAccountId,
+              displayName: profile.displayName ?? null,
+            },
+            select: { id: true },
+          })
+        : await tx.socialAccount.upsert({
+            where: {
+              clientId_platform_platformAccountId: {
+                clientId: payload.clientId,
+                platform,
+                platformAccountId: profile.platformAccountId,
+              },
+            },
+            create: {
+              clientId: payload.clientId,
+              platform,
+              platformAccountId: profile.platformAccountId,
+              displayName: profile.displayName ?? null,
+              isActive: true,
+              createdByUserId: payload.sub,
+            },
+            update: {
+              displayName: profile.displayName ?? null,
+            },
+            select: { id: true },
+          });
 
       // 1:1 credential: upsert replaces the previous ciphertext wholesale.
       await tx.socialAccountCredential.upsert({

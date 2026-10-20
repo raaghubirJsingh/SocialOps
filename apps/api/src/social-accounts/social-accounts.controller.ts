@@ -43,6 +43,7 @@ import {
 } from './dto/list-social-accounts.dto.js';
 import { updateSocialAccountSchema } from './dto/update-social-account.dto.js';
 import type { UpdateSocialAccountDto } from './dto/update-social-account.dto.js';
+import { OperationalGatingService } from '../common/operational-gating.service.js';
 import { SocialAccountsService } from './social-accounts.service.js';
 
 /**
@@ -69,6 +70,7 @@ export class SocialAccountsController {
   constructor(
     private readonly clientsService: ClientsService,
     private readonly socialAccountsService: SocialAccountsService,
+    private readonly gating: OperationalGatingService,
   ) {}
 
   @Get()
@@ -110,6 +112,7 @@ export class SocialAccountsController {
     @Body(new ZodValidationPipe(createSocialAccountSchema)) dto: unknown,
   ) {
     await this.requireClientInScope(clientId, organization.id);
+    await this.gating.requireOnboardingActive(clientId);
     return this.socialAccountsService.create(
       clientId,
       user.sub,
@@ -153,6 +156,7 @@ export class SocialAccountsController {
     @Body(new ZodValidationPipe(updateSocialAccountSchema)) dto: unknown,
   ) {
     await this.requireClientInScope(clientId, organization.id);
+    await this.gating.requireOnboardingActive(clientId);
     return this.socialAccountsService.update(
       clientId,
       socialAccountId,
@@ -187,6 +191,7 @@ export class SocialAccountsController {
     @Param('socialAccountId', ParseUUIDPipe) socialAccountId: string,
   ): Promise<void> {
     await this.requireClientInScope(clientId, organization.id);
+    await this.gating.requireOnboardingActive(clientId);
     await this.socialAccountsService.disconnect(
       clientId,
       socialAccountId,

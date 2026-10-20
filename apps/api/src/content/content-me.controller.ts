@@ -24,6 +24,7 @@ import {
 
 import { CurrentClient } from '../clients/decorators/current-client.decorator.js';
 import { ClientAccessGuard } from '../clients/guards/client-access.guard.js';
+import { OperationalGatingService } from '../common/operational-gating.service.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { Public } from '../rbac/decorators/public.decorator.js';
 import { ChangeRequestService } from './change-request.service.js';
@@ -68,6 +69,7 @@ export class ContentMeController {
     private readonly contentService: ContentService,
     private readonly statusService: ContentStatusService,
     private readonly changeRequestService: ChangeRequestService,
+    private readonly gating: OperationalGatingService,
   ) {}
 
   @Get()
@@ -94,17 +96,21 @@ export class ContentMeController {
   @UseGuards(ClientAccessGuard)
   @ApiOperation({ summary: 'Create a DRAFT Content item (status accepted: no).' })
   @ApiCreatedResponse({ description: 'The created DRAFT row.' })
-  create(
+  async create(
     @CurrentClient() client: Client,
     @Body(new ZodValidationPipe(createContentSchema)) dto: unknown,
   ) {
+    // ClientAccessGuard already proved binding + onboarding ACTIVE; the
+    // SocialAccount dependency applies here too (creation only).
+    await this.gating.requireActiveSocialAccount(client.id);
     // No agencyId argument: a Client has no organization context, so the
     // service resolves the managing Agency from the ACTIVE relationship.
-    return this.contentService.create({
+    const content = await this.contentService.create({
       clientId: client.id,
       actorUserId: client.ownerUserId as string,
       dto: dto as CreateContentDto,
     });
+    return this.contentService.findOneForOwningClient(client.id, content.id);
   }
 
   @Get(':contentId/revisions')
@@ -117,18 +123,6 @@ export class ContentMeController {
     @Param('contentId', ParseUUIDPipe) contentId: string,
   ) {
     return this.statusService.listRevisions(client.id, contentId);
-  }
-
-  @Get(':contentId/status-events')
-  @Public()
-  @UseGuards(ClientAccessGuard)
-  @ApiOperation({ summary: 'Append-only transition history for one item.' })
-  @ApiOkResponse({ description: 'Status events, newest first.' })
-  statusEvents(
-    @CurrentClient() client: Client,
-    @Param('contentId', ParseUUIDPipe) contentId: string,
-  ) {
-    return this.statusService.listStatusEvents(client.id, contentId);
   }
 
   @Get(':contentId')
@@ -153,18 +147,19 @@ export class ContentMeController {
   })
   @ApiOkResponse({ description: 'The updated Content row.' })
   @ApiNotFoundResponse({ description: 'Not found for this Client.' })
-  update(
+  async update(
     @CurrentClient() client: Client,
     @Param('contentId', ParseUUIDPipe) contentId: string,
     @Body(new ZodValidationPipe(updateContentSchema)) dto: unknown,
   ) {
-    return this.contentService.update({
+    await this.contentService.update({
       clientId: client.id,
       contentId,
       actorUserId: client.ownerUserId as string,
       actor: 'CLIENT_OWNER',
       dto: dto as UpdateContentDto,
     });
+    return this.contentService.findOneForOwningClient(client.id, contentId);
   }
 
   @Post(':contentId/status')
@@ -175,13 +170,13 @@ export class ContentMeController {
   })
   @ApiOkResponse({ description: 'The updated Content row.' })
   @ApiForbiddenResponse({ description: 'This actor may not perform it.' })
-  transition(
+  async transition(
     @CurrentClient() client: Client,
     @Param('contentId', ParseUUIDPipe) contentId: string,
     @Body(new ZodValidationPipe(transitionContentSchema)) dto: unknown,
   ) {
     const body = dto as TransitionContentDto;
-    return this.statusService.transition({
+    await this.statusService.transition({
       clientId: client.id,
       contentId,
       actor: 'CLIENT_OWNER',
@@ -189,6 +184,7 @@ export class ContentMeController {
       to: body.to,
       note: body.note,
     });
+    return this.contentService.findOneForOwningClient(client.id, contentId);
   }
 
   /**
@@ -208,17 +204,18 @@ export class ContentMeController {
   })
   @ApiOkResponse({ description: 'The APPROVED Content row.' })
   @ApiNotFoundResponse({ description: 'Not found for this Client.' })
-  confirmFinal(
+  async confirmFinal(
     @CurrentClient() client: Client,
     @Param('contentId', ParseUUIDPipe) contentId: string,
     @Body(new ZodValidationPipe(confirmFinalContentSchema)) dto: unknown,
   ) {
-    return this.statusService.confirmFinal({
+    await this.statusService.confirmFinal({
       clientId: client.id,
       contentId,
       actorUserId: client.ownerUserId as string,
       note: (dto as ConfirmFinalContentDto).note,
     });
+    return this.contentService.findOneForOwningClient(client.id, contentId);
   }
 
   // ---------------------------------------------------------------------------
@@ -245,17 +242,18 @@ export class ContentMeController {
   })
   @ApiOkResponse({ description: 'The FINAL_CONFIRMED Content row.' })
   @ApiNotFoundResponse({ description: 'Not found for this Client.' })
-  confirmFinalLocked(
+  async confirmFinalLocked(
     @CurrentClient() client: Client,
     @Param('contentId', ParseUUIDPipe) contentId: string,
     @Body(new ZodValidationPipe(confirmFinalContentSchema)) dto: unknown,
   ) {
-    return this.statusService.confirmFinalLocked({
+    await this.statusService.confirmFinalLocked({
       clientId: client.id,
       contentId,
       actorUserId: client.ownerUserId as string,
       note: (dto as ConfirmFinalContentDto).note,
     });
+    return this.contentService.findOneForOwningClient(client.id, contentId);
   }
 
   // ---------------------------------------------------------------------------

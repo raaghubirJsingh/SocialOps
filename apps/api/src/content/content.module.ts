@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { ClientsModule } from '../clients/clients.module.js';
+import { OperationalGatingService } from '../common/operational-gating.service.js';
 import { PrismaModule } from '../prisma/prisma.module.js';
 import { S3Module } from '../s3/s3.module.js';
 import { AIAgentService } from './ai-agent.service.js';
@@ -65,6 +66,7 @@ import { RawDataService } from './raw-data.service.js';
     LlmService,
     AiTaskDispatchGuard,
     AIAgentService,
+    OperationalGatingService,
   ],
   exports: [
     ContentService,

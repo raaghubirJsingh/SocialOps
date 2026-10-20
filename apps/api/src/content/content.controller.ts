@@ -33,6 +33,7 @@ import {
 import { CurrentUser } from '../rbac/decorators/current-user.decorator.js';
 import { RequireMinimumRole } from '../rbac/decorators/require-roles.decorator.js';
 import { RoleGuard } from '../rbac/guards/role.guard.js';
+import { OperationalGatingService } from '../common/operational-gating.service.js';
 import { ContentStatusService } from './content-status.service.js';
 import { ContentService } from './content.service.js';
 import { AIAgentService } from './ai-agent.service.js';
@@ -82,6 +83,7 @@ export class ContentController {
     private readonly internalNoteService: InternalNoteService,
     private readonly aiAgentService: AIAgentService,
     private readonly aiTaskGuard: AiTaskDispatchGuard,
+    private readonly gating: OperationalGatingService,
   ) {}
 
   @Get()
@@ -116,12 +118,48 @@ export class ContentController {
     @Body(new ZodValidationPipe(createContentSchema)) dto: unknown,
   ) {
     await this.requireClientInScope(clientId, organization.id);
+    // Progressive gating: PENDING clients accept no writes; creation also
+    // needs at least one active SocialAccount (record, not credential).
+    await this.gating.requireOnboardingActive(clientId);
+    await this.gating.requireActiveSocialAccount(clientId);
     return this.contentService.create({
       clientId,
       actorUserId: user.sub,
       // Server-verified managing Agency: the organization context was proven by
       // the global OrganizationMembershipGuard, never supplied by the client.
       agencyId: organization.id,
+      dto: dto as CreateContentDto,
+    });
+  }
+
+  @Post('from-request/:requestId')
+  @HttpCode(201)
+  @UseGuards(RoleGuard)
+  @RequireMinimumRole('ADMIN')
+  @ApiOperation({
+    summary: 'Create the first draft from a client Content Request.',
+    description:
+      'Creates a DRAFT and its immutable initial revision while atomically recording the source request. The request itself remains unchanged.',
+  })
+  @ApiCreatedResponse({ description: 'The created DRAFT row.' })
+  @ApiNotFoundResponse({
+    description: 'The request was not found for this Client.',
+  })
+  async createFromRequest(
+    @CurrentUser() user: JwtAccessPayload,
+    @CurrentOrganization() organization: RequestOrganizationContext,
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Param('requestId', ParseUUIDPipe) requestId: string,
+    @Body(new ZodValidationPipe(createContentSchema)) dto: unknown,
+  ) {
+    await this.requireClientInScope(clientId, organization.id);
+    await this.gating.requireOnboardingActive(clientId);
+    await this.gating.requireActiveSocialAccount(clientId);
+    return this.contentService.create({
+      clientId,
+      actorUserId: user.sub,
+      agencyId: organization.id,
+      sourceRequestId: requestId,
       dto: dto as CreateContentDto,
     });
   }
@@ -180,6 +218,9 @@ export class ContentController {
     @Body(new ZodValidationPipe(updateContentSchema)) dto: unknown,
   ) {
     await this.requireClientInScope(clientId, organization.id);
+    // Progressive gating: PENDING clients accept no writes. The
+    // SocialAccount dependency applies to CREATION only, never here.
+    await this.gating.requireOnboardingActive(clientId);
     return this.contentService.update({
       clientId,
       contentId,
@@ -208,6 +249,7 @@ export class ContentController {
     @Body(new ZodValidationPipe(transitionContentSchema)) dto: unknown,
   ) {
     await this.requireClientInScope(clientId, organization.id);
+    await this.gating.requireOnboardingActive(clientId);
     const body = dto as TransitionContentDto;
     return this.statusService.transition({
       clientId,
@@ -271,6 +313,7 @@ export class ContentController {
     @Body(new ZodValidationPipe(createInternalNoteSchema)) dto: unknown,
   ) {
     await this.requireClientInScope(clientId, organization.id);
+    await this.gating.requireOnboardingActive(clientId);
     return this.internalNoteService.create({
       contentId,
       clientId,
@@ -350,6 +393,7 @@ export class ContentController {
     @Body(new ZodValidationPipe(processAiTaskSchema)) dto: unknown,
   ) {
     await this.requireClientInScope(clientId, organization.id);
+    await this.gating.requireOnboardingActive(clientId);
     const body = dto as ProcessAiTaskDto;
 
     // Cost control BEFORE any provider call.

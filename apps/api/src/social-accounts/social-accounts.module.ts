@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { ClientsModule } from '../clients/clients.module.js';
+import { OperationalGatingService } from '../common/operational-gating.service.js';
 import { CryptoModule } from '../crypto/crypto.module.js';
 import { PrismaModule } from '../prisma/prisma.module.js';
 import { SocialAccountMeController } from './social-account-me.controller.js';
@@ -53,6 +54,7 @@ import { OAuthStateService } from './oauth/oauth-state.service.js';
     SocialAccountsService,
     OAuthStateService,
     SocialAccountsOAuthService,
+    OperationalGatingService,
   ],
   exports: [SocialAccountsService, SocialAccountsOAuthService],
 })

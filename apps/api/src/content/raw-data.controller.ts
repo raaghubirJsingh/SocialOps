@@ -22,6 +22,7 @@ import {
 
 import type { JwtAccessPayload } from '../auth/types/jwt-payload.type.js';
 import { ClientsService } from '../clients/clients.service.js';
+import { OperationalGatingService } from '../common/operational-gating.service.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import {
   CurrentOrganization,
@@ -65,6 +66,7 @@ export class RawDataController {
     private readonly clientsService: ClientsService,
     private readonly rawDataService: RawDataService,
     private readonly s3Service: S3Service,
+    private readonly gating: OperationalGatingService,
   ) {}
 
   @Get()
@@ -81,6 +83,19 @@ export class RawDataController {
       clientId,
       normaliseListRawDataQuery(query as ListRawDataQueryDto),
     );
+  }
+
+  @Get(':rawDataId')
+  @ApiOperation({ summary: 'Read one intake record for a Client.' })
+  @ApiOkResponse({ description: 'The immutable intake record.' })
+  @ApiNotFoundResponse({ description: 'Client not found for this Agency.' })
+  async get(
+    @CurrentOrganization() organization: RequestOrganizationContext,
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Param('rawDataId', ParseUUIDPipe) rawDataId: string,
+  ) {
+    await this.requireClientInScope(clientId, organization.id);
+    return this.rawDataService.findOneForClient(clientId, rawDataId);
   }
 
   @Post('upload-url')
@@ -101,8 +116,11 @@ export class RawDataController {
     @Param('clientId', ParseUUIDPipe) clientId: string,
     @Body(new ZodValidationPipe(presignedUploadSchema)) dto: unknown,
   ) {
-    // Prove the ACTIVE ClientAgencyRelationship (uniform 404 otherwise).
+    // Prove the ACTIVE ClientAgencyRelationship (uniform 404 otherwise), then
+    // the onboarding gate. RawData is deliberately OUTSIDE the SocialAccount
+    // dependency: intake is the input Content drafts are built from.
     await this.requireClientInScope(clientId, organization.id);
+    await this.gating.requireOnboardingActive(clientId);
     const body = dto as PresignedUploadDto;
     const objectKey = this.s3Service.buildObjectKey(
       organization.id,
@@ -135,6 +153,7 @@ export class RawDataController {
     @Body(new ZodValidationPipe(createRawDataSchema)) dto: unknown,
   ) {
     await this.requireClientInScope(clientId, organization.id);
+    await this.gating.requireOnboardingActive(clientId);
     return this.rawDataService.create(
       clientId,
       user.sub,

@@ -53,11 +53,17 @@ function makeService(over: {
   // The real OAuthStateService.mint() returns the signed state STRING.
   const state = { mint: jest.fn(async () => 'state.signed.payload') };
   const crypto = {};
+  // Gating stub: onboarding ACTIVE by default; tests override per case.
+  const gating = {
+    requireOnboardingActive: jest.fn(async () => undefined),
+    requireActiveSocialAccount: jest.fn(async () => undefined),
+  };
   const service = new SocialAccountsOAuthService(
     prisma as never,
     clientsService as never,
     state as never,
     crypto as never,
+    gating as never,
   );
   return { service, state, prisma };
 }
@@ -370,6 +376,10 @@ function makeCallbackService(over: {
     clientsService as never,
     { mint: jest.fn(), consume: jest.fn() } as never,
     {} as never,
+    {
+      requireOnboardingActive: jest.fn(async () => undefined),
+      requireActiveSocialAccount: jest.fn(async () => undefined),
+    } as never,
   );
   return { service, prisma, clientsService };
 }

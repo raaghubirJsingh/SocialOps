@@ -23,9 +23,20 @@ const OAUTH_PLATFORM_LABELS: Readonly<Record<string, string>> = Object.freeze({
 });
 
 const CODE_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
+  // client invitation (POST /api/clients/:id/invite)
+  CLIENT_ALREADY_ONBOARDED:
+    'This client is already onboarded, so it can no longer be invited.',
   // social accounts
   DUPLICATE_SOCIAL_ACCOUNT:
     'That platform account is already recorded for this client.',
+  // Global profileUrl uniqueness: the server never says WHO holds the URL
+  // (tenant-blind 409), so this copy must stay equally generic.
+  SOCIAL_ACCOUNT_URL_UNAVAILABLE:
+    'This profile URL is not available. Enter a different one.',
+  // Platform-vs-host validation: a 400 about THIS caller's own input, so the
+  // copy names the fix rather than any other tenant's data.
+  SOCIAL_ACCOUNT_URL_PLATFORM_MISMATCH:
+    'This URL does not match the selected platform. Enter a link from the same platform.',
   // content status machine
   INVALID_CONTENT_TRANSITION:
     'That status change is not allowed from the current state.',
@@ -47,6 +58,14 @@ const CODE_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
   // Phase 2 change-request limit (Scenario 1 max 2, HTTP 400)
   CHANGE_REQUEST_LIMIT_EXCEEDED:
     'You have used all change requests on this content (maximum 2).',
+  // Progressive operational gating (Client Operations V1 amendment):
+  // agency writes while the Client is still PENDING, and Content creation
+  // with no active SocialAccount. Both name only the caller's own
+  // prerequisite, never another tenant's data.
+  CLIENT_NOT_ACTIVE:
+    'This client is not active yet. Complete onboarding first.',
+  SOCIAL_ACCOUNT_REQUIRED:
+    'Record at least one active social account for this client before creating content.',
   // Client-side OAuth connect requires an ACTIVE managing Agency
   // (approved Decision 013). This is a tenant-scope boundary, not a
   // permissions fault. State the requirement only: there is no self-serve
@@ -63,6 +82,12 @@ const CODE_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
   AI_USER_REQUIRED: 'The selected assignee must be an AI employee.',
   AI_EMPLOYEE_NOT_MEMBER:
     'The selected AI employee is not a member of this organization.',
+  // Registration OTP lifecycle (stable codes from the registration API).
+  // Both are temporary, recoverable states - never a permanent account fault.
+  OTP_LOCKED:
+    'Verification is temporarily locked. Please wait and try again.',
+  OTP_RESEND_LIMIT:
+    'You have used all verification attempts for now. Please try again later.',
 });
 
 const STATUS_MESSAGES: Readonly<Record<number, string>> = Object.freeze({
