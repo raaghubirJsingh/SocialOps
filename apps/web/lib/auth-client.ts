@@ -1,4 +1,10 @@
 import type {
+  AdminStepUpChallengeRequest,
+  AdminStepUpChallengeResponse,
+  AdminStepUpResendRequest,
+  AdminStepUpResendResponse,
+  AdminStepUpVerifyRequest,
+  AdminStepUpVerifyResponse,
   AuthenticatedUser,
   GenericStatusResponse,
   LogoutRequest,
@@ -219,4 +225,44 @@ export async function refreshAccessToken(session: Session): Promise<TokenPair> {
   };
   saveSession(next);
   return tokenPair;
+}
+
+/**
+ * SuperAdmin step-up OTP (Decision 020).
+ *
+ * The step-up flow:
+ * 1. POST /admin/step-up/challenge  — issue OTP to user's email
+ * 2. POST /admin/step-up/verify     — verify OTP, returns sessionToken
+ * 3. Use sessionToken as Bearer token on SUPERADMIN routes
+ * 4. POST /admin/step-up/resend     — resend OTP (max 3 times)
+ *
+ * The sessionToken is a raw token (not a JWT) that must be stored by
+ * the client and sent as `Authorization: Bearer <sessionToken>` on
+ * protected admin routes. It is single-use and consumed on first use.
+ */
+export async function adminStepUpChallenge(
+  input: AdminStepUpChallengeRequest,
+): Promise<AdminStepUpChallengeResponse> {
+  return apiFetch<AdminStepUpChallengeResponse>('/admin/step-up/challenge', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+export async function adminStepUpVerify(
+  input: AdminStepUpVerifyRequest,
+): Promise<AdminStepUpVerifyResponse> {
+  return apiFetch<AdminStepUpVerifyResponse>('/admin/step-up/verify', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+export async function adminStepUpResend(
+  input: AdminStepUpResendRequest,
+): Promise<AdminStepUpResendResponse> {
+  return apiFetch<AdminStepUpResendResponse>('/admin/step-up/resend', {
+    method: 'POST',
+    body: input,
+  });
 }

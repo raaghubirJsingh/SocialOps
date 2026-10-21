@@ -22,6 +22,7 @@ export interface LoginRequest {
  * discriminated by the 1:1 EmployeeProfile row.
  */
 export type AccountType = 'SERVICE_PROVIDER' | 'CLIENT';
+export type ClientType = 'INDIVIDUAL' | 'BUSINESS';
 
 /**
  * Authenticated user identity returned by `POST /api/auth/login` and
@@ -70,6 +71,7 @@ export interface RegistrationStartRequest {
   phone: string;
   /** Nullable while discovery is unresolved (L13); required by /password. */
   accountType?: AccountType | null;
+  clientType?: ClientType | null;
   discoveryAnswers?: DiscoveryAnswers;
   /** Present only when resuming/editing an existing pending row (L6). */
   resumeToken?: string;
@@ -82,9 +84,28 @@ export interface RegistrationStartResponse {
   maskedEmail: string;
   maskedPhone: string;
   accountType: AccountType | null;
+  clientType: ClientType | null;
   emailVerified: boolean;
   whatsappVerified: boolean;
   sendStatus: { email: 'sent' | 'unavailable'; whatsapp: 'sent' | 'unavailable' };
+  resendRemaining: { email: number; whatsapp: number };
+  lockedUntil: string | null;
+}
+
+export interface RegistrationSession {
+  resumeToken: string;
+  stage: 'verification' | 'password';
+  expiresAt: string;
+  maskedEmail: string;
+  maskedPhone: string;
+  accountType: AccountType | null;
+  clientType: ClientType | null;
+  emailVerified: boolean;
+  whatsappVerified: boolean;
+  sendStatus: {
+    email: 'sent' | 'unavailable' | 'already_verified' | null;
+    whatsapp: 'sent' | 'unavailable' | 'already_verified' | null;
+  };
   resendRemaining: { email: number; whatsapp: number };
   lockedUntil: string | null;
 }
@@ -124,6 +145,7 @@ export interface RegistrationPasswordRequest {
    * selection travels with the password stage. Never guessed.
    */
   accountType?: AccountType | null;
+   clientType?: ClientType | null;
 }
 
 export interface RegistrationCompleteResponse {
@@ -138,6 +160,7 @@ export interface RegistrationResumeSnapshot {
   stage: 'verification' | 'password';
   expiresAt: string;
   accountType: AccountType | null;
+  clientType: ClientType | null;
   fullName: string;
   maskedEmail: string;
   maskedPhone: string;
@@ -239,4 +262,39 @@ export interface VerifyEmailResponse {
  */
 export interface GenericStatusResponse {
   status: 'verified' | 'queued';
+}
+
+/**
+ * SuperAdmin step-up OTP types (Decision 020).
+ *
+ * Mirrors backend AdminStepUpChallengeDto, AdminStepUpVerifyDto,
+ * AdminStepUpResendDto in apps/api/src/admin/dto/admin-step-up.dto.ts.
+ */
+export type AdminStepUpChannel = 'EMAIL';
+
+export interface AdminStepUpChallengeRequest {
+  channel: AdminStepUpChannel;
+}
+
+export interface AdminStepUpChallengeResponse {
+  sendStatus: 'sent' | 'unavailable';
+}
+
+export interface AdminStepUpVerifyRequest {
+  channel: AdminStepUpChannel;
+  otp: string;
+}
+
+export type AdminStepUpVerifyResponse =
+  | { outcome: 'verified'; sessionToken: string }
+  | { outcome: 'invalid' }
+  | { outcome: 'locked'; retryAfterSeconds: number };
+
+export interface AdminStepUpResendRequest {
+  channel: AdminStepUpChannel;
+}
+
+export interface AdminStepUpResendResponse {
+  sendStatus: 'sent' | 'unavailable';
+  resendRemaining: number;
 }
