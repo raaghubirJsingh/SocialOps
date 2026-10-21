@@ -181,6 +181,9 @@ model User {
   socialOpsAdminGrantedAt   DateTime?
   socialOpsAdminGrantedById String?   @db.Uuid
   socialOpsAdminRevokedAt   DateTime?
+  /// Explicit platform permissions for granular control (used with isSocialOpsAdmin gate).
+  /// Granted/revoked via PlatformAdminService; audited in AdminAuditEvent.
+  platformPermissions       PlatformPermission[] @default([])
 
   // Client Operations V1 (metadata only): audit-only creator/actor links.
   // None of these confer ownership or authorization - ownership lives on
@@ -196,6 +199,13 @@ model User {
   // Unified Content & AI Foundation (Phase 1): boundary-enforced relations.
   internalNotesAuthored InternalNote[]  @relation("InternalNoteAuthor")
   changeRequestsMade    ChangeRequest[] @relation("ChangeRequestRequester")
+
+  // SuperAdmin step-up (Decision 020 §6): one active challenge and any
+  // historical sessions per user. Carries no authorization weight on its own;
+  // the SocialOpsAdminGuard verifies the session against the DB on every
+  // SUPERADMIN request.
+  adminStepUpChallenges AdminStepUpChallenge[]
+  adminStepUpSessions   AdminStepUpSession[]
 }
 
 /// Platform vs external Service-Provider classification (Decision 012).
@@ -705,6 +715,84 @@ enum ScenarioType {
   SCENARIO_3
 }
 
+/// Platform Administrator permissions (explicit, auditable).
+/// Used alongside User.isSocialOpsAdmin Boolean gate for granular control.
+/// See PlatformAdminService for grant/revoke/bootstrap logic.
+enum PlatformPermission {
+  CLIENT_STATUS_MANAGEMENT
+  AGENCY_DISCOVERY_APPROVAL
+  GLOBAL_ORG_READ
+  GLOBAL_USER_READ
+  GLOBAL_CLIENT_READ
+  GLOBAL_CONTENT_READ
+  PLATFORM_ROLE_GRANT
+  PLATFORM_ROLE_REVOKE
+  PLATFORM_AUDIT_READ
+}
+
+/// Verification channel for a SuperAdmin step-up OTP challenge.
+/// V1 EMAIL only; mobile/SMS delivery is DEFERRED until a provider is
+/// approved separately (Decision 020 §6). The enum exists so the channel is
+/// explicit and future channels require a schema + migration, not a string.
+enum AdminStepUpChannel {
+  EMAIL
+}
+
+/// SuperAdmin step-up OTP challenge (Decision 020 §6).
+///
+/// A fresh challenge is required on EVERY SuperAdmin login attempt. Only
+/// one challenge is active per user at a time (userId unique); issuing a new
+/// challenge invalidates the previous one. The raw OTP is NEVER persisted -
+/// only the Argon2id hash (identical parameters to password hashing).
+///
+/// Security properties mirror RegistrationOtp: 6-digit numeric code, 5-minute
+/// expiry, single use (usedAt), max 3 wrong attempts -> 1-hour lock, resend
+/// quota of 3 successful dispatches. Wrong/expired/used answers are uniform;
+/// only the lock state is distinct.
+///
+/// Concurrency: the challenge row is written with ONE atomic upsert on the
+/// userId unique key, so concurrent issuers converge on the same row.
+model AdminStepUpChallenge {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  channel   AdminStepUpChannel
+  codeHash  String
+  expiresAt DateTime
+  usedAt       DateTime?
+  attempts     Int      @default(0)
+  resendCount  Int      @default(0)
+  lockedUntil  DateTime?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([userId])
+  @@index([expiresAt])
+}
+
+/// SuperAdmin step-up session (Decision 020 §6).
+///
+/// A short-lived session token issued ONLY after a successful step-up OTP
+/// verification. It is the credential that satisfies SUPERADMIN routes; a
+/// normal access token can never satisfy them. Only the SHA-256 hash is
+/// persisted (AGENTS.md §8). Sessions are single-use: consumed on first
+/// SUPERADMIN request and revoked afterwards, so a leaked session token
+/// cannot be replayed.
+model AdminStepUpSession {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @db.Uuid
+  sessionTokenHash String   @unique
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  consumedAt       DateTime?
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
 /// A social-media account recorded against exactly ONE Client.
 ///
 /// SCOPE: METADATA ONLY. This model deliberately stores NO access token, NO
@@ -736,8 +824,18 @@ model SocialAccount {
   handle            String?
   displayName       String?
   /// Human-checkable public reference (e.g. the profile URL). Never fetched
-  /// or verified by the backend in this phase.
+  /// or verified by the backend in this phase. Stored in TRIMMED form (or
+  /// NULL) so it always agrees with `normalizedUrl` about "no URL".
   profileUrl        String?
+  /// Canonical form of `profileUrl` (normalizeProfileUrl in
+  /// src/social-accounts/lib/profile-url-normalization.ts) carrying a GLOBAL
+  /// unique index: one URL may exist exactly once across all Clients and all
+  /// Service Providers/Organizations (approved uniqueness decision). NULL when
+  /// no URL is recorded — Postgres treats NULLs as distinct, so URL-less rows
+  /// never collide, and inactive rows still hold their URL. Internal
+  /// bookkeeping: deliberately NOT part of SOCIAL_ACCOUNT_SELECT, so it never
+  /// reaches an API response.
+  normalizedUrl     String? @unique
 
   /// Declarative enable/disable of the record (mirrors
   /// Organization.isActive / Workspace.isActive). Carries no OAuth meaning.
@@ -811,6 +909,9 @@ model Content {
   /// Tenant key. Non-nullable: Content can never exist outside a Client
   /// (AGENTS.md §6-§7 isolation).
   clientId String        @db.Uuid
+  /// The immutable Content Request from which this Content was created.
+  /// Nullable for historical and independently-created Content.
+  sourceRequestId String? @unique @db.Uuid
   title    String
   body     String
   status   ContentStatus @default(DRAFT)
@@ -844,6 +945,7 @@ model Content {
   updatedAt       DateTime  @updatedAt
 
   client               Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sourceRequest        RawData?              @relation("ContentSourceRequest", fields: [sourceRequestId], references: [id], onDelete: SetNull)
   agency               Organization?        @relation("ContentAgency", fields: [agencyId], references: [id], onDelete: Restrict)
   createdByUser        User?                @relation("ContentCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   updatedByUser        User?                @relation("ContentUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
@@ -943,6 +1045,7 @@ model RawData {
 
   client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   content        Content? @relation(fields: [contentId], references: [id], onDelete: SetNull)
+  requestedContent Content? @relation("ContentSourceRequest")
   capturedByUser User?    @relation("RawDataCapturer", fields: [capturedByUserId], references: [id], onDelete: SetNull)
 
   @@index([clientId, capturedAt])
@@ -1026,4 +1129,28 @@ model ChangeRequest {
 
   @@index([contentId])
   @@index([requestedById, contentId])
+}
+
+/// Platform Administrator audit event (insert-only).
+/// Records all privileged platform operations: bootstrap, grant, revoke,
+/// and future platform-level writes. Cross-tenant by design — not scoped to
+/// any Client or Organization.
+model AdminAuditEvent {
+  id           String   @id @default(uuid()) @db.Uuid
+  actorUserId  String   @db.Uuid
+  /// Action identifier: e.g. "platform_admin.bootstrap", "platform_admin.granted",
+  /// "platform_admin.revoked", "platform_admin.client_status_changed",
+  /// "platform_admin.agency_discovery_approved".
+  action       String
+  /// Target resource type: "user" | "organization" | "client" | "platform_setting"
+  targetType   String
+  /// Target resource ID (nullable for bootstrap/no-target actions)
+  targetId     String?  @db.Uuid
+  /// Structured details for forensic analysis (never includes secrets)
+  details      Json?
+  createdAt    DateTime @default(now())
+
+  @@index([actorUserId, createdAt])
+  @@index([targetType, targetId])
+  @@index([action, createdAt])
 }
