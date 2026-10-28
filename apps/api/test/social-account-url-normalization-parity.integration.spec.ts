@@ -53,6 +53,22 @@ describe('Decision 021: profile URL normalization parity (TypeScript vs SQL back
     await prisma.$executeRawUnsafe(
       `DROP INDEX IF EXISTS "${NORMALIZED_URL_INDEX}";`,
     );
+
+    // Create a dedicated Client for this test (self-contained, not relying on seed).
+    // This avoids race conditions with other suites' afterAll cleanup.
+    const parityClient = await prisma.client.create({
+      data: {
+        type: 'BUSINESS',
+        name: 'Parity Test Client',
+        directEmail: 'parity-test@example.com',
+        directPhone: '+1-555-0000',
+        website: null,
+        industry: null,
+        // status and onboardingStatus use their @default values (ACTIVE / PENDING)
+      },
+      select: { id: true },
+    });
+    (global as any).__PARITY_CLIENT_ID__ = parityClient.id;
   });
 
   afterAll(async () => {
@@ -63,6 +79,12 @@ describe('Decision 021: profile URL normalization parity (TypeScript vs SQL back
     await prisma.socialAccount.deleteMany({
       where: { handle: 'parity-test' },
     });
+    // Clean up the dedicated test client
+    if ((global as any).__PARITY_CLIENT_ID__) {
+      await prisma.client.deleteMany({
+        where: { id: (global as any).__PARITY_CLIENT_ID__ },
+      });
+    }
     await prisma.$executeRawUnsafe(
       `DROP INDEX IF EXISTS "${NORMALIZED_URL_INDEX}";`,
     );
@@ -83,7 +105,7 @@ describe('Decision 021: profile URL normalization parity (TypeScript vs SQL back
           data: {
             client: {
               connect: {
-                id: (await prisma.client.findFirst({ select: { id: true } }))!.id,
+                id: (global as any).__PARITY_CLIENT_ID__,
               },
             },
             platform: 'INSTAGRAM',
