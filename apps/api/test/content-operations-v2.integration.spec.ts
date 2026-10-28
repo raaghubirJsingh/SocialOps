@@ -34,6 +34,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
 import { createActiveUser } from './helpers/active-user.factory.js';
+import { twoStepLogin } from './shared/two-step-login.js';
 
 // The guard runs at module load, before any Prisma call can be made.
 const dbName = new URL(process.env.DATABASE_URL ?? '').pathname.slice(1);
@@ -94,7 +95,7 @@ async function seedOrgUser(name: string, role: OrganizationRole) {
   await prisma.organizationMembership.create({
     data: { organizationId: orgId, userId: user.id, role },
   });
-  const login = await auth.login({ email, password: PASSWORD });
+  const login = await twoStepLogin(auth, email, PASSWORD);
   return { id: user.id, email, orgId, accessToken: login.accessToken };
 }
 
@@ -108,7 +109,7 @@ async function registerClientUser(name: string) {
     accountType: 'CLIENT',
     password: PASSWORD,
   });
-  const login = await auth.login({ email, password: PASSWORD });
+  const login = await twoStepLogin(auth, email, PASSWORD);
   return { id: user.id, email, accessToken: login.accessToken };
 }
 
@@ -261,6 +262,7 @@ beforeAll(async () => {
   await prisma.contentRevision.deleteMany({});
   await prisma.content.deleteMany({});
   await prisma.rawData.deleteMany({});
+  await prisma.loginOtpChallenge.deleteMany({});
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
