@@ -3,10 +3,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AgencyRelationshipStatus, ContentStatus } from '@prisma/client';
+import {
+  AgencyRelationshipStatus,
+  ContentStatus,
+  Prisma,
+} from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service.js';
-import { CLIENT_CONTENT_SELECT, CONTENT_SELECT } from './content.select.js';
+import {
+  CLIENT_CONTENT_WORKFLOW_SELECT,
+  CONTENT_SELECT,
+  toClientContentView,
+} from './content.select.js';
 import { isContentImmutable } from './constants/content-transitions.js';
 import { contentHashOf } from './content-hash.js';
 import type { CreateContentDto } from './dto/create-content.dto.js';
@@ -54,20 +62,25 @@ export class ContentService {
    * Client-safe list (Phase 2 strict data boundary).
    *
    * Identical tenant scoping to `listForClient`, but every row is projected
-   * through CLIENT_CONTENT_SELECT so `agencyId` and `internalNotes` never leave
+   * through a status-free client projection so `agencyId` and `internalNotes` never leave
    * PostgreSQL in the first place. This is the query-level half of the Client
    * isolation guarantee; ClientBoundaryInterceptor is the second half.
    */
-  listForOwningClient(clientId: string, filters: ListContentQuery) {
-    return this.prisma.content.findMany({
+  async listForOwningClient(clientId: string, filters: ListContentQuery) {
+    const items = await this.prisma.content.findMany({
       where: {
         clientId,
+        // Same server-side narrowing as the agency twin `listForClient`: the
+        // `status` query param is validated by listContentQuerySchema (an
+        // unknown value is a 400), so dropping it here would silently return
+        // unfiltered rows.
         ...(filters.status ? { status: filters.status } : {}),
       },
-      select: CLIENT_CONTENT_SELECT,
+      select: CLIENT_CONTENT_WORKFLOW_SELECT,
       orderBy: { createdAt: 'desc' },
       take: filters.take,
     });
+    return items.map(toClientContentView);
   }
 
   /**
@@ -77,10 +90,10 @@ export class ContentService {
   async findOneForOwningClient(clientId: string, contentId: string) {
     const content = await this.prisma.content.findFirst({
       where: { id: contentId, clientId },
-      select: CLIENT_CONTENT_SELECT,
+      select: CLIENT_CONTENT_WORKFLOW_SELECT,
     });
     if (!content) throw new NotFoundException('Content not found');
-    return content;
+    return toClientContentView(content);
   }
 
   /** Tenant-scoped single read: a miss is a uniform 404. */
@@ -110,6 +123,7 @@ export class ContentService {
     clientId: string;
     actorUserId: string;
     agencyId?: string;
+    sourceRequestId?: string;
     dto: CreateContentDto;
   }) {
     const { clientId, actorUserId, dto } = params;
@@ -128,6 +142,37 @@ export class ContentService {
         )?.organizationId ??
         null;
 
+      if (params.sourceRequestId) {
+        const request = await tx.rawData.findFirst({
+          where: {
+            id: params.sourceRequestId,
+            clientId,
+            source: 'CLIENT_FORM',
+          },
+          select: { id: true },
+        });
+        if (!request) throw new NotFoundException('Content request not found');
+
+        // Lock the RawData row to serialize concurrent draft creation for the same
+        // intake request. This ensures the pre-check and insert are serialized.
+        await tx.$queryRaw`
+          SELECT "id" FROM "RawData"
+          WHERE "id" = ${params.sourceRequestId}::uuid
+          FOR UPDATE
+        `;
+
+        const existingContent = await tx.content.findUnique({
+          where: { sourceRequestId: params.sourceRequestId },
+          select: { id: true },
+        });
+        if (existingContent) {
+          throw new ConflictException({
+            code: 'CONTENT_REQUEST_ALREADY_DRAFTED',
+            message: 'A draft already exists for this Content Request',
+          });
+        }
+      }
+
       const content = await tx.content.create({
         data: {
           clientId,
@@ -136,6 +181,7 @@ export class ContentService {
           status: ContentStatus.DRAFT,
           scenarioType: dto.scenarioType ?? null,
           agencyId,
+          sourceRequestId: params.sourceRequestId ?? null,
           createdByUserId: actorUserId,
           updatedByUserId: actorUserId,
         },
@@ -155,6 +201,35 @@ export class ContentService {
       });
 
       return content;
+    }).catch((error: unknown) => {
+      // P2002 fallback for the Decision 022 race: only the sourceRequestId
+      // unique constraint maps to CONTENT_REQUEST_ALREADY_DRAFTED. Any other
+      // unique violation in the same transaction is rethrown unchanged so it
+      // is never misreported as a duplicate draft. The target is read as a
+      // SUBSTRING (same discipline as the Decision 021 URL-index mapping):
+      // Prisma reports it either as a column array (['sourceRequestId']) or
+      // as the index-name string ('Content_sourceRequestId_key').
+      if (
+        params.sourceRequestId &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const target = (error.meta as { target?: unknown } | undefined)?.target;
+        const columns = Array.isArray(target)
+          ? target.map((entry) => String(entry))
+          : typeof target === 'string'
+            ? [target]
+            : [];
+        if (
+          columns.some((column) => column.includes('sourceRequestId'))
+        ) {
+          throw new ConflictException({
+            code: 'CONTENT_REQUEST_ALREADY_DRAFTED',
+            message: 'A draft already exists for this Content Request',
+          });
+        }
+      }
+      throw error;
     });
   }
 
