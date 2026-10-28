@@ -124,11 +124,46 @@ export class ClientsService {
     });
   }
 
-  /** Agency-side list: ONLY Clients with an ACTIVE relationship to the org. */
-  listClientsForOrganization(organizationId: string) {
+  /**
+   * Escapes LIKE wildcard characters so user input is matched LITERALLY.
+   *
+   * Prisma's `contains` compiles to `ILIKE '%<term>%'` with no ESCAPE clause,
+   * so a raw `%` or `_` in the term would act as a wildcard (a lone `%`
+   * matches every row). PostgreSQL's default LIKE escape is a backslash, so
+   * prefixing `\`, `%` and `_` with `\` makes them literal. The term is still
+   * passed as a bound parameter - this is pattern escaping, not SQL string
+   * building, and never touches raw SQL.
+   */
+  private escapeLikeWildcards(term: string): string {
+    return term.replace(/[\\%_]/g, (char) => `\\${char}`);
+  }
+
+  /**
+   * Agency-side list: ONLY Clients with an ACTIVE relationship to the org.
+   *
+   * Optional `q` is a case-insensitive substring search across the client
+   * name, direct email, direct phone and primary contact name. The tenant
+   * condition (`relationships.some({ organizationId, status: 'ACTIVE' })`)
+   * stays TOP-LEVEL and is always ANDed; the search is a separate OR group so
+   * `q` can never widen or bypass the tenant scope. `q` is used only as a
+   * parameterised Prisma `contains` value (LIKE-wildcard escaped) - never raw
+   * SQL, never logged.
+   */
+  listClientsForOrganization(organizationId: string, q?: string) {
+    const term = q ? this.escapeLikeWildcards(q) : undefined;
     return this.prisma.client.findMany({
       where: {
         relationships: { some: { organizationId, status: 'ACTIVE' } },
+        ...(term
+          ? {
+              OR: [
+                { name: { contains: term, mode: 'insensitive' } },
+                { directEmail: { contains: term, mode: 'insensitive' } },
+                { directPhone: { contains: term, mode: 'insensitive' } },
+                { primaryContactName: { contains: term, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
       },
       orderBy: { createdAt: 'desc' },
     });

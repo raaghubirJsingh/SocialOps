@@ -40,7 +40,7 @@ export class SocialOpsAdminGuard implements CanActivate {
 
     const dbUser = await this.prisma.user.findUnique({
       where: { id: user.sub },
-      select: { isSocialOpsAdmin: true },
+      select: { isSocialOpsAdmin: true, socialOpsAdminRevokedAt: true },
     });
 
     // Fail closed: missing user or a false/absent flag denies - including
@@ -48,6 +48,14 @@ export class SocialOpsAdminGuard implements CanActivate {
     if (!dbUser || dbUser.isSocialOpsAdmin !== true) {
       throw new ForbiddenException('SOCIALOPS_ADMIN authority required');
     }
+
+    // If revokedAt is set, the admin privilege has been revoked.
+    // This check provides immediate revocation for new requests
+    // (refresh tokens are revoked separately via AuthService.revokeAllUserTokens).
+    if (dbUser.socialOpsAdminRevokedAt !== null) {
+      throw new ForbiddenException('Platform admin authority has been revoked');
+    }
+
     return true;
   }
 }

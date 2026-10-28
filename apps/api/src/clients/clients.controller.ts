@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 
@@ -26,6 +27,10 @@ import { ClientOnboardingService } from './client-onboarding.service.js';
 import { ClientStatusService } from './client-status.service.js';
 import { ClientsService } from './clients.service.js';
 import { inviteClientSchema } from './dto/client-common.dto.js';
+import {
+  listClientsQuerySchema,
+  normaliseListClientsQuery,
+} from './dto/list-clients.dto.js';
 import { updateClientFieldSchema } from './dto/update-client-field.dto.js';
 import { clientStatusSchema } from './dto/client-status.dto.js';
 import { createClientSchema } from './dto/create-client.dto.js';
@@ -52,8 +57,14 @@ export class ClientsController {
   ) {}
 
   @Get()
-  list(@CurrentOrganization() organization: RequestOrganizationContext) {
-    return this.clientsService.listClientsForOrganization(organization.id);
+  list(
+    @CurrentOrganization() organization: RequestOrganizationContext,
+    @Query(new ZodValidationPipe(listClientsQuerySchema)) query: unknown,
+  ) {
+    const { q } = normaliseListClientsQuery(
+      query as { q?: string },
+    );
+    return this.clientsService.listClientsForOrganization(organization.id, q);
   }
 
   @Post()
@@ -216,16 +227,19 @@ export class ClientsManagementController {
     @CurrentUser() user: JwtAccessPayload,
     @CurrentOrganization() organization: RequestOrganizationContext,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body(new ZodValidationPipe(inviteClientSchema)) dto: unknown,
+    @Body(new ZodValidationPipe(inviteClientSchema)) _dto: unknown,
   ) {
     const client = await this.clientsService.getClientForOrganization(
       id,
       organization.id,
     );
     if (!client) throwClientNotFound();
+    // Recipient is the Client's own saved email, resolved from the
+    // tenant-scoped row above - never from the request body (which the
+    // strict inviteClientSchema already rejects as unexpected input).
     return this.invitationService.issueInvitation(
       client,
-      (dto as { email: string }).email,
+      client.directEmail,
       user.sub,
     );
   }

@@ -1,9 +1,14 @@
 import { z } from 'zod';
 
-/** Agency-side invitation of a Client User by email. */
-export const inviteClientSchema = z.object({
-  email: z.string().email().max(200),
-});
+/**
+ * Agency-side invitation of a Client User.
+ *
+ * The recipient is the Client's saved `directEmail`, resolved server-side
+ * from the tenant-scoped Client row. The request body carries NO recipient:
+ * a caller-supplied email must never override it, so the schema is strict
+ * and rejects any unexpected field.
+ */
+export const inviteClientSchema = z.object({}).strict();
 
 export type InviteClientDto = z.infer<typeof inviteClientSchema>;
 

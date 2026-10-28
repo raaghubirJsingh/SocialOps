@@ -26,7 +26,7 @@ function makeRequest(sub: string | undefined) {
 type MockFn = ReturnType<typeof jest.fn>;
 const asMock = (fn: unknown): MockFn => fn as MockFn;
 
-function makeGuard(dbUser: { isSocialOpsAdmin: boolean } | null) {
+function makeGuard(dbUser: { isSocialOpsAdmin: boolean; socialOpsAdminRevokedAt: Date | null } | null) {
   const findUnique = jest.fn();
   asMock(findUnique).mockResolvedValue(dbUser);
   const prisma = { user: { findUnique } };
@@ -36,18 +36,30 @@ function makeGuard(dbUser: { isSocialOpsAdmin: boolean } | null) {
 
 describe('SocialOpsAdminGuard (user-level global authority, Option A)', () => {
   it('allows a user whose DB flag isSocialOpsAdmin is true', async () => {
-    const { guard, findUnique } = makeGuard({ isSocialOpsAdmin: true });
+    const { guard, findUnique } = makeGuard({
+      isSocialOpsAdmin: true,
+      socialOpsAdminRevokedAt: null,
+    });
 
     await expect(
       guard.canActivate(makeContext(makeRequest(ADMIN_ID))),
     ).resolves.toBe(true);
     expect(findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: ADMIN_ID } }),
+      expect.objectContaining({
+        where: { id: ADMIN_ID },
+        select: {
+          isSocialOpsAdmin: true,
+          socialOpsAdminRevokedAt: true,
+        },
+      }),
     );
   });
 
   it('denies when the DB flag is false', async () => {
-    const { guard } = makeGuard({ isSocialOpsAdmin: false });
+    const { guard } = makeGuard({
+      isSocialOpsAdmin: false,
+      socialOpsAdminRevokedAt: null,
+    });
 
     await expect(
       guard.canActivate(makeContext(makeRequest(PLAIN_ID))),
@@ -57,7 +69,10 @@ describe('SocialOpsAdminGuard (user-level global authority, Option A)', () => {
   it('is separate from organization roles: an org OWNER without the flag is denied', async () => {
     // The organization-scoped OWNER/ADMIN/MEMBER/VIEWER roles never imply
     // SOCIALOPS_ADMIN. The guard reads only the user-level DB flag.
-    const { guard } = makeGuard({ isSocialOpsAdmin: false });
+    const { guard } = makeGuard({
+      isSocialOpsAdmin: false,
+      socialOpsAdminRevokedAt: null,
+    });
     const request = {
       ...makeRequest(PLAIN_ID),
       organizationRole: 'OWNER',
@@ -77,10 +92,27 @@ describe('SocialOpsAdminGuard (user-level global authority, Option A)', () => {
   });
 
   it('denies an unauthenticated request', async () => {
-    const { guard } = makeGuard({ isSocialOpsAdmin: true });
+    const { guard } = makeGuard({
+      isSocialOpsAdmin: true,
+      socialOpsAdminRevokedAt: null,
+    });
 
     await expect(
       guard.canActivate(makeContext(makeRequest(undefined))),
     ).rejects.toThrow(/Authentication required/i);
+  });
+
+  it('denies a user whose platform admin authority has been revoked', async () => {
+    // socialOpsAdminRevokedAt is set: the flag may still read true, but the
+    // authority was revoked and the guard must reject the request so a
+    // revoked admin cannot continue operating on their existing access token.
+    const { guard } = makeGuard({
+      isSocialOpsAdmin: true,
+      socialOpsAdminRevokedAt: new Date(),
+    });
+
+    await expect(
+      guard.canActivate(makeContext(makeRequest(ADMIN_ID))),
+    ).rejects.toThrow(/Platform admin authority has been revoked/i);
   });
 });
