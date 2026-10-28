@@ -1,4 +1,8 @@
-import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+} from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { randomInt } from 'node:crypto';
 
@@ -11,6 +15,7 @@ import {
   OTP_MAX_WRONG_ATTEMPTS,
   OTP_MAX_RESENDS,
   OTP_TTL_MINUTES,
+  REGISTRATION_ERROR_CODES,
 } from './constants/registration.constants.js';
 import {
   EMAIL_VERIFICATION_PROVIDER,
@@ -199,7 +204,10 @@ export class OtpService {
         data: { resendCount: { increment: 1 } },
       });
       if (consumed.count === 0) {
-        throw new ForbiddenException(RESEND_LIMIT_MESSAGE);
+        throw new ForbiddenException({
+          code: REGISTRATION_ERROR_CODES.OTP_RESEND_LIMIT,
+          message: RESEND_LIMIT_MESSAGE,
+        });
       }
     }
 
@@ -251,6 +259,7 @@ export class OtpService {
 
     if (pending.lockedUntil && pending.lockedUntil.getTime() > now.getTime()) {
       throw new ForbiddenException({
+        code: REGISTRATION_ERROR_CODES.OTP_LOCKED,
         message: LOCKED_MESSAGE,
         retryAfterSeconds: Math.ceil(
           (pending.lockedUntil.getTime() - now.getTime()) / 1000,
@@ -276,7 +285,10 @@ export class OtpService {
     // the row with resendCount 1 inside the same atomic step.
     const existing = await this.findChallenge(effective.id, channel);
     if (existing && existing.resendCount >= OTP_MAX_RESENDS) {
-      throw new ForbiddenException(RESEND_LIMIT_MESSAGE);
+      throw new ForbiddenException({
+        code: REGISTRATION_ERROR_CODES.OTP_RESEND_LIMIT,
+        message: RESEND_LIMIT_MESSAGE,
+      });
     }
     if (existing) {
       const reserved = await this.prisma.registrationOtp.updateMany({
@@ -284,7 +296,10 @@ export class OtpService {
         data: { resendCount: { increment: 1 } },
       });
       if (reserved.count === 0) {
-        throw new ForbiddenException(RESEND_LIMIT_MESSAGE);
+        throw new ForbiddenException({
+          code: REGISTRATION_ERROR_CODES.OTP_RESEND_LIMIT,
+          message: RESEND_LIMIT_MESSAGE,
+        });
       }
     }
 
@@ -367,10 +382,13 @@ export class OtpService {
    * timestamp and marks the challenge single-use (usedAt).
    *
    * Atomicity: the success path (pending stamp + usedAt) runs inside ONE
-   * Prisma $transaction, and the wrong-attempt increment runs as an atomic
-   * `updateMany` that only fires while the counted threshold is not yet
-   * reached, so concurrent wrong attempts cannot interleave or overshoot
-   * the 3-attempt lock. Exactly 3 wrong attempts -> 1-hour lock (L4).
+   * Prisma $transaction. The wrong-attempt path runs as a CONDITIONAL
+   * atomic `updateMany` whose `where` guard (`attempts < max - 1`) is
+   * evaluated by PostgreSQL at write time, so two concurrent wrong
+   * attempts cannot both pass the check and cannot lose an increment:
+   * only one wins the guard and the other falls through to the lock
+   * path. Exactly 3 wrong attempts -> 1-hour lock (L4), regardless of
+   * concurrency.
    */
   async verify(
     pending: PendingRegistration,
@@ -430,31 +448,55 @@ export class OtpService {
       };
     }
 
-    const attempts = row.attempts + 1;
-    if (attempts >= OTP_MAX_WRONG_ATTEMPTS) {
+    // CONDITIONAL atomic increment (remediation). The previous code read
+    // `row.attempts` outside any transaction and wrote an absolute value
+    // (`attempts: row.attempts + 1`), so two concurrent wrong attempts both
+    // read the same starting count and the second write clobbered the first
+    // (lost increment) - the lock fired on the 4th wrong attempt instead of
+    // the 3rd. The guard below is evaluated by PostgreSQL at write time:
+    //
+    //   attempts semantics: 0 -> 1st wrong (invalid), 1 -> 2nd wrong
+    //   (invalid), 2 -> 3rd wrong (lock). The guard `lt: max - 1` (= lt: 2)
+    //   lets attempts 0 and 1 increment; when attempts is already 2 the
+    //   guard fails (count === 0) and we fall through to the lock path.
+    //
+    // A racing verifier that also reaches this point sees the same guard:
+    // exactly one of the two wins the increment, and the loser falls
+    // through to the lock path. The threshold can never be overshot.
+    const incremented = await this.prisma.registrationOtp.updateMany({
+      where: { id: row.id, attempts: { lt: OTP_MAX_WRONG_ATTEMPTS - 1 } },
+      data: { attempts: { increment: 1 } },
+    });
+
+    if (incremented.count === 0) {
+      // The threshold was already reached - by this request's earlier read
+      // or by a concurrent verifier that won the guard first. Set the
+      // pending-global 1-hour lock atomically with the final attempt count.
+      // Re-read the lock state INSIDE the transaction so a lock already set
+      // by a racing request is observed and not clobbered (the lock is
+      // idempotent: setting it again to the same 1-hour window is harmless,
+      // but we avoid a pointless write when it is already active).
       const lockedUntil = new Date(now.getTime() + OTP_LOCK_MINUTES * 60 * 1000);
-      // One atomic transaction: record the 3rd wrong attempt AND set the
-      // pending-global 1-hour lock together (L4). The registration is never
-      // deleted by a lock.
-      await this.prisma.$transaction([
-        this.prisma.registrationOtp.updateMany({
+      await this.prisma.$transaction(async (tx) => {
+        const current = await tx.pendingRegistration.findUnique({
+          where: { id: effective.id },
+          select: { lockedUntil: true },
+        });
+        if (current?.lockedUntil && current.lockedUntil.getTime() > Date.now()) {
+          return; // already locked by a concurrent verifier
+        }
+        await tx.registrationOtp.updateMany({
           where: { id: row.id },
-          data: { attempts },
-        }),
-        this.prisma.pendingRegistration.update({
+          data: { attempts: OTP_MAX_WRONG_ATTEMPTS },
+        });
+        await tx.pendingRegistration.update({
           where: { id: effective.id },
           data: { lockedUntil },
-        }),
-      ]);
+        });
+      });
       return { outcome: 'locked', retryAfterSeconds: OTP_LOCK_MINUTES * 60 };
     }
 
-    // Atomic increment of the wrong-attempt counter (no read-modify-write
-    // gap for a concurrent verifier to slip through).
-    await this.prisma.registrationOtp.updateMany({
-      where: { id: row.id },
-      data: { attempts },
-    });
     return { outcome: 'invalid' };
   }
 }

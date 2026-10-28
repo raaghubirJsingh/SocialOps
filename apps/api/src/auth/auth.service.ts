@@ -317,6 +317,12 @@ export class AuthService {
         // Employee Module V1: 1:1 relation read in the SAME query so
         // `isEmployee` is derived with zero extra round-trips.
         employeeProfile: { select: { userId: true } },
+        // SuperAdmin Module (Decision 020): the flag is read in the
+        // same query so the login response can carry it without an
+        // extra round-trip. It is a UI routing hint ONLY — every
+        // SUPERADMIN route independently re-verifies the flag and
+        // requires a fresh step-up session via AdminStepUpGuard.
+        isSocialOpsAdmin: true,
       },
     });
 
@@ -362,7 +368,15 @@ export class AuthService {
         // relation (UI routing hint only — the server-side authority
         // is EmployeeContextGuard, verified per request).
         isEmployee: user.employeeProfile !== null,
+        // SuperAdmin Module (Decision 020): derived from the User
+        // row's isSocialOpsAdmin flag (UI routing hint only — every
+        // SUPERADMIN route independently re-verifies the flag and
+        // requires a fresh step-up session via AdminStepUpGuard).
+        isSocialOpsAdmin: user.isSocialOpsAdmin,
       },
+      // Convenience mirror of `user.email` retained for backward
+      // compatibility with code that reads `session.email` directly.
+      email: user.email,
     };
   }
 
@@ -422,5 +436,20 @@ export class AuthService {
     if (result.count > 0) {
       this.logger.debug(`Revoked refresh token hash ${tokenHash.slice(0, 8)}`);
     }
+  }
+
+  /**
+   * Revoke ALL refresh tokens for a user (used when platform admin status
+   * is revoked). This forces re-authentication on next request.
+   */
+  async revokeAllUserTokens(userId: string): Promise<number> {
+    const result = await this.prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    if (result.count > 0) {
+      this.logger.log(`Revoked ${result.count} refresh tokens for user ${userId} (platform admin revocation)`);
+    }
+    return result.count;
   }
 }

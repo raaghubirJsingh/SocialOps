@@ -69,3 +69,23 @@ export const PENDING_NOT_FOUND_MESSAGE = 'Registration not found or has expired'
 
 /** Explicit duplicate-User message (L7 - matches legacy register behavior). */
 export const EMAIL_IN_USE_MESSAGE = 'Email already in use';
+
+/**
+ * Stable machine-readable codes for the registration API error contract.
+ *
+ * These are the ONLY codes the registration endpoints emit. The frontend
+ * keys on them directly (see `lib/registration-error.ts`) instead of parsing
+ * human-readable message text, so a copy change never breaks a consumer.
+ *
+ * `EMAIL_IN_USE` is emitted by BOTH the normal duplicate-User detection at
+ * POST /start and the Prisma P2002 uniqueness race at POST /password, so the
+ * two paths always answer identically.
+ */
+export const REGISTRATION_ERROR_CODES = Object.freeze({
+  EMAIL_IN_USE: 'EMAIL_IN_USE',
+  OTP_LOCKED: 'OTP_LOCKED',
+  OTP_RESEND_LIMIT: 'OTP_RESEND_LIMIT',
+} as const);
+
+export type RegistrationErrorCode =
+  (typeof REGISTRATION_ERROR_CODES)[keyof typeof REGISTRATION_ERROR_CODES];

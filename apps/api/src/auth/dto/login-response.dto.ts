@@ -44,10 +44,25 @@ export interface LoginUserDto {
    * against PostgreSQL on every employees/* request.
    */
   isEmployee: boolean;
+  /**
+   * SuperAdmin Module (Decision 020): true when User.isSocialOpsAdmin
+   * is set. Derived at read time from the User row (the JWT carries no
+   * admin claim — AGENTS.md §7 keeps authorization state server-side).
+   *
+   * UI routing convenience ONLY — not authorization state. Every
+   * SUPERADMIN route independently re-verifies the flag and requires a
+   * fresh step-up session via AdminStepUpGuard.
+   */
+  isSocialOpsAdmin: boolean;
 }
 
 export interface LoginResult {
   accessToken: string;
   refreshToken: string;
   user: LoginUserDto;
+  /**
+   * Convenience mirror of `user.email` retained for backward
+   * compatibility with code that reads `session.email` directly.
+   */
+  email: string;
 }

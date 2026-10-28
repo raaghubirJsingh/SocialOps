@@ -26,6 +26,7 @@ import type {
 import {
   EMAIL_IN_USE_MESSAGE,
   PENDING_NOT_FOUND_MESSAGE,
+  REGISTRATION_ERROR_CODES,
 } from './constants/registration.constants.js';
 import {
   LOCKED_MESSAGE,
@@ -133,7 +134,7 @@ export class RegistrationService {
       select: { id: true },
     });
     if (existingUser) {
-      throw new ForbiddenException(EMAIL_IN_USE_MESSAGE);
+      throw new ConflictException({ code: 'EMAIL_IN_USE', message: EMAIL_IN_USE_MESSAGE });
     }
 
     const existing = await this.pending.loadAliveByEmail(dto.email);
@@ -192,14 +193,17 @@ export class RegistrationService {
     } catch (error) {
       // Unique race on PendingRegistration.email: another identical
       // /start won the row. No credential is ever handed back without
-      // proof, so surface an explicit conflict instead.
+      // proof, so surface an explicit conflict instead. The stable code
+      // is the SAME as the User-duplicate and password-completion race
+      // paths so every duplicate-email answer is indistinguishable.
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        throw new ConflictException(
-          'Registration already in progress for this email',
-        );
+        throw new ConflictException({
+          code: REGISTRATION_ERROR_CODES.EMAIL_IN_USE,
+          message: EMAIL_IN_USE_MESSAGE,
+        });
       }
       throw error;
     }
@@ -256,6 +260,40 @@ export class RegistrationService {
    * - a CHANGED phone clears whatsappVerifiedAt (stale-proof) so a
    *   verification for the OLD number can never satisfy the dual gate
    */
+  /**
+   * Server-side discovery-acceptance predicate (Option A).
+   *
+   * Discovery is accepted only when ALL of these hold:
+   *   - `discoveryAnswers` is a non-null, non-array object;
+   *   - `discoveryAnswers.discoveryAccepted === true`;
+   *   - `discoveryAnswers.classification` is exactly `CLIENT` or
+   *     `SERVICE_PROVIDER`.
+   *
+   * Deliberately NOT required as independent conditions: `root` (the
+   * frontend always sets it, but the predicate tolerates its absence so a
+   * resume request that legitimately omits it is not rejected) and
+   * `clientType` (ambiguous accepted discovery must continue to allow
+   * `clientType: null`; the server never guesses a persona - see
+   * `deriveClientType`).
+   *
+   * Used by BOTH the completion gate (`password`) and the resume guard
+   * (`resumeExisting`), so an invalid incoming snapshot can never silently
+   * replace an already-accepted one.
+   */
+  private static isAcceptedDiscovery(
+    answers: unknown,
+  ): answers is Record<string, unknown> {
+    if (!answers || typeof answers !== 'object' || Array.isArray(answers)) {
+      return false;
+    }
+    const record = answers as Record<string, unknown>;
+    return (
+      record.discoveryAccepted === true &&
+      (record.classification === 'CLIENT' ||
+        record.classification === 'SERVICE_PROVIDER')
+    );
+  }
+
   private async resumeExisting(
     existing: PendingRegistration,
     dto: RegistrationStartDto,
@@ -277,7 +315,14 @@ export class RegistrationService {
         fullName: dto.fullName,
         accountType,
         clientType,
-        ...(dto.discoveryAnswers !== undefined
+        // Discovery overwrite guard: an incoming snapshot is stored ONLY
+        // when it is accepted per `isAcceptedDiscovery`. A missing, null,
+        // empty, malformed, or unaccepted incoming value must NOT silently
+        // replace an already-accepted stored snapshot - the stored value is
+        // preserved verbatim instead. This keeps resume from invalidating
+        // acceptance that the completion gate later relies on.
+        ...(dto.discoveryAnswers !== undefined &&
+          RegistrationService.isAcceptedDiscovery(dto.discoveryAnswers)
           ? {
               discoveryAnswers:
                 dto.discoveryAnswers as Prisma.InputJsonValue,
@@ -330,6 +375,7 @@ export class RegistrationService {
     }
     if (result.outcome === 'locked') {
       throw new ForbiddenException({
+        code: REGISTRATION_ERROR_CODES.OTP_LOCKED,
         message: LOCKED_MESSAGE,
         retryAfterSeconds: result.retryAfterSeconds,
       });
@@ -370,6 +416,17 @@ export class RegistrationService {
     // never satisfy or bypass either (L14).
     if (!pending.emailVerifiedAt || !pending.whatsappVerifiedAt) {
       throw new ForbiddenException('Both verifications must be completed');
+    }
+    // Discovery acceptance gate (approved Option A): the stored discovery
+    // snapshot must be accepted before Account Creation. A missing, null,
+    // empty, malformed, or unaccepted snapshot rejects completion with the
+    // same generic line as any other lifecycle failure - no new error code,
+    // no internal detail exposed. `clientType` is deliberately NOT required:
+    // ambiguous accepted discovery (ownBranch 'both' / 'mixedBranch
+    // 'undecided') legitimately yields a null persona, and the server never
+    // guesses one (see `deriveClientType`).
+    if (!RegistrationService.isAcceptedDiscovery(pending.discoveryAnswers)) {
+      throw new ForbiddenException(UNIFORM_INVALID_MESSAGE);
     }
     // L13: classification must be resolved BEFORE Account Creation and
     // is never guessed by the server. The resume path may carry the
@@ -445,7 +502,7 @@ export class RegistrationService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        throw new ForbiddenException(EMAIL_IN_USE_MESSAGE);
+        throw new ConflictException({ code: 'EMAIL_IN_USE', message: EMAIL_IN_USE_MESSAGE });
       }
       throw error;
     }

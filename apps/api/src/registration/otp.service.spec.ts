@@ -1,9 +1,13 @@
+import { ForbiddenException } from '@nestjs/common';
 import { jest } from '@jest/globals';
 import * as argon2 from 'argon2';
 
 import type { PendingRegistration } from '@prisma/client';
 
-import { OTP_MAX_RESENDS } from './constants/registration.constants.js';
+import {
+  OTP_MAX_RESENDS,
+  OTP_MAX_WRONG_ATTEMPTS,
+} from './constants/registration.constants.js';
 import { OtpService } from './otp.service.js';
 import { ProviderUnavailableError } from './providers/verification-provider.port.js';
 import type { VerificationProvider } from './providers/verification-provider.port.js';
@@ -14,7 +18,7 @@ import type { VerificationProvider } from './providers/verification-provider.por
  */
 
 function makePrisma() {
-  return {
+  const self = {
     registrationOtp: {
       findUnique: jest.fn(async () => null as unknown),
       findFirst: jest.fn(async () => null as unknown),
@@ -29,19 +33,31 @@ function makePrisma() {
       })),
     },
     pendingRegistration: {
+      findUnique: jest.fn(async () => ({ lockedUntil: null })),
       update: jest.fn(async (args: unknown) => args),
     },
     $transaction: jest.fn(async (ops: unknown) => {
-      // Sequential in-memory stand-in for Prisma $transaction([...]): the
-      // service passes already-constructed Prisma promises, which the mock
-      // delegates resolve synchronously. Await each entry and return the
-      // collected results so destructured updates behave as in production.
+      // Sequential in-memory stand-in for Prisma $transaction. Two shapes:
+      //   - array form: the service passes already-constructed Prisma
+      //     promises; await each and return the collected results.
+      //   - function form: the service passes a callback receiving a `tx`
+      //     proxy that mirrors the same delegates; invoke it and return
+      //     whatever it yields. This is what the lock path uses to re-read
+      //     the lock state inside the transaction.
+      if (typeof ops === 'function') {
+        const tx = {
+          registrationOtp: self.registrationOtp,
+          pendingRegistration: self.pendingRegistration,
+        };
+        return ops(tx);
+      }
       const list = ops as unknown[];
       const out: unknown[] = [];
       for (const op of list) out.push(await op);
       return out;
     }),
   };
+  return self;
 }
 
 function makeProvider(
@@ -151,12 +167,16 @@ describe('OtpService', () => {
 
     const result = await service.verify(makePending(), 'EMAIL', '000000');
     expect(result.outcome).toBe('invalid');
+    // CONDITIONAL atomic increment (remediation): the write is an
+    // `increment: 1` guarded by `attempts < max - 1`, so the mock's
+    // `count: 1` default represents the guard succeeding.
     const bumpArg = (
       prisma.registrationOtp.updateMany.mock.calls[0] as unknown as [
-        { data: { attempts: number } },
+        { where: { attempts?: { lt: number } }; data: { attempts: { increment: number } } },
       ]
     )[0];
-    expect(bumpArg.data.attempts).toBe(1);
+    expect(bumpArg.where.attempts?.lt).toBe(OTP_MAX_WRONG_ATTEMPTS - 1);
+    expect(bumpArg.data.attempts.increment).toBe(1);
     expect(prisma.pendingRegistration.update).not.toHaveBeenCalled();
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
@@ -173,10 +193,18 @@ describe('OtpService', () => {
       codeHash,
       resendCount: 0,
     });
+    // The conditional guard FAILS at attempts = 2 (already at threshold),
+    // so the mock must return count: 0 to drive the lock path.
+    prisma.registrationOtp.updateMany.mockResolvedValueOnce({ count: 0 });
+    // Inside the lock transaction, the re-read finds no active lock.
+    prisma.pendingRegistration.findUnique.mockResolvedValueOnce({
+      lockedUntil: null,
+    });
 
     const result = await service.verify(makePending(), 'EMAIL', '999999');
     expect(result).toEqual({ outcome: 'locked', retryAfterSeconds: 3600 });
-    // Atomic $transaction: attempts write + pending-global lock together.
+    // Atomic $transaction: the lock path uses the function form so the
+    // lock state can be re-read before writing.
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     const lockArg = prisma.pendingRegistration.update.mock.calls[0][0] as {
       data: { lockedUntil: Date };
@@ -188,6 +216,58 @@ describe('OtpService', () => {
     expect(
       (prisma.pendingRegistration as unknown as { delete?: unknown }).delete,
     ).toBeUndefined();
+  });
+
+  it('the lock exception carries the stable OTP_LOCKED code', async () => {
+    // The OtpService returns the locked OUTCOME (it does not throw - the
+    // RegistrationService is what translates the outcome into a ForbiddenException
+    // carrying the stable code). Assert the outcome here; the HTTP-level code is
+    // pinned by the integration suite.
+    const prisma = makePrisma();
+    const { service } = makeService(prisma);
+    prisma.registrationOtp.findUnique.mockResolvedValue({
+      id: 'otp-1',
+      attempts: 2,
+      usedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+      codeHash: 'hash',
+      resendCount: 0,
+    });
+    // Conditional guard fails at the threshold -> lock path.
+    prisma.registrationOtp.updateMany.mockResolvedValueOnce({ count: 0 });
+    prisma.pendingRegistration.findUnique.mockResolvedValueOnce({
+      lockedUntil: null,
+    });
+
+    const result = await service.verify(makePending(), 'EMAIL', '999999');
+    expect(result).toEqual({ outcome: 'locked', retryAfterSeconds: 3600 });
+  });
+
+  it('the resend-limit exception carries the stable OTP_RESEND_LIMIT code', async () => {
+    const prisma = makePrisma();
+    const { service } = makeService(prisma);
+    prisma.registrationOtp.findUnique.mockResolvedValue({
+      id: 'otp-1',
+      attempts: 0,
+      usedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+      codeHash: 'hash',
+      resendCount: OTP_MAX_RESENDS,
+    });
+
+    // The service throws a ForbiddenException; the RegistrationService
+    // rethrows it unchanged, so the stable code reaches the wire.
+    let caught: unknown;
+    try {
+      await service.resend(makePending(), 'EMAIL');
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(ForbiddenException);
+    const response = (caught as { response?: unknown }).response;
+    expect(response).toEqual(
+      expect.objectContaining({ code: 'OTP_RESEND_LIMIT' }),
+    );
   });
 
   it('an active lock blocks verification without touching the challenge', async () => {
@@ -344,12 +424,29 @@ describe('OtpService', () => {
       .map((c) => (c[0] as { update: Record<string, unknown> }).update)
       .filter((d) => d.attempts === 0);
     expect(resets.length).toBeGreaterThan(0);
-    // ... and NO resend quota consumed (no increment anywhere: post-lock
-    // re-issues pass countResend=false, and releaseExpiredLock never reserves).
-    const quotaBumps = [
-      ...prisma.registrationOtp.updateMany.mock.calls,
-      ...prisma.registrationOtp.upsert.mock.calls,
-    ].filter((c) => JSON.stringify(c[0]).includes('increment'));
+    // ... and NO resend quota consumed (no resendCount increment anywhere:
+    // post-lock re-issues pass countResend=false, and releaseExpiredLock never
+    // reserves). The predicate is scoped to `resendCount` so the legitimate
+    // wrong-attempt `attempts` increment below is not mistaken for quota use.
+    const writes = [
+      ...prisma.registrationOtp.updateMany.mock.calls.map(
+        (c) => (c as unknown as [{ data: Record<string, unknown> }])[0].data,
+      ),
+      ...prisma.registrationOtp.upsert.mock.calls.map(
+        (c) =>
+          (c as unknown as [{ update?: Record<string, unknown> }])[0].update ??
+          {},
+      ),
+    ];
+    const quotaBumps = writes.filter(
+      (d) =>
+        d &&
+        typeof d === 'object' &&
+        'resendCount' in d &&
+        JSON.stringify(
+          (d as { resendCount: unknown }).resendCount,
+        ).includes('increment'),
+    );
     expect(quotaBumps.length).toBe(0);
   });
 });
