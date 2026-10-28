@@ -23,7 +23,7 @@ const TITLES: Record<string, string> = {
   '/client/notifications': 'Notifications',
   '/client/social-accounts': 'Social accounts',
   '/client/content': 'Content',
-  '/client/raw-data': 'Raw data',
+  '/client/raw-data': 'Requests',
 };
 
 function deriveTitle(pathname: string): string {

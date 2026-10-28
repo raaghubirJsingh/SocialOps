@@ -14,6 +14,16 @@ import {
   verifyRegistrationOtp,
 } from '@/lib/auth-client';
 import {
+  describeRegistrationError,
+  type RegistrationErrorContext,
+} from '@/lib/registration-error';
+import {
+  applyOtpResendResponse,
+  applyOtpVerifyResponse,
+  createRegistrationSessionFromStart,
+  isOtpVerifyResponse,
+} from '@/lib/registration-verification';
+import {
   FORCED_OPTIONS,
   FORCED_QUESTION,
   botMessageFor,
@@ -28,7 +38,7 @@ import {
 import type {
   AccountType,
   OtpChannel,
-  RegistrationResumeSnapshot,
+  RegistrationSession,
   RegistrationStartResponse,
 } from '@/types/auth';
 
@@ -77,10 +87,7 @@ interface Msg {
 }
 
 export interface RegistrationFlowProps {
-  initialResume?: {
-    token: string;
-    snapshot: RegistrationResumeSnapshot;
-  };
+  initialSession?: RegistrationSession;
 }
 
 function bodyOf(err: unknown): { message?: string; retryAfterSeconds?: number } {
@@ -90,23 +97,91 @@ function bodyOf(err: unknown): { message?: string; retryAfterSeconds?: number } 
   return {};
 }
 
-function messageFromError(err: unknown): string {
-  if (err instanceof ApiError) {
-    const body = bodyOf(err);
-    if (err.status === 404) {
-      return 'यह registration समाप्त हो चुका है — कृपया दोबारा शुरू करें। (This registration has expired or was completed. Please start again.)';
-    }
-    if (err.status === 429 && body.retryAfterSeconds) {
-      return `Too many attempts — please wait ${body.retryAfterSeconds} seconds and try again.`;
-    }
-    if (typeof body.message === 'string' && body.message.length > 0) {
-      return body.retryAfterSeconds
-        ? `${body.message} (retry in ${body.retryAfterSeconds}s)`
-        : body.message;
-    }
-    return err.message;
+/**
+ * Response-shape guard for POST /auth/registration/start.
+ *
+ * `apiFetch` performs NO runtime shape validation: an empty body parses to
+ * `null` and a non-JSON body degrades to the raw text string (its
+ * `safeJsonParse` swallows the parse error). Dereferencing such a "result"
+ * would throw a bare TypeError, which is indistinguishable from a network
+ * failure at the call site AND happens only AFTER the server has already
+ * committed the PendingRegistration row. Validating first means the caller can
+ * treat a malformed 2xx exactly like a dead API and surface the friendly
+ * connection line, instead of crashing deeper in the component.
+ */
+function isValidStartResult(
+  value: unknown,
+): value is RegistrationStartResponse {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
   }
-  return 'Something went wrong. Please try again.';
+  const candidate = value as Record<string, unknown>;
+  if (
+    (candidate['status'] !== 'pending_created' &&
+      candidate['status'] !== 'pending_resumed') ||
+    typeof candidate['resumeToken'] !== 'string' ||
+    candidate['resumeToken'] === '' ||
+    typeof candidate['expiresAt'] !== 'string' ||
+    typeof candidate['maskedEmail'] !== 'string' ||
+    typeof candidate['maskedPhone'] !== 'string' ||
+    (candidate['accountType'] !== null &&
+      candidate['accountType'] !== 'CLIENT' &&
+      candidate['accountType'] !== 'SERVICE_PROVIDER') ||
+    (candidate['clientType'] !== null &&
+      candidate['clientType'] !== 'INDIVIDUAL' &&
+      candidate['clientType'] !== 'BUSINESS') ||
+    typeof candidate['emailVerified'] !== 'boolean' ||
+    typeof candidate['whatsappVerified'] !== 'boolean' ||
+    (candidate['lockedUntil'] !== null &&
+      typeof candidate['lockedUntil'] !== 'string')
+  ) {
+    return false;
+  }
+  const sendStatus = candidate['sendStatus'];
+  const resendRemaining = candidate['resendRemaining'];
+  if (
+    sendStatus === null ||
+    typeof sendStatus !== 'object' ||
+    Array.isArray(sendStatus) ||
+    resendRemaining === null ||
+    typeof resendRemaining !== 'object' ||
+    Array.isArray(resendRemaining)
+  ) {
+    return false;
+  }
+  const channels = sendStatus as Record<string, unknown>;
+  const remaining = resendRemaining as Record<string, unknown>;
+  return (
+    (channels['email'] === 'sent' || channels['email'] === 'unavailable') &&
+    (channels['whatsapp'] === 'sent' ||
+      channels['whatsapp'] === 'unavailable') &&
+    typeof remaining['email'] === 'number' &&
+    Number.isFinite(remaining['email']) &&
+    remaining['email'] >= 0 &&
+    typeof remaining['whatsapp'] === 'number' &&
+    Number.isFinite(remaining['whatsapp']) &&
+    remaining['whatsapp'] >= 0
+  );
+}
+
+/**
+ * Thin delegate to the PURE mapper in `@/lib/registration-error`.
+ *
+ * The mapper owns every status/code decision; this wrapper only supplies the
+ * flow context, because a 404 means "expired session" in the later staged
+ * calls but "an unfinished registration already owns this email" at the
+ * identity step.
+ *
+ * NOTE: `err.message` is deliberately NOT used anywhere. It used to surface a
+ * raw transport string for an ApiError with no recognisable body, and a bare
+ * generic line for a non-ApiError; both are now covered by the mapper's safe
+ * connection message.
+ */
+function messageFromError(
+  err: unknown,
+  context: RegistrationErrorContext = 'lifecycle',
+): string {
+  return describeRegistrationError(err, context);
 }
 
 const EMAIL_OTP_HINT =
@@ -114,45 +189,41 @@ const EMAIL_OTP_HINT =
 const PASSWORD_PROMPT =
   'बहुत बढ़िया! अब अपना password बनाइए (कम से कम 8 characters)।';
 
-export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
+export function RegistrationFlow({ initialSession }: RegistrationFlowProps) {
   const [conversation, setConversation] = useState<ConversationState>(() =>
     createConversation(),
   );
   const [stage, setStage] = useState<Stage>(() => {
-    if (!initialResume) return 'discovery';
-    if (!initialResume.snapshot.accountType) return 'forced-choice';
-    return initialResume.snapshot.stage === 'password' ? 'password' : 'verification';
+    if (!initialSession) return 'discovery';
+    if (!initialSession.accountType) return 'forced-choice';
+    return initialSession.stage;
   });
   const [messages, setMessages] = useState<Msg[]>(() => {
-    if (!initialResume) {
+    if (!initialSession) {
       return [{ role: 'bot', text: botMessageFor(createConversation()) }];
     }
-    const s = initialResume.snapshot;
-    const lines = [`आपका registration जारी है (${s.maskedEmail} / ${s.maskedPhone}).`];
-    if (!s.accountType) lines.push(FORCED_QUESTION);
-    else if (s.stage === 'verification') lines.push(EMAIL_OTP_HINT);
+    const lines = [
+      `आपका registration जारी है (${initialSession.maskedEmail} / ${initialSession.maskedPhone}).`,
+    ];
+    if (!initialSession.accountType) lines.push(FORCED_QUESTION);
+    else if (initialSession.stage === 'verification') lines.push(EMAIL_OTP_HINT);
     else lines.push(PASSWORD_PROMPT);
     return lines.map((text) => ({ role: 'bot' as const, text }));
   });
 
-  const [resumeToken, setResumeToken] = useState<string | null>(
-    initialResume?.token ?? null,
-  );
-  const [startInfo, setStartInfo] = useState<RegistrationStartResponse | null>(null);
-  const [snapshot, setSnapshot] = useState<RegistrationResumeSnapshot | null>(
-    initialResume?.snapshot ?? null,
-  );
-  const [verified, setVerified] = useState({
-    email: initialResume?.snapshot.emailVerified ?? false,
-    whatsapp: initialResume?.snapshot.whatsappVerified ?? false,
-  });
-  const [classification, setClassification] = useState<AccountType | null>(
-    initialResume?.snapshot.accountType ?? null,
+  const [session, setSession] = useState<RegistrationSession | null>(
+    initialSession ?? null,
   );
 
   // Identity wizard (Rule 7) is owned by the pure state machine; this
   // component only renders the single field for the current sub-step.
   const [identityError, setIdentityError] = useState<string | null>(null);
+  /**
+   * Set when the identity submission failed, so the "Start again" affordance
+   * is rendered even if no input is currently on screen. Without it the chat
+   * could reach a state with no input AND no action at all.
+   */
+  const [offerRestart, setOfferRestart] = useState(false);
   /** Draft text for the one identity input currently on screen. */
   const [identityDraft, setIdentityDraft] = useState('');
 
@@ -187,7 +258,6 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const [busy, setBusy] = useState(false);
-  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const transcriptRef = useRef<HTMLDivElement>(null);
 
@@ -207,8 +277,12 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
     });
   }, [messages]);
 
+  const lockedUntil = session?.lockedUntil
+    ? Date.parse(session.lockedUntil)
+    : null;
   const lockSeconds =
     lockedUntil && lockedUntil > now ? Math.ceil((lockedUntil - now) / 1000) : 0;
+  const resumeToken = session?.resumeToken ?? null;
   // "Dead" = the staged registration cannot continue, because the resume
   // credential is gone (a 404 clears it in handleFailure) while the user
   // sits in a stage that requires it. Computed from the stages that DO
@@ -226,16 +300,26 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
   // local `stage`, which is presentation bookkeeping only and can disagree.
   const inIdentityWizard = identitySubStep !== null;
 
-  function handleFailure(err: unknown): void {
+  function handleFailure(
+    err: unknown,
+    context: RegistrationErrorContext = 'lifecycle',
+  ): void {
     const body = bodyOf(err);
     if (err instanceof ApiError && err.status === 403 && body.retryAfterSeconds) {
-      // Uses the state heartbeat clock (module-pure; no Date.now() here).
-      setLockedUntil(now + body.retryAfterSeconds * 1000);
+      const retryAfterSeconds = body.retryAfterSeconds;
+      setSession((current) =>
+        current
+          ? {
+              ...current,
+              lockedUntil: new Date(now + retryAfterSeconds * 1000).toISOString(),
+            }
+          : null,
+      );
     }
-    if (err instanceof ApiError && err.status === 404) {
-      setResumeToken(null); // dead credential - restart required
+    if (err instanceof ApiError && err.status === 404 && context === 'lifecycle') {
+      setSession(null); // dead credential - restart required
     }
-    push({ role: 'error', text: messageFromError(err) });
+    push({ role: 'error', text: messageFromError(err, context) });
   }
   function chooseOption(id: string, label: string): void {
     push({ role: 'user', text: label });
@@ -249,11 +333,13 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
 
   function chooseForcedClassification(value: AccountType, label: string): void {
     push({ role: 'user', text: label });
-    setClassification(value);
+    setSession((current) =>
+      current ? { ...current, accountType: value } : current,
+    );
     // The explicit forced choice (never guessed - L13) travels with the
     // password stage for resume flows, where the pending row started
     // with accountType = null.
-    const target: Stage = snapshot?.stage === 'password' ? 'password' : 'verification';
+    const target: Stage = session?.stage ?? 'verification';
     setStage(target);
     push({ role: 'bot', text: target === 'password' ? PASSWORD_PROMPT : EMAIL_OTP_HINT });
   }
@@ -302,6 +388,30 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
     await completeRegistration(next);
   }
 
+  /**
+   * Recover from a FAILED identity submission.
+   *
+   * `submitIdentityField` advanced the PURE state machine to the terminal
+   * 'identity' stage BEFORE the /start round-trip, so a failure used to leave
+   * the chat with no input (`identityFieldFor('identity') === null`), no
+   * "Start again" button (`dead` is false while `stage === 'identity'`), and
+   * nothing else - a hard dead end.
+   *
+   * The rollback therefore lives HERE, in the component, and deliberately not
+   * in `registration-conversation.ts`: that module stays pure and one-way
+   * (its own contract says a field is asked exactly once, which is still true
+   * for every SUCCESSFUL step). Only the failing step is revisited, the
+   * already-collected name/phone are preserved, and the submitted value is
+   * put back in the box so the user does not retype it.
+   */
+  function recoverIdentityStep(state: ConversationState): void {
+    setConversation((prev) =>
+      prev.stage === 'identity' ? { ...prev, stage: 'identity-email' } : prev,
+    );
+    setIdentityDraft(state.email ?? '');
+    setOfferRestart(true);
+  }
+
   /** All three identity fields are in: classify-check, then POST /start once. */
   async function completeRegistration(state: ConversationState): Promise<void> {
     const { fullName, phone, email } = state;
@@ -323,10 +433,27 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
         accountType: state.classification,
         discoveryAnswers: discoveryAnswersSnapshot(state),
       });
-      setResumeToken(result.resumeToken);
-      setStartInfo(result);
-      setStage('verification');
-      push({ role: 'bot', text: EMAIL_OTP_HINT });
+
+      // Validate BEFORE touching any state: a malformed 2xx must not
+      // half-advance the UI, and it must not surface as a raw TypeError.
+      if (!isValidStartResult(result)) {
+        handleIdentityFailure(null, state);
+        return;
+      }
+
+      const nextSession = createRegistrationSessionFromStart(result);
+      setSession(nextSession);
+      setStage(
+        nextSession.accountType ? nextSession.stage : 'forced-choice',
+      );
+      push({
+        role: 'bot',
+        text: nextSession.accountType
+          ? nextSession.stage === 'password'
+            ? PASSWORD_PROMPT
+            : EMAIL_OTP_HINT
+          : FORCED_QUESTION,
+      });
       const unavailable = [
         result.sendStatus.email === 'unavailable' ? 'Email' : null,
         result.sendStatus.whatsapp === 'unavailable' ? 'WhatsApp' : null,
@@ -338,14 +465,32 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
         });
       }
     } catch (err) {
-      handleFailure(err);
+      handleIdentityFailure(err, state);
     } finally {
       setBusy(false);
     }
   }
 
+  /**
+   * A failed identity submission, in ONE place.
+   *
+   * The message goes BOTH into the transcript and next to the input, and the
+   * email step is restored, so the user always has a visible input and always
+   * has an action. `null` is the sentinel for "2xx with an unusable body",
+   * which the pure mapper renders as the friendly connection line.
+   */
+  function handleIdentityFailure(
+    err: unknown,
+    state: ConversationState,
+  ): void {
+    const message = messageFromError(err, 'identity');
+    setIdentityError(message);
+    push({ role: 'error', text: message });
+    recoverIdentityStep(state);
+  }
+
   async function verifyChannel(channel: OtpChannel): Promise<void> {
-    if (!resumeToken) return;
+    if (!session) return;
     const otp = otpInputs[channel].trim();
     if (!/^\d{6}$/.test(otp)) {
       push({ role: 'error', text: '6 अंकों का OTP डालें। (Enter the 6-digit code.)' });
@@ -353,18 +498,28 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
     }
     setBusy(true);
     try {
-      await verifyRegistrationOtp({ resumeToken, channel, otp });
-      const nextVerified = {
-        email: verified.email || channel === 'EMAIL',
-        whatsapp: verified.whatsapp || channel === 'WHATSAPP',
-      };
-      setVerified(nextVerified);
+      const response = await verifyRegistrationOtp({
+        resumeToken: session.resumeToken,
+        channel,
+        otp,
+      });
+      if (!isOtpVerifyResponse(response)) {
+        // Fail closed: a 2xx with an unusable body must surface the
+        // friendly connection line, never a success mark.
+        handleFailure(null);
+        return;
+      }
+      const { session: nextSession, advanceToPassword } = applyOtpVerifyResponse(
+        session,
+        response,
+      );
+      setSession(nextSession);
       setOtpInputs((prev) => ({ ...prev, [channel]: '' }));
       push({
         role: 'bot',
         text: channel === 'EMAIL' ? 'Email verify हो गया ✓' : 'WhatsApp verify हो गया ✓',
       });
-      if (nextVerified.email && nextVerified.whatsapp) {
+      if (advanceToPassword) {
         setStage('password');
         push({ role: 'bot', text: PASSWORD_PROMPT });
       }
@@ -376,23 +531,19 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
   }
 
   async function resendChannel(channel: OtpChannel): Promise<void> {
-    if (!resumeToken) return;
+    if (!session) return;
     setBusy(true);
     try {
-      const res = await resendRegistrationOtp({ resumeToken, channel });
-      const key = channel === 'EMAIL' ? 'email' : 'whatsapp';
-      setStartInfo((prev) =>
-        prev
-          ? {
-              ...prev,
-              sendStatus: {
-                ...prev.sendStatus,
-                [key]: res.sendStatus === 'sent' ? 'sent' : 'unavailable',
-              },
-              resendRemaining: { ...prev.resendRemaining, [key]: res.resendRemaining },
-            }
-          : prev,
-      );
+      const res = await resendRegistrationOtp({
+        resumeToken: session.resumeToken,
+        channel,
+      });
+      const nextSession = applyOtpResendResponse(session, res);
+      setSession(nextSession);
+      if (session.stage !== 'password' && nextSession.stage === 'password') {
+        setStage('password');
+        push({ role: 'bot', text: PASSWORD_PROMPT });
+      }
       push({
         role: 'bot',
         text: `नया OTP भेज दिया गया (${res.sendStatus}). बचे resends: ${res.resendRemaining}`,
@@ -414,13 +565,14 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
       setPasswordError('Password और Confirm Password मेल नहीं खाते। (Passwords do not match.)');
       return;
     }
-    if (!resumeToken) return;
+    if (!session) return;
     setBusy(true);
     try {
       await setRegistrationPassword({
-        resumeToken,
+        resumeToken: session.resumeToken,
         password,
-        ...(classification ? { accountType: classification } : {}),
+        ...(session.accountType ? { accountType: session.accountType } : {}),
+        ...(session.clientType ? { clientType: session.clientType } : {}),
       });
       setStage('created');
       push({
@@ -439,41 +591,38 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
     setConversation(fresh);
     setStage('discovery');
     setMessages([{ role: 'bot', text: botMessageFor(fresh) }]);
-    setResumeToken(null);
-    setStartInfo(null);
-    setSnapshot(null);
-    setVerified({ email: false, whatsapp: false });
-    setClassification(null);
+    setSession(null);
     setOtpInputs({ EMAIL: '', WHATSAPP: '' });
     setPassword('');
     setConfirmPassword('');
-    setLockedUntil(null);
     setIdentityError(null);
     setPasswordError(null);
+    setIdentityDraft('');
+    setOfferRestart(false);
   }
   const channelRows: Array<{
     id: OtpChannel;
     label: string;
     contact: string;
     remaining: number | null;
-    sendStatus: 'sent' | 'unavailable' | null;
+    sendStatus: RegistrationSession['sendStatus']['email'];
     verified: boolean;
   }> = [
     {
       id: 'EMAIL',
       label: 'Email',
-      contact: snapshot?.maskedEmail ?? startInfo?.maskedEmail ?? '',
-      remaining: snapshot?.resendRemaining.email ?? startInfo?.resendRemaining.email ?? null,
-      sendStatus: startInfo?.sendStatus.email ?? null,
-      verified: verified.email,
+      contact: session?.maskedEmail ?? '',
+      remaining: session?.resendRemaining.email ?? null,
+      sendStatus: session?.sendStatus.email ?? null,
+      verified: session?.emailVerified ?? false,
     },
     {
       id: 'WHATSAPP',
       label: 'WhatsApp',
-      contact: snapshot?.maskedPhone ?? startInfo?.maskedPhone ?? '',
-      remaining: snapshot?.resendRemaining.whatsapp ?? startInfo?.resendRemaining.whatsapp ?? null,
-      sendStatus: startInfo?.sendStatus.whatsapp ?? null,
-      verified: verified.whatsapp,
+      contact: session?.maskedPhone ?? '',
+      remaining: session?.resendRemaining.whatsapp ?? null,
+      sendStatus: session?.sendStatus.whatsapp ?? null,
+      verified: session?.whatsappVerified ?? false,
     },
   ];
 
@@ -521,11 +670,12 @@ export function RegistrationFlow({ initialResume }: RegistrationFlowProps) {
         </p>
       )}
 
-      {/* Dead-end fallback. NEVER shown while the identity wizard is active:
-          those steps run before /start and a null resumeToken is normal
-          there, so offering only "Start again" would discard a conversation
-          the user can still legitimately finish. */}
-      {dead && !inIdentityWizard && (
+      {/* Recovery affordance. Renders when the staged registration genuinely
+          cannot continue (dead credential on a resume-gated stage) OR when an
+          identity submission failed. The `offerRestart` term is what guarantees
+          the user ALWAYS has at least one action: without it a failed /start
+          left no input (terminal 'identity' stage) and no button either. */}
+      {((dead && !inIdentityWizard) || offerRestart) && (
         <div className="space-y-2">
           <Button type="button" className="hover:-translate-y-1" onClick={restart}>
             फिर से शुरू करें (Start again)

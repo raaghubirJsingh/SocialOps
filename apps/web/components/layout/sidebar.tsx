@@ -75,20 +75,34 @@ export const CLIENT_NAV_ITEMS: readonly NavItem[] = [
 
 export const EMPLOYEE_NAV_ITEMS: readonly NavItem[] = [DASHBOARD_ITEM];
 
+export const SUPER_ADMIN_NAV_ITEMS: readonly NavItem[] = [
+  { href: '/super-admin', label: 'Overview', description: 'Platform overview' },
+  { href: '/super-admin/organizations', label: 'Agencies', description: 'Manage agencies' },
+  { href: '/super-admin/clients', label: 'Clients', description: 'Manage clients' },
+  { href: '/super-admin/users', label: 'Users', description: 'Manage users' },
+  { href: '/super-admin/employees', label: 'Employees', description: 'Manage employee profiles' },
+  { href: '/super-admin/health', label: 'System Health', description: 'Platform health' },
+  { href: '/super-admin/audit', label: 'Audit Logs', description: 'Platform audit logs' },
+  { href: '/super-admin/platform-admins', label: 'Settings', description: 'Platform settings' },
+];
+
 export function Sidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const clientId = searchParams.get('clientId') ?? '';
   const { session } = useSession();
   const isEmployee = session?.user?.isEmployee ?? false;
+  const isSuperAdmin = session?.user?.isSocialOpsAdmin ?? false;
   const isClientAccount =
-    !isEmployee && session?.user?.accountType === 'CLIENT';
+    !isEmployee && !isSuperAdmin && session?.user?.accountType === 'CLIENT';
 
   const items = isEmployee
     ? EMPLOYEE_NAV_ITEMS
-    : isClientAccount
-      ? CLIENT_NAV_ITEMS
-      : AGENCY_NAV_ITEMS;
+    : isSuperAdmin
+      ? SUPER_ADMIN_NAV_ITEMS
+      : isClientAccount
+        ? CLIENT_NAV_ITEMS
+        : AGENCY_NAV_ITEMS;
 
   const clientHrefs = new Set(CLIENT_NAV_ITEMS.map((item) => item.href));
 

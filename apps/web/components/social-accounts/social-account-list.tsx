@@ -12,11 +12,18 @@ interface SocialAccountListProps {
   /**
    * Reconnect hand-off. The parent performs the full-page redirect to the
    * authorize URL - OAuth cannot be completed by a background fetch.
+   *
+   * Takes the WHOLE ACCOUNT, not just its platform: the card targets one
+   * specific SocialAccount row, so the callback updates that row with the
+   * platformAccountId it discovers instead of creating a second one. The
+   * platform is deliberately not a parameter - the server reads it from the row.
    */
-  onStartConnect?: (platform: SocialAccountDto['platform']) => void;
+  onStartConnect?: (account: SocialAccountDto) => void;
   onDisconnect?: (account: SocialAccountDto) => void;
   /** Account id currently being disconnected, for the row's busy state. */
   disconnectingId?: string | null;
+  /** Account id whose row-scoped OAuth connect is starting, for its busy state. */
+  connectingId?: string | null;
 }
 
 /**
@@ -41,6 +48,7 @@ export function SocialAccountList({
   onStartConnect,
   onDisconnect,
   disconnectingId = null,
+  connectingId = null,
 }: SocialAccountListProps) {
   if (accounts.length === 0) {
     return (
@@ -113,9 +121,14 @@ export function SocialAccountList({
                     type="button"
                     size="sm"
                     variant="secondary"
-                    onClick={() => onStartConnect(account.platform)}
+                    disabled={connectingId === account.id}
+                    onClick={() => onStartConnect(account)}
                   >
-                    {account.hasCredential ? 'Reconnect' : 'Connect'}
+                    {connectingId === account.id
+                      ? 'Redirecting…'
+                      : account.hasCredential
+                        ? 'Reconnect'
+                        : 'Connect'}
                   </Button>
                 )}
                 {onDisconnect && account.hasCredential && (

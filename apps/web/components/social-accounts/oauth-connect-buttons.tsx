@@ -31,9 +31,13 @@ interface OAuthConnectButtonsProps {
  * platforms still need connecting and reports the outcome back.
  *
  * The platform list is the approved V1 set only (Instagram, Facebook,
- * YouTube). A platform that already has a recorded account is not offered
- * again - re-connecting an existing platform is a separate concern and the
- * server upserts on its own composite key.
+ * YouTube). A platform that already has a recorded account is not offered again
+ * here, because this component drives the PLATFORM-SCOPED connect, whose
+ * callback upserts on the (clientId, platform, platformAccountId) composite.
+ *
+ * To connect a row that already exists (and record its platformAccountId
+ * without creating a duplicate), use the row-scoped endpoint instead - that is
+ * what the per-card "Connect"/"Reconnect" button on SocialAccountList calls.
  */
 export function OAuthConnectButtons({
   accounts,

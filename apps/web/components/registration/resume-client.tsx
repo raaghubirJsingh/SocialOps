@@ -8,7 +8,14 @@ import { RegistrationFlow } from '@/components/registration/registration-flow';
 import { Button } from '@/components/ui/button';
 import { ApiError } from '@/lib/api';
 import { resumeRegistration } from '@/lib/auth-client';
-import type { RegistrationResumeSnapshot } from '@/types/auth';
+import { createRegistrationSessionFromResume } from '@/lib/registration-verification';
+import type { RegistrationSession } from '@/types/auth';
+
+type ResumeState =
+  | { kind: 'loading' }
+  | { kind: 'ready'; session: RegistrationSession }
+  | { kind: 'expired' }
+  | { kind: 'error' };
 
 /**
  * Resume-registration client (Registration Phase v1.0 / OPEN-1/OPEN-6A).
@@ -22,9 +29,8 @@ import type { RegistrationResumeSnapshot } from '@/types/auth';
 export function ResumeClient() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token') ?? '';
-  const [snapshot, setSnapshot] = useState<RegistrationResumeSnapshot | null>(null);
-  const [state, setState] = useState<'loading' | 'ready' | 'expired' | 'error'>(
-    token ? 'loading' : 'expired',
+  const [state, setState] = useState<ResumeState>(() =>
+    token ? { kind: 'loading' } : { kind: 'expired' },
   );
 
   useEffect(() => {
@@ -34,11 +40,17 @@ export function ResumeClient() {
       try {
         const result = await resumeRegistration({ resumeToken: token });
         if (cancelled) return;
-        setSnapshot(result);
-        setState('ready');
+        setState({
+          kind: 'ready',
+          session: createRegistrationSessionFromResume(token, result),
+        });
       } catch (err) {
         if (cancelled) return;
-        setState(err instanceof ApiError && err.status === 404 ? 'expired' : 'error');
+        setState(
+          err instanceof ApiError && err.status === 404
+            ? { kind: 'expired' }
+            : { kind: 'error' },
+        );
       }
     })();
     return () => {
@@ -46,11 +58,11 @@ export function ResumeClient() {
     };
   }, [token]);
 
-  if (state === 'loading') {
+  if (state.kind === 'loading') {
     return <p className="text-sm text-slate-400">Loading…</p>;
   }
 
-  if (state !== 'ready' || !snapshot) {
+  if (state.kind !== 'ready') {
     return (
       <div className="space-y-4">
         <p className="text-sm text-slate-300">
@@ -64,5 +76,5 @@ export function ResumeClient() {
     );
   }
 
-  return <RegistrationFlow initialResume={{ token, snapshot }} />;
+  return <RegistrationFlow initialSession={state.session} />;
 }
