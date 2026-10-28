@@ -12,8 +12,8 @@ export const ADMIN_STEP_UP_TTL_MINUTES = 5;
 /** Maximum wrong OTP attempts before the temporary lock (mirrors L4). */
 export const ADMIN_STEP_UP_MAX_WRONG_ATTEMPTS = 3;
 
-/** Temporary verification lock after 3 wrong attempts: 1 hour (mirrors L4). */
-export const ADMIN_STEP_UP_LOCK_MINUTES = 60;
+/** Temporary verification lock after 3 wrong attempts: 1 minute (mirrors L4). */
+export const ADMIN_STEP_UP_LOCK_MINUTES = 1;
 
 /** Maximum SUCCESSFUL resends (mirrors L4/OPEN-5). */
 export const ADMIN_STEP_UP_MAX_RESENDS = 3;

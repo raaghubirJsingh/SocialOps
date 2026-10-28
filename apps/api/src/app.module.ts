@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
 import { RedisModule } from './redis/redis.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { RegistrationModule } from './registration/registration.module.js';
+import { AdminStepUpModule } from './admin/admin-step-up.module.js';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard.js';
 import { RbacModule } from './rbac/rbac.module.js';
 import { OrganizationMembershipGuard } from './rbac/guards/organization-membership.guard.js';
@@ -16,6 +17,7 @@ import { ContentModule } from './content/content.module.js';
 import { ChangeRequestModule } from './change-requests/change-request.module.js';
 import { EmployeesModule } from './employees/employees.module.js';
 import { HealthModule } from './health/health.module.js';
+import { PlatformAdminModule } from './platform-admin/platform-admin.module.js';
 
 @Module({
   imports: [
@@ -31,6 +33,8 @@ import { HealthModule } from './health/health.module.js';
     ChangeRequestModule,
     EmployeesModule,
     HealthModule,
+    PlatformAdminModule,
+    AdminStepUpModule,
   ],
   controllers: [AppController],
   providers: [
