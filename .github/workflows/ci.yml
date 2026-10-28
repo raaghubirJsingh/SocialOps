@@ -132,6 +132,16 @@ jobs:
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
         run: npx prisma migrate status --schema apps/api/prisma/schema.prisma
+      - name: Seed test database
+        # prisma/seed.ts is idempotent and hard-stops in production
+        # (NODE_ENV === 'production'). CI runs in a throwaway container
+        # with no real data, so this is safe. Some integration specs
+        # (e.g. social-account-url-normalization-parity) require a
+        # Client row that only the seed script creates.
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          AUTH_DEV_AUTO_VERIFY_REGISTER: "true"
+        run: npm run seed --workspace=apps/api
       - name: Jest unit tests (API)
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
