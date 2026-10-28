@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useForm, type Resolver } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -14,6 +14,7 @@ import {
   adminStepUpVerify,
   adminStepUpResend,
 } from '@/lib/auth-client';
+import { saveSuperAdminSession } from '@/lib/super-admin-session';
 import type { AdminStepUpVerifyResponse } from '@/types/auth';
 
 /**
@@ -48,7 +49,7 @@ const otpResolver: Resolver<OtpFormValues> = async (raw) => {
 
 export function SuperAdminStepUpChallenge() {
   const router = useRouter();
-  const { session } = useSession();
+  const { session, isLoading: sessionLoading } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [sendStatus, setSendStatus] = useState<'idle' | 'sent' | 'unavailable' | 'loading'>('idle');
   const [resendRemaining, setResendRemaining] = useState<number | null>(null);
@@ -66,10 +67,13 @@ export function SuperAdminStepUpChallenge() {
     defaultValues: { otp: '' },
   });
 
-  // Auto-issue challenge on mount
+  // Auto-issue challenge on mount, but only AFTER the session is loaded.
+  // The challenge endpoint requires an authenticated JWT (via @CurrentUser),
+  // so firing it before the session exists guarantees a 401 and no OTP.
   useEffect(() => {
-    issueChallenge();
-  }, []);
+    if (sessionLoading || !session) return;
+    void issueChallenge();
+  }, [sessionLoading, session]);
 
   // Countdown timer for lock
   useEffect(() => {
@@ -84,7 +88,11 @@ export function SuperAdminStepUpChallenge() {
     return () => clearInterval(timer);
   }, [countdown]);
 
+  const challengeInFlightRef = useRef(false);
+
   const issueChallenge = useCallback(async () => {
+    if (challengeInFlightRef.current) return;
+    challengeInFlightRef.current = true;
     setError(null);
     setSendStatus('loading');
     try {
@@ -96,10 +104,12 @@ export function SuperAdminStepUpChallenge() {
     } catch {
       setSendStatus('unavailable');
       setError('Failed to send OTP. Please try again.');
+    } finally {
+      challengeInFlightRef.current = false;
     }
   }, []);
 
-  const onSubmit = handleSubmit(async (values) => {
+  const onSubmit = handleSubmit(async (values: OtpFormValues) => {
     setError(null);
     setIsLoading(true);
     try {
@@ -110,14 +120,9 @@ export function SuperAdminStepUpChallenge() {
 
       if (result.outcome === 'verified') {
         // Store sessionToken in localStorage for the admin session
-        const adminSession = {
-          sessionToken: result.sessionToken,
-          expiresAt: Date.now() + 15 * 60 * 1000, // 15 minutes
-        };
-        localStorage.setItem('socialops.superAdminSession', JSON.stringify(adminSession));
+        saveSuperAdminSession(result.sessionToken);
 
         router.push('/super-admin');
-        router.refresh();
       } else if (result.outcome === 'locked') {
         setError(`Too many attempts. Try again in ${result.retryAfterSeconds} seconds.`);
         setRetryAfter(result.retryAfterSeconds);
@@ -134,7 +139,7 @@ export function SuperAdminStepUpChallenge() {
     } finally {
       setIsLoading(false);
     }
-  }, [router]);
+  });
 
   const handleResend = useCallback(async () => {
     setError(null);
@@ -190,32 +195,38 @@ export function SuperAdminStepUpChallenge() {
           className="w-full"
           disabled={isLoading || retryAfter !== null}
         >
-          {isLoading ? 'Verifying…' : retryAfter ? `Locked ({retryAfter}s)` : 'Verify & Continue'}
+          {isLoading ? 'Verifying…' : retryAfter ? `Locked (${retryAfter}s)` : 'Verify & Continue'}
         </Button>
 
-        {sendStatus === 'sent' && (
-          <div className="text-center text-sm text-slate-400">
-            <p>Code sent successfully.</p>
-            {resendRemaining !== null && resendRemaining > 0 && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="mt-2"
-                onClick={handleResend}
-                disabled={isLoading}
-              >
-                Resend code ({resendRemaining} remaining)
-              </Button>
-            )}
-          </div>
-        )}
+        {/* Action / Resend Controls — Always visible so the user can re-trigger dispatch */}
+        <div className="flex flex-col items-center gap-2 text-center text-sm">
+          {sendStatus === 'sent' && (
+            <p className="text-emerald-400 font-medium">OTP request dispatched successfully!</p>
+          )}
 
-        {sendStatus === 'unavailable' && (
-          <p className="text-center text-sm text-amber-400">
-            Email provider unavailable. Check server logs for the OTP (dev mode).
-          </p>
-        )}
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="w-full mt-1 border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700"
+            onClick={resendRemaining === null ? issueChallenge : handleResend}
+            disabled={isLoading || sendStatus === 'loading' || (resendRemaining !== null && resendRemaining <= 0)}
+          >
+            {sendStatus === 'loading'
+              ? 'Sending Code...'
+              : resendRemaining !== null && resendRemaining <= 0
+              ? 'No OTP resends remaining'
+              : resendRemaining !== null
+              ? `Resend OTP Code (${resendRemaining} left)`
+              : 'Send / Request OTP Code'}
+          </Button>
+
+          {sendStatus === 'unavailable' && (
+            <p className="text-xs text-amber-400/90 mt-1">
+              Email provider unconfigured (Dev Mode). Check your terminal for `[DEV ONLY] SuperAdmin OTP`.
+            </p>
+          )}
+        </div>
       </form>
     </div>
   );

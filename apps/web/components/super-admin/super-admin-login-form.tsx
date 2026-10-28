@@ -65,7 +65,6 @@ export function SuperAdminLoginForm() {
       await login(values);
       // Successful login for Super Admin: redirect to step-up challenge
       router.push('/super-admin/step-up');
-      router.refresh();
     } catch (err) {
       if (err instanceof Error) {
         setSubmitError(err.message);

@@ -3,7 +3,7 @@
  *
  * Stores the raw sessionToken from the step-up verification (Decision 020).
  * This is NOT the regular JWT session - it's a separate, short-lived
- * token (15 min, single-use) used exclusively for SUPERADMIN routes.
+ * token (15 min, TTL-bound) used exclusively for SUPERADMIN routes.
  */
 const SUPER_ADMIN_SESSION_KEY = 'socialops.superAdminSession';
 

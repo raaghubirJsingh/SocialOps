@@ -1,11 +1,10 @@
-import type { Metadata } from 'next';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { SuperAdminStepUpChallenge } from '@/components/super-admin/super-admin-step-up-challenge';
-
-export const metadata: Metadata = {
-  title: 'Super Admin Step-Up Verification · SocialOps',
-  description: 'Complete step-up verification to access the Super Admin console.',
-};
+import { hasValidSuperAdminSession } from '@/lib/super-admin-session';
 
 /**
  * Super Admin step-up challenge route (/super-admin/step-up) — requires auth.
@@ -13,8 +12,29 @@ export const metadata: Metadata = {
  * After regular login, Super Admin users must complete an OTP challenge
  * before accessing any admin routes (Decision 020). This page issues the
  * challenge and then handles verification.
+ *
+ * Guard: if a valid step-up session already exists (e.g. user navigated
+ * back to this page after completing verification), skip the challenge
+ * entirely and redirect to /super-admin. This prevents the component from
+ * auto-issuing a new OTP challenge on every mount regardless of an existing
+ * valid session.
  */
 export default function SuperAdminStepUpPage() {
+  const router = useRouter();
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    if (hasValidSuperAdminSession()) {
+      router.replace('/super-admin');
+    } else {
+      setChecking(false);
+    }
+  }, [router]);
+
+  if (checking) {
+    return null;
+  }
+
   return (
     <div className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 p-6 text-slate-100">
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
