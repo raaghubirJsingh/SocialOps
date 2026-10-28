@@ -83,4 +83,64 @@ test.describe('conversational registration discovery', () => {
     await page.getByRole('button', { name: 'दूसरों के भी' }).click();
     await expect(page.getByText(/समझ गया/)).toBeVisible();
   });
+
+  test('a resumed registration keeps resend counts current through verification', async ({
+    page,
+  }) => {
+    await page.route('**/api/auth/registration/resume', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          stage: 'verification',
+          expiresAt: '2026-10-15T00:00:00.000Z',
+          accountType: 'CLIENT',
+          clientType: 'INDIVIDUAL',
+          fullName: 'Asha',
+          maskedEmail: 'a***@example.test',
+          maskedPhone: '+*******3210',
+          emailVerified: true,
+          whatsappVerified: false,
+          resendRemaining: { email: 3, whatsapp: 2 },
+          lockedUntil: null,
+        }),
+      }),
+    );
+    await page.route('**/api/auth/registration/otp/resend', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          channel: 'WHATSAPP',
+          sendStatus: 'sent',
+          resendRemaining: 1,
+        }),
+      }),
+    );
+    await page.route('**/api/auth/registration/otp/verify', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          channel: 'WHATSAPP',
+          verified: true,
+          bothVerified: true,
+        }),
+      }),
+    );
+
+    await page.goto('/register/resume?token=resume-token');
+    await expect(page.getByText('Verified ✓')).toBeVisible();
+    await expect(page.getByLabel('WhatsApp OTP')).toBeVisible();
+    await page.getByRole('button', { name: 'Resend (2 left)' }).click();
+    await expect(
+      page.getByRole('button', { name: 'Resend (1 left)' }),
+    ).toBeVisible();
+
+    await page.getByLabel('WhatsApp OTP').fill('123456');
+    await page.getByRole('button', { name: 'Verify' }).click();
+    // The password stage is reached; use the role+exact-name locator to
+    // avoid the strict-mode collision with the "Confirm Password" field.
+    await expect(page.getByRole('textbox', { name: 'Password', exact: true })).toBeVisible();
+  });
 });

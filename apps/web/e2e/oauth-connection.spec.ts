@@ -270,5 +270,78 @@ test.describe('connection affordances from hasCredential', () => {
       page.getByText(/ciphertext|refresh_token|access_token/i),
     ).toHaveCount(0);
   });
+
+  test('Connect starts the ROW-SCOPED handshake, not the platform-scoped one', async ({
+    page,
+  }) => {
+    // The row id - not the platform - is what must be sent, because the server
+    // reads the platform from the row and updates THAT row. Calling the old
+    // platform-scoped route here is precisely what produced the duplicate row.
+    const requested: string[] = [];
+    await page.route(
+      '**/api/clients/*/social-accounts/*/connect',
+      async (route) => {
+        requested.push(new URL(route.request().url()).pathname);
+        await route.fulfill(
+          json({
+            authorizeUrl:
+              'https://www.facebook.com/v21.0/dialog/oauth?client_id=stub&state=stub',
+            expiresIn: 600,
+          }),
+        );
+      },
+    );
+
+    await gotoSocialAccounts(page, [account({ hasCredential: false })]);
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+
+    expect(requested).toHaveLength(1);
+    // The trailing segment is the SocialAccount id.
+    expect(requested[0]).toContain(
+      `/${account().id}/connect`,
+    );
+    // NOT the platform name.
+    expect(requested[0]).not.toContain('/INSTAGRAM/connect');
+  });
+
+  test('a failed row-scoped start surfaces a message and stays on the page', async ({
+    page,
+  }) => {
+    await page.route('**/api/clients/*/social-accounts/*/connect', (route) =>
+      route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({ message: 'Social account not found' }),
+      }),
+    );
+
+    await gotoSocialAccounts(page, [account({ hasCredential: false })]);
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+
+    // Scoped away from Next's own route announcer, which is also role="alert".
+    const alert = page.locator('[role="alert"]').filter({ hasText: /./ }).first();
+    await expect(alert).toBeVisible();
+    // The raw backend string is NOT shown: describeApiError maps the 404 to a
+    // user-facing message that names the scope, without leaking internals.
+    await expect(alert).toContainText(/organization or client scope/i);
+    await expect(alert).not.toContainText(/stack|node_modules|prisma/i);
+    // Still on the page: the failed handshake did not navigate away.
+    await expect(
+      page.getByRole('heading', { name: 'Social accounts' }),
+    ).toBeVisible();
+  });
+
+  test('shows no manual platform-id input anywhere on the card', async ({
+    page,
+  }) => {
+    await gotoSocialAccounts(page, [account({ hasCredential: false })]);
+    // The platform id is DISCOVERED through OAuth, never typed by hand.
+    await expect(
+      page.getByLabel(/platform account id|platform id/i),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole('textbox', { name: /platform id/i }),
+    ).toHaveCount(0);
+  });
 });
 

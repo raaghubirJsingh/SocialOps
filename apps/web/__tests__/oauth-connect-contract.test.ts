@@ -83,3 +83,91 @@ describe('socialAccountApi OAuth connect', () => {
     }
   });
 });
+
+/**
+ * Row-scoped connect: the card's Connect button targets ONE existing row.
+ *
+ * The path segment is the SocialAccount id and NOT a platform. That is the whole
+ * point: the backend then reads the platform from the row and updates that row
+ * with the platformAccountId it discovers, instead of upserting a second row
+ * (the composite upsert can never match a row whose platformAccountId is NULL).
+ * No platform id is ever typed by the user or sent from the browser.
+ */
+describe('socialAccountApi row-scoped OAuth connect', () => {
+  beforeEach(() => {
+    mockedApiFetch.mockReset();
+  });
+
+  it('sends the row id and the client binding, and no platform', async () => {
+    mockedApiFetch.mockResolvedValue({
+      authorizeUrl: PROVIDER_URL,
+      expiresIn: 600,
+    });
+
+    await socialAccountApi.startOAuthConnectMineForAccount(
+      '11111111-1111-4111-8111-111111111111',
+      '33333333-3333-4333-8333-333333333333',
+    );
+
+    expect(mockedApiFetch).toHaveBeenCalledWith(
+      '/client/me/social-accounts/33333333-3333-4333-8333-333333333333/connect',
+      { headers: { 'X-Client-Id': '11111111-1111-4111-8111-111111111111' } },
+    );
+    // The platform is never a parameter: the server reads it from the row.
+    const [path] = mockedApiFetch.mock.calls[0] as [string];
+    expect(path).not.toContain('INSTAGRAM');
+    expect(path).not.toContain('FACEBOOK');
+    expect(path).not.toContain('YOUTUBE');
+  });
+
+  it('sends the row id on the agency path, with no tenant header of its own', async () => {
+    mockedApiFetch.mockResolvedValue({
+      authorizeUrl: PROVIDER_URL,
+      expiresIn: 600,
+    });
+
+    await socialAccountApi.startOAuthConnectForAccount(
+      '11111111-1111-4111-8111-111111111111',
+      '33333333-3333-4333-8333-333333333333',
+    );
+
+    // No explicit X-Client-Id: apiFetch attaches the verified X-Organization-Id,
+    // and the backend proves the ACTIVE relationship plus row membership.
+    expect(mockedApiFetch).toHaveBeenCalledWith(
+      '/clients/11111111-1111-4111-8111-111111111111/social-accounts/33333333-3333-4333-8333-333333333333/connect',
+    );
+  });
+
+  it('returns the provider authorize URL verbatim for the row-scoped flow', async () => {
+    mockedApiFetch.mockResolvedValue({
+      authorizeUrl: PROVIDER_URL,
+      expiresIn: 600,
+    });
+
+    const res = await socialAccountApi.startOAuthConnectForAccount(
+      '11111111-1111-4111-8111-111111111111',
+      '33333333-3333-4333-8333-333333333333',
+    );
+
+    // Still a navigation payload the browser leaves for verbatim - the redirect
+    // cannot be done by a background fetch.
+    expect(res.authorizeUrl).toBe(PROVIDER_URL);
+    expect(() => new URL(res.authorizeUrl)).not.toThrow();
+  });
+
+  it('never exposes a credential field in the connect response', async () => {
+    mockedApiFetch.mockResolvedValue({
+      authorizeUrl: PROVIDER_URL,
+      expiresIn: 600,
+    });
+
+    const res = await socialAccountApi.startOAuthConnectForAccount(
+      '11111111-1111-4111-8111-111111111111',
+      '33333333-3333-4333-8333-333333333333',
+    );
+
+    // Tokens are encrypted server-side and must never reach the browser.
+    expect(Object.keys(res).sort()).toEqual(['authorizeUrl', 'expiresIn']);
+    expect(JSON.stringify(res)).not.toMatch(/token|secret|credential/i);
+  });
+});
