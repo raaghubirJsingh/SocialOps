@@ -18,6 +18,7 @@ import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
 import { assertDisposableTestDatabase } from '../src/common/disposable-database.js';
 import { createActiveUser } from './helpers/active-user.factory.js';
+import { twoStepLogin } from './shared/two-step-login.js';
 
 // This suite clears shared tables. Fail closed before connecting or running
 // any cleanup unless the explicitly configured database uses the test suffix.
@@ -61,7 +62,7 @@ async function seedOrgUser(name: string, role: OrganizationRole) {
   await prisma.organizationMembership.create({
     data: { organizationId: orgId, userId: user.id, role },
   });
-  const login = await auth.login({ email, password: PASSWORD });
+  const login = await twoStepLogin(auth, email, PASSWORD);
   return { id: user.id, email, orgId, accessToken: login.accessToken };
 }
 
@@ -75,7 +76,7 @@ async function registerClientUser(name: string) {
     accountType: 'CLIENT',
     password: PASSWORD,
   });
-  const login = await auth.login({ email, password: PASSWORD });
+  const login = await twoStepLogin(auth, email, PASSWORD);
   return { id: user.id, email, accessToken: login.accessToken };
 }
 
@@ -204,6 +205,7 @@ afterAll(async () => {
   await prisma.emailVerificationToken.deleteMany({
     where: { user: { email: { contains: runTag } } },
   });
+  await prisma.loginOtpChallenge.deleteMany({});
   await prisma.organizationMembership.deleteMany({
     where: { user: { email: { contains: runTag } } },
   });

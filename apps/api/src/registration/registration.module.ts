@@ -49,5 +49,6 @@ import { ReminderService } from './reminder/reminder.service.js';
       useValue: new DevConsoleVerificationProvider('WHATSAPP'),
     },
   ],
+  exports: [EMAIL_VERIFICATION_PROVIDER, WHATSAPP_VERIFICATION_PROVIDER],
 })
 export class RegistrationModule {}

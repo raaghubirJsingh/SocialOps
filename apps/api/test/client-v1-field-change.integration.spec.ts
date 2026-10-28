@@ -10,6 +10,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
 import { createActiveUser } from './helpers/active-user.factory.js';
+import { twoStepLogin } from './shared/two-step-login.js';
 
 if (!process.env.JWT_ACCESS_SECRET)
   process.env.JWT_ACCESS_SECRET = 'integration-cv1d-access-32ch';
@@ -32,7 +33,7 @@ async function registerLogin(accountType: 'CLIENT' | 'SERVICE_PROVIDER', name: s
   const email = testEmail(name);
   // Legacy register is retired (L11): create the active fixture directly.
   const user = await createActiveUser(prisma, { email, fullName: name, accountType, password: PASSWORD });
-  const login = await auth.login({ email, password: PASSWORD });
+  const login = await twoStepLogin(auth, email, PASSWORD);
   return { id: user.id, email, accessToken: login.accessToken };
 }
 
@@ -101,6 +102,7 @@ afterAll(async () => {
   await prisma.client.deleteMany({ where: { directEmail: { contains: runTag } } });
   await prisma.refreshToken.deleteMany({ where: { user: { email: { contains: runTag } } } });
   await prisma.emailVerificationToken.deleteMany({ where: { user: { email: { contains: runTag } } } });
+  await prisma.loginOtpChallenge.deleteMany({});
   await prisma.organizationMembership.deleteMany({ where: { user: { email: { contains: runTag } } } });
   await prisma.user.deleteMany({ where: { email: { contains: runTag } } });
   await prisma.organization.deleteMany({ where: { slug: { contains: runTag } } });

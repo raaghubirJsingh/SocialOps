@@ -166,6 +166,7 @@ afterAll(async () => {
   await app.close();
   await prisma.refreshToken.deleteMany({ where: { user: { email: { contains: runTag } } } });
   await prisma.emailVerificationToken.deleteMany({ where: { user: { email: { contains: runTag } } } });
+  await prisma.loginOtpChallenge.deleteMany({ where: { user: { email: { contains: runTag } } } });
   await prisma.organizationMembership.deleteMany({
     where: { user: { email: { contains: runTag } } },
   });

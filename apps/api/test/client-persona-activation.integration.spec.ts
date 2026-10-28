@@ -29,6 +29,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
 import { createActiveUser } from './helpers/active-user.factory.js';
+import { twoStepLogin } from './shared/two-step-login.js';
 
 if (!process.env.JWT_ACCESS_SECRET)
   process.env.JWT_ACCESS_SECRET = 'integration-persona-access-32c';
@@ -57,7 +58,7 @@ async function personaLessUser(name: string) {
     phone: '+919876543210',
     password: PASSWORD,
   });
-  const login = await auth.login({ email, password: PASSWORD });
+  const login = await twoStepLogin(auth, email, PASSWORD);
   return { email, accessToken: login.accessToken };
 }
 
@@ -89,6 +90,7 @@ afterAll(async () => {
   await prisma.emailVerificationToken.deleteMany({
     where: { user: { email: { contains: runTag } } },
   });
+  await prisma.loginOtpChallenge.deleteMany({});
   await prisma.organizationMembership.deleteMany({
     where: { user: { email: { contains: runTag } } },
   });

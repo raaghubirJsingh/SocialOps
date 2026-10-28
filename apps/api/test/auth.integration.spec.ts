@@ -5,8 +5,13 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import * as argon2 from 'argon2';
 import { AuthService } from '../src/auth/auth.service.js';
+import { LoginOtpService } from '../src/auth/login-otp.service.js';
 import { OrganizationProvisioningService } from '../src/memberships/organization-provisioning.service.js';
 import type { LoginDto } from '../src/auth/dto/login.dto.js';
+import type { LoginOtpRequiredResponse, LoginSuccessResponse } from '../src/auth/dto/login-response.dto.js';
+import { EMAIL_VERIFICATION_PROVIDER } from '../src/registration/providers/verification-provider.port.js';
+import { DevConsoleVerificationProvider } from '../src/registration/providers/dev-console.provider.js';
+import { readDevConsoleOutbox } from '../src/registration/providers/dev-console.provider.js';
 
 if (!process.env.JWT_ACCESS_SECRET) process.env.JWT_ACCESS_SECRET = 'integration-access-secret-32-chars-min';
 if (!process.env.JWT_REFRESH_SECRET) process.env.JWT_REFRESH_SECRET = 'integration-refresh-secret-32-chars-min';
@@ -22,7 +27,11 @@ process.env.AUTH_DEV_AUTO_VERIFY_REGISTER = 'false';
 const prisma = new PrismaService();
 const jwtService = new JwtService();
 const organizationProvisioning = new OrganizationProvisioningService(prisma);
-const authService = new AuthService(prisma, jwtService, organizationProvisioning);
+const loginOtp = new LoginOtpService(
+  prisma,
+  new DevConsoleVerificationProvider('EMAIL'),
+);
+const authService = new AuthService(prisma, jwtService, organizationProvisioning, loginOtp);
 
 /**
  * Register `email` and capture its verification token from the
@@ -80,9 +89,15 @@ async function registerAndCaptureToken(
 }
 
 /** Register + verify + login: token pair for a VERIFIED user. */
-async function registerVerifiedAndLogin(email: string, password: string) {
-  const rawToken = await registerAndCaptureToken(email, password);
-  await authService.verifyEmail(rawToken);
+async function registerVerifiedAndLogin(email: string, password: string): Promise<LoginSuccessResponse> {
+  // This helper is called multiple times per test (login + logout). It must
+  // NOT re-register the same email: the unique-email guard would reject the
+  // second call. Only register if the user doesn't exist yet.
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (!existing) {
+    const rawToken = await registerAndCaptureToken(email, password);
+    await authService.verifyEmail(rawToken);
+  }
   const step1 = await authService.login({ email, password } as LoginDto);
   if ('status' in step1 && step1.status === 'otp_required') {
     const outbox = readDevConsoleOutbox();
@@ -95,7 +110,8 @@ async function registerVerifiedAndLogin(email: string, password: string) {
     if ('status' in step2) throw new Error(`OTP verification failed: ${JSON.stringify(step2)}`);
     return step2;
   }
-  return step1;
+  // The fallback should not happen for verified users with two-step login
+  throw new Error('Expected otp_required for verified user');
 }
 
 const runTag = `stageb6-${randomUUID()}`;
@@ -127,6 +143,7 @@ afterAll(async () => {
   await prisma.emailVerificationToken.deleteMany({
     where: { user: { email: { contains: runTag } } },
   });
+  await prisma.loginOtpChallenge.deleteMany({ where: { user: { email: { contains: runTag } } } });
   if (userIds.length > 0) {
     await prisma.organizationMembership.deleteMany({
       where: { userId: { in: userIds } },
@@ -305,12 +322,12 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
     const first = await registerVerifiedAndLogin(email, password);
 
     // Rotate: second pair should differ from first.
-    const second = await authService.refresh(first.refreshToken);
+    const second = await authService.refresh((first as LoginSuccessResponse).refreshToken);
     expect(second.accessToken).toBeTruthy();
     expect(second.refreshToken).not.toBe(first.refreshToken);
 
     // Reuse of the original (now revoked) refresh token must fail.
-    await expect(authService.refresh(first.refreshToken)).rejects.toBeInstanceOf(
+    await expect(authService.refresh((first as LoginSuccessResponse).refreshToken)).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
   });
@@ -319,10 +336,10 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
     const email = testEmail('logout');
     const tokens = await registerVerifiedAndLogin(email, 'LogoutMe012!');
 
-    await authService.logout(tokens.refreshToken);
+    await authService.logout((tokens as LoginSuccessResponse).refreshToken);
 
     // After logout, the same refresh token should be rejected on refresh.
-    await expect(authService.refresh(tokens.refreshToken)).rejects.toBeInstanceOf(
+    await expect(authService.refresh((tokens as LoginSuccessResponse).refreshToken)).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
   });
@@ -343,12 +360,12 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
     await authService.verifyEmail(rawToken);
     const loggedIn = await registerVerifiedAndLogin(email, password);
 
-    const decodedAccess = jwtService.verify(loggedIn.accessToken, {
+    const decodedAccess = jwtService.verify((loggedIn as LoginSuccessResponse).accessToken, {
       secret: process.env.JWT_ACCESS_SECRET,
     });
     expect(decodedAccess).toMatchObject({ email });
 
-    const decodedRefresh = jwtService.verify(loggedIn.refreshToken, {
+    const decodedRefresh = jwtService.verify((loggedIn as LoginSuccessResponse).refreshToken, {
       secret: process.env.JWT_REFRESH_SECRET,
     });
     expect(decodedRefresh).toHaveProperty('sub');
@@ -521,11 +538,19 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
         status: 'registration_complete',
         email: dto.email,
       });
-      // No verifyEmail call. Just log in.
-      const tokens = await authService.login({
+      // No verifyEmail call. Login still requires two-step OTP.
+      const step1 = await authService.login({
         email: dto.email,
         password: dto.password,
-      });
+      }) as LoginOtpRequiredResponse;
+      expect(step1.status).toBe('otp_required');
+      const outbox = readDevConsoleOutbox();
+      const lastMsg = outbox.find((m) => m.channel === 'EMAIL' && m.message.to === dto.email);
+      if (!lastMsg) throw new Error(`No OTP message in outbox for ${dto.email}`);
+      const match = lastMsg.message.body.match(/login code is (\d{6})/);
+      if (!match) throw new Error(`Could not extract OTP from: ${lastMsg.message.body}`);
+      const otp = match[1];
+      const tokens = await authService.verifyLoginOtp(dto.email, otp) as LoginSuccessResponse;
       expect(tokens.accessToken).toBeTruthy();
       expect(tokens.refreshToken).toBeTruthy();
     } finally {

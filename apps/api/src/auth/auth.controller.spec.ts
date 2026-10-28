@@ -4,6 +4,8 @@ import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { jest } from '@jest/globals';
 
+import type { LoginResult } from './dto/login-response.dto.js';
+
 type MockAuthService = {
   login: jest.Mock;
   refresh: jest.Mock;
@@ -55,8 +57,8 @@ describe('AuthController', () => {
     });
   });
 
-  describe('POST /auth/login',()=>{
-    it('calls authService.login with dto and returns tokens + user identity',async()=>{
+  describe('POST /auth/login', () => {
+    it('calls authService.login with dto and returns tokens + user identity', async () => {
       const loginResult = {
         accessToken: 'at',
         refreshToken: 'rt',
@@ -65,19 +67,27 @@ describe('AuthController', () => {
           email: 'a@b.com',
           fullName: 'Service Provider E2E',
           accountType: 'SERVICE_PROVIDER' as const,
+          isEmployee: false,
+          isSocialOpsAdmin: false,
         },
+        email: 'a@b.com',
       };
       mockService.login = jest.fn(async () => loginResult);
-      const result = await controller.login({email:'a@b.com',password:'pass'});
+      const result = await controller.login({ email: 'a@b.com', password: 'pass' });
       expect(result).toBe(loginResult);
       // The controller must surface the user identity fields the
       // frontend needs (AGENTS.md §17).
-      expect(result.user).toEqual({
-        id: 'user-1',
-        email: 'a@b.com',
-        fullName: 'Service Provider E2E',
-        accountType: 'SERVICE_PROVIDER',
-      });
+      // TypeScript requires a type guard for discriminated union
+      if ('user' in result) {
+        expect(result.user).toEqual({
+          id: 'user-1',
+          email: 'a@b.com',
+          fullName: 'Service Provider E2E',
+          accountType: 'SERVICE_PROVIDER',
+          isEmployee: false,
+          isSocialOpsAdmin: false,
+        });
+      }
     });
   });
 

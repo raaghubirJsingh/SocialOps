@@ -6,6 +6,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
 import { createActiveUser } from './helpers/active-user.factory.js';
+import { twoStepLogin } from './shared/two-step-login.js';
 
 if (!process.env.JWT_ACCESS_SECRET)
   process.env.JWT_ACCESS_SECRET = 'integration-cv1-access-32chars!!';
@@ -45,7 +46,7 @@ async function seedUser(
   // Legacy register is retired (L11): create the active fixture directly.
   const user = await createActiveUser(prisma, { email, fullName: name, accountType, password });
   await prisma.organizationMembership.create({ data: { organizationId: orgId, userId: user.id, role } });
-  const login = await auth.login({ email, password });
+  const login = await twoStepLogin(auth, email, password);
   return { id: user.id, email, organizationId: orgId, role, accessToken: login.accessToken };
 }
 
@@ -62,6 +63,7 @@ beforeAll(async () => {
   await prisma.client.deleteMany({});
   await prisma.refreshToken.deleteMany({});
   await prisma.emailVerificationToken.deleteMany({});
+  await prisma.loginOtpChallenge.deleteMany({});
   await prisma.organizationMembership.deleteMany({});
   // AdminStepUpChallenge / AdminStepUpSession reference User with
   // onDelete: Restrict, so they must be cleared BEFORE user.deleteMany()
@@ -91,6 +93,7 @@ afterAll(async () => {
   await prisma.clientAgencyRelationship.deleteMany({});
   await prisma.client.deleteMany({});
   await prisma.emailVerificationToken.deleteMany({});
+  await prisma.loginOtpChallenge.deleteMany({});
   await prisma.refreshToken.deleteMany({ where: { user: { email: { contains: runTag } } } });
   await prisma.organizationMembership.deleteMany({ where: { user: { email: { contains: runTag } } } });
   await prisma.user.deleteMany({ where: { email: { contains: runTag } } });

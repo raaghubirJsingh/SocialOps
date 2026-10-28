@@ -41,6 +41,7 @@ import { SocialOpsProviderService } from '../src/clients/social-ops-provider.ser
 import { OAuthStateService } from '../src/social-accounts/oauth/oauth-state.service.js';
 import { SocialAccountsOAuthService } from '../src/social-accounts/oauth/social-accounts-oauth.service.js';
 import { createActiveUser } from './helpers/active-user.factory.js';
+import { twoStepLogin } from './shared/two-step-login.js';
 
 const dbName = new URL(process.env.DATABASE_URL ?? '').pathname.slice(1);
 if (!/(^|_)(test|itest)$/.test(dbName)) {
@@ -118,7 +119,8 @@ async function selfRegisteringClient(name: string) {
     where: { id: user.id },
     data: { clientType: 'INDIVIDUAL' },
   });
-  const login = await app.get(AuthService).login({ email, password: PASSWORD });
+  const auth = app.get(AuthService);
+  const login = await twoStepLogin(auth, email, PASSWORD);
   return { email, accessToken: login.accessToken };
 }
 
@@ -152,8 +154,13 @@ afterAll(async () => {
   });
   const ids = clients.map((c) => c.id);
   await prisma.clientEvent.deleteMany({ where: { clientId: { in: ids } } });
+  const socialopsOrg = await prisma.organization.findUnique({ where: { slug: 'socialops' } });
+  if (socialopsOrg) {
+    await prisma.clientAgencyRelationship.deleteMany({ where: { organizationId: socialopsOrg.id } });
+  }
   await prisma.clientAgencyRelationship.deleteMany({ where: { clientId: { in: ids } } });
   await prisma.client.deleteMany({ where: { id: { in: ids } } });
+  await prisma.loginOtpChallenge.deleteMany({});
   await prisma.organization.deleteMany({ where: { slug: 'socialops' } });
   await prisma.user.deleteMany({ where: { email: emails } });
   await prisma.$disconnect();
@@ -233,7 +240,8 @@ describe('first-time self-registration attaches the platform Service Provider', 
       phone: '+919876543211',
       password: PASSWORD,
     });
-    const login = await app.get(AuthService).login({ email, password: PASSWORD });
+    const auth = app.get(AuthService);
+    const login = await twoStepLogin(auth, email, PASSWORD);
     const res = await activate(login.accessToken);
 
     expect(res.status).toBe(409);
@@ -491,7 +499,8 @@ describe('legacy-intake activation also attaches the platform Service Provider',
       where: { id: user.id },
       data: { phoneVerifiedAt: null },
     });
-    const login = await app.get(AuthService).login({ email, password: PASSWORD });
+    const auth = app.get(AuthService);
+    const login = await twoStepLogin(auth, email, PASSWORD);
     return { email, id: user.id, accessToken: login.accessToken };
   }
 

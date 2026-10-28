@@ -2,9 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { AuthService } from '../src/auth/auth.service.js';
+import { LoginOtpService } from '../src/auth/login-otp.service.js';
 import { OrganizationProvisioningService } from '../src/memberships/organization-provisioning.service.js';
 import { createActiveUser } from './helpers/active-user.factory.js';
 import { readDevConsoleOutbox, clearDevConsoleOutbox } from '../src/registration/providers/dev-console.provider.js';
+import { DevConsoleVerificationProvider } from '../src/registration/providers/dev-console.provider.js';
 
 /**
  * Service Provider tenant provisioning integration tests.
@@ -30,10 +32,16 @@ process.env.BOOT_ARTIFACTS_ALLOWED = 'true';
 const prisma = new PrismaService();
 const jwtService = new JwtService();
 const organizationProvisioning = new OrganizationProvisioningService(prisma);
-const authService = new AuthService(prisma, jwtService, organizationProvisioning);
+const loginOtp = new LoginOtpService(prisma, new DevConsoleVerificationProvider('EMAIL'));
+const authService = new AuthService(prisma, jwtService, organizationProvisioning, loginOtp);
 
 /** Perform the two-step login: login -> verify OTP -> return tokens. */
 async function twoStepLogin(email: string, password: string) {
+  // Clear any stale messages from previous logins BEFORE this login
+  // pushes its own challenge; otherwise the outbox may contain OTPs that
+  // have already been consumed (usedAt stamped) by an earlier verification.
+  clearDevConsoleOutbox();
+
   // Step 1: login returns otp_required
   const step1 = await authService.login({ email, password });
   if ('status' in step1 && step1.status !== 'otp_required') {
@@ -92,6 +100,9 @@ async function cleanup() {
   }
   await prisma.organization.deleteMany({
     where: { slug: { contains: runTag } },
+  });
+  await prisma.loginOtpChallenge.deleteMany({
+    where: { user: { email: { contains: runTag } } },
   });
   await prisma.user.deleteMany({
     where: { email: { contains: runTag } },

@@ -132,6 +132,7 @@ async function cleanup(): Promise<void> {
     const orgIds = [...new Set(memberships.map((m) => m.organizationId))];
     await prisma.organizationMembership.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.loginOtpChallenge.deleteMany({ where: { userId: { in: userIds } } });
     if (orgIds.length > 0) {
       await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
     }
@@ -277,14 +278,30 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
     );
     expect(resumeOldToken.status).toBe(404);
 
-    // Login works with the created password (unchanged login behavior).
-    const login = await diagnosticPhase('firstTest.login', () =>
+    // Login works with the created password (two-step: login -> OTP -> tokens).
+    // Clear any stale messages BEFORE the login pushes its own challenge.
+    clearDevConsoleOutbox();
+    const step1 = await diagnosticPhase('firstTest.login.step1', () =>
       http
         .post('/api/auth/login')
         .send({ email: testEmail('happy'), password: PASSWORD }),
     );
-    expect(login.status).toBe(200);
-    expect(login.body.accessToken).toBeTruthy();
+    expect(step1.status).toBe(200);
+    expect(step1.body.status).toBe('otp_required');
+    // Read OTP from dev console outbox
+    const outbox = readDevConsoleOutbox();
+    const lastMsg = outbox.find((m) => m.channel === 'EMAIL' && m.message.to === testEmail('happy'));
+    if (!lastMsg) throw new Error(`No OTP message in outbox for ${testEmail('happy')}`);
+    const match = lastMsg.message.body.match(/login code is (\d{6})/);
+    if (!match) throw new Error(`Could not extract OTP from: ${lastMsg.message.body}`);
+    const otp = match[1];
+    const step2 = await diagnosticPhase('firstTest.login.step2', () =>
+      http
+        .post('/api/auth/login/verify-otp')
+        .send({ email: testEmail('happy'), otp }),
+    );
+    expect(step2.status).toBe(200);
+    expect(step2.body.accessToken).toBeTruthy();
   });
 
   it('rejects an email that already belongs to a User with the explicit message (L7)', async () => {
