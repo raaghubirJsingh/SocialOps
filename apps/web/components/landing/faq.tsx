@@ -9,19 +9,19 @@ export function FaqSection() {
   return (
     <section
       id="faq"
-      className="scroll-mt-20 border-y border-slate-800/80 bg-slate-900/30"
+      className="scroll-mt-16 border-y border-slate-800/80 bg-slate-900/30"
     >
-      <div className="mx-auto w-full max-w-3xl px-6 py-20">
+      <div className="mx-auto w-full max-w-3xl px-6 py-12 sm:py-16">
         <SectionHeading
           eyebrow="FAQ"
           title="Questions, answered honestly"
           intro="No marketing fog. If something is not built yet, we say so."
         />
-        <div className="mt-10 space-y-3">
+        <div className="mt-6 space-y-3">
           {FAQS.map((faq) => (
             <details
               key={faq.q}
-              className="group surface-panel rounded-2xl px-5 py-4 transition-all duration-200 open:border-blue-500/40 open:bg-white/[0.05] hover:border-slate-600"
+              className="group surface-panel rounded-2xl px-4 py-3.5 transition-all duration-200 open:border-blue-500/40 open:bg-white/[0.05] hover:border-slate-600"
             >
               <summary className="cursor-pointer list-none text-sm font-semibold text-slate-100 marker:hidden [&::-webkit-details-marker]:hidden">
                 <span className="flex items-center justify-between gap-4">

@@ -158,14 +158,14 @@ export function ContactForm() {
 /** Contact section (`#contact`): info card + validated form. */
 export function ContactSection() {
   return (
-    <section id="contact" className="scroll-mt-20">
-      <div className="mx-auto w-full max-w-6xl px-6 py-20">
+    <section id="contact" className="scroll-mt-16">
+      <div className="mx-auto w-full max-w-6xl px-6 py-12 sm:py-16">
         <SectionHeading
           eyebrow="Contact"
           title="Talk to a human"
           intro="Questions about fit, onboarding or the roadmap? Write to us — we read everything."
         />
-        <div className="mx-auto mt-12 grid max-w-4xl gap-6 md:grid-cols-5">
+        <div className="mx-auto mt-8 grid max-w-4xl gap-6 md:grid-cols-5">
           <ContactInfoCard />
           <div className="surface-panel rounded-2xl p-6 md:col-span-3">
             <ContactForm />

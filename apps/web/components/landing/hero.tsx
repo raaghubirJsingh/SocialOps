@@ -23,7 +23,7 @@ export function Hero() {
         <div className="bg-grid-faint absolute inset-0 opacity-[0.14]" />
       </div>
 
-      <div className="relative mx-auto w-full max-w-6xl px-6 pb-16 pt-20 sm:pt-28">
+      <div className="relative mx-auto w-full max-w-6xl px-6 pb-10 pt-12 sm:pt-16">
         <p className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-blue-300 shadow-lg shadow-blue-600/10">
           <span
             aria-hidden="true"
@@ -32,7 +32,7 @@ export function Hero() {
           AI-assisted social media operations
         </p>
 
-        <h1 className="mt-6 max-w-3xl text-balance text-4xl font-extrabold leading-[1.03] tracking-tight text-white sm:text-6xl">
+        <h1 className="mt-5 max-w-3xl text-balance text-3xl font-extrabold leading-[1.1] tracking-tight text-white sm:text-5xl">
           One story.
           <br />
           <span className="bg-linear-to-r from-blue-400 via-fuchsia-400 to-cyan-300 bg-clip-text text-transparent">
@@ -40,18 +40,18 @@ export function Hero() {
           </span>
         </h1>
 
-        <p className="mt-6 max-w-2xl text-pretty text-lg leading-relaxed text-slate-300">
+        <p className="mt-4 max-w-2xl text-pretty text-base leading-relaxed text-slate-300 sm:text-lg">
           SocialOps turns a single idea into reviewed and approved content
           prepared for Instagram, Facebook and YouTube — with human sign-off at
           every gate and AI assistance arriving in later approved phases.
         </p>
 
-        <p className="mt-6 max-w-2xl border-l-2 border-blue-500/60 pl-4 font-medium text-slate-200">
+        <p className="mt-4 max-w-2xl border-l-2 border-blue-500/60 pl-4 font-medium text-slate-200">
           One Story → Multiple Formats → Multiple Platforms → Multiple
           Revenue Streams → Permanent Knowledge Base.
         </p>
 
-        <div className="mt-10 flex flex-wrap items-center gap-4">
+        <div className="mt-6 flex flex-wrap items-center gap-4 sm:mt-7">
           <Link href="/register" className={`group ${LANDING_BUTTON_PRIMARY}`}>
             Start free today
             <ArrowRight
@@ -66,21 +66,21 @@ export function Hero() {
 
         <p className="mt-4 inline-flex items-center gap-2 text-xs text-slate-400">
           <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
-          Human approval is a mandatory, recorded gate — nothing can be marked
-          approved without it.
+          Human approval is a recorded gate. Publishing itself is not part
+          of the current phase.
         </p>
 
         {/* Honest stats — foundation facts only */}
-        <dl className="mt-14 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <dl className="mt-8 grid grid-cols-2 gap-4 sm:mt-10 lg:grid-cols-4">
           {HERO_STATS.map((stat) => (
             <div
               key={stat.label}
-              className="surface-glass rounded-2xl p-5 transition-all duration-300 hover:-translate-y-1 hover:border-blue-500/30"
+              className="surface-glass rounded-2xl p-4 transition-all duration-300 hover:-translate-y-1 hover:border-blue-500/30"
             >
               <dt className="order-2 mt-1 text-xs leading-snug text-slate-400">
                 {stat.label}
               </dt>
-              <dd className="bg-linear-to-r from-blue-400 to-cyan-300 bg-clip-text text-3xl font-extrabold tabular-nums text-transparent">
+              <dd className="bg-linear-to-r from-blue-400 to-cyan-300 bg-clip-text text-2xl font-extrabold tabular-nums text-transparent">
                 {stat.value}
               </dd>
             </div>
@@ -88,9 +88,9 @@ export function Hero() {
         </dl>
 
         <p className="mt-4 text-pretty text-xs leading-relaxed text-slate-400">
-          Scope of the V1 design — not shipped integrations. Live today:
-          accounts &amp; roles, client onboarding, content review &amp; final
-          approval.
+          Live today: accounts and roles, client onboarding, content review
+          and final approval. Platform connections, publishing and analytics
+          arrive in later phases.
         </p>
       </div>
     </section>

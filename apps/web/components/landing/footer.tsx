@@ -37,9 +37,10 @@ export function LandingFooter() {
       <div className="border-t border-white/[0.06] bg-white/[0.02]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-pretty text-xs leading-relaxed text-slate-400">
-            SocialOps V1 — live today: accounts &amp; roles, client onboarding,
-            agency↔client linking, content review &amp; final approval, intake
-            records. Further modules ship only after explicit approval.
+            SocialOps V1 — live today: accounts and roles, client onboarding,
+            agency↔client linking, content review and final approval, intake
+            records. Platform connections, publishing and analytics arrive in
+            later phases.
           </p>
           <p className="text-xs text-slate-400">© 2026 SocialOps</p>
         </div>
