@@ -40,9 +40,9 @@ async function seedOrgUser(name: string, role: OrganizationRole) {
   return { id: user.id, email, orgId, accessToken: login.accessToken };
 }
 
-async function registerClientUser(name: string) {
+async function registerClientUser(name: string, emailOverride?: string) {
   const auth = app.get(AuthService);
-  const email = testEmail(name);
+  const email = emailOverride ?? testEmail(name);
   // Legacy register is retired (L11): create the active CLIENT fixture.
   const user = await createActiveUser(prisma, { email, fullName: name, accountType: 'CLIENT', password: PASSWORD });
   const login = await auth.login({ email, password: PASSWORD });
@@ -114,12 +114,12 @@ async function releasePlatformProvider(accessToken: string, clientId: string) {
   expect(res.status).toBe(201);
 }
 
-async function createPendingClient(ownerToken: string, orgId: string, tag: string) {
+async function createPendingClient(ownerToken: string, orgId: string, tag: string, directEmail?: string) {
   const res = await http
     .post('/api/clients')
     .set('Authorization', `Bearer ${ownerToken}`)
     .set('X-Organization-Id', orgId)
-    .send({ type: 'INDIVIDUAL', name: `HS ${tag} ${runTag}`, directEmail: testEmail(`${tag}-direct`), directPhone: '+15550001111' });
+    .send({ type: 'INDIVIDUAL', name: `HS ${tag} ${runTag}`, directEmail: directEmail ?? testEmail(`${tag}-direct`), directPhone: '+15550001111' });
   expect(res.status).toBe(201);
   return res.body.client.id as string;
 }
@@ -127,20 +127,25 @@ async function createPendingClient(ownerToken: string, orgId: string, tag: strin
 describe('L1 HTTP surface', () => {
   it('invitation accept binds owner; wrong email 403; minimal resolve via service', async () => {
     const owner = await seedOrgUser('hs-owner1', 'OWNER');
-    const invitee = await registerClientUser('hs-invitee1');
-    const clientId = await createPendingClient(owner.accessToken, owner.orgId, 'inv1');
+    // The invitation recipient is the Client's saved directEmail, so the
+    // invited User must be registered with exactly that address.
+    const directEmail = testEmail('inv1-direct');
+    const invitee = await registerClientUser('hs-invitee1', directEmail);
+    const clientId = await createPendingClient(owner.accessToken, owner.orgId, 'inv1', directEmail);
     const { result, logs } = await withLogs(() =>
       http
         .post(`/api/clients/${clientId}/invite`)
         .set('Authorization', `Bearer ${owner.accessToken}`)
         .set('X-Organization-Id', owner.orgId)
-        .send({ email: invitee.email }),
+        .send({}),
     );
     expect(result.status).toBe(201);
+    // Recipient is always the Client's own saved email.
+    expect(result.body.email).toBe(directEmail.toLowerCase());
     const raw = tokenFromLogs(logs, 'Client invitation URL');
     const resolved = await http.get(`/api/invitations/${raw}`);
     expect(resolved.status).toBe(200);
-    expect(resolved.body.email).toBe(invitee.email.toLowerCase());
+    expect(resolved.body.email).toBe(directEmail.toLowerCase());
     expect(resolved.body.clientName).toBeTruthy();
     expect(resolved.body.clientType).toBeTruthy();
     expect(resolved.body).not.toHaveProperty('ownerUserId');
@@ -166,16 +171,18 @@ describe('L1 HTTP surface', () => {
 
   it('/api/client/me requires binding and ACTIVE onboarding; PENDING blocked', async () => {
     const owner = await seedOrgUser('hs-owner2', 'OWNER');
-    const invitee = await registerClientUser('hs-invitee2');
-    const clientId = await createPendingClient(owner.accessToken, owner.orgId, 'me1');
+    const directEmail = testEmail('me1-direct');
+    const invitee = await registerClientUser('hs-invitee2', directEmail);
+    const clientId = await createPendingClient(owner.accessToken, owner.orgId, 'me1', directEmail);
     const { result, logs } = await withLogs(() =>
       http
         .post(`/api/clients/${clientId}/invite`)
         .set('Authorization', `Bearer ${owner.accessToken}`)
         .set('X-Organization-Id', owner.orgId)
-        .send({ email: invitee.email }),
+        .send({}),
     );
     expect(result.status).toBe(201);
+    expect(result.body.email).toBe(directEmail.toLowerCase());
     const raw = tokenFromLogs(logs, 'Client invitation URL');
     await http.post(`/api/invitations/${raw}/accept`).set('Authorization', `Bearer ${invitee.accessToken}`).send({});
     const pendingMe = await http
@@ -188,7 +195,7 @@ describe('L1 HTTP surface', () => {
         .post(`/api/clients/${clientId}/invite`)
         .set('Authorization', `Bearer ${owner.accessToken}`)
         .set('X-Organization-Id', owner.orgId)
-        .send({ email: invitee.email }),
+        .send({}),
     );
     void mlogs;
     const mobiles = await prisma.mobileVerificationToken.findMany({
@@ -196,6 +203,34 @@ describe('L1 HTTP surface', () => {
       orderBy: { createdAt: 'desc' },
     });
     expect(mobiles.length).toBeGreaterThan(0);
+  });
+
+  it('invite body cannot override the recipient; saved directEmail always wins', async () => {
+    const owner = await seedOrgUser('hs-owner3a', 'OWNER');
+    const directEmail = testEmail('inv3-direct');
+    const attackerEmail = testEmail('inv3-attacker');
+    const clientId = await createPendingClient(owner.accessToken, owner.orgId, 'inv3', directEmail);
+    // A supplied email is rejected as an unexpected field (strict schema).
+    const rejected = await http
+      .post(`/api/clients/${clientId}/invite`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .set('X-Organization-Id', owner.orgId)
+      .send({ email: attackerEmail });
+    expect(rejected.status).toBe(400);
+    // The valid, body-less request issues the invitation to the SAVED email.
+    const { result, logs } = await withLogs(() =>
+      http
+        .post(`/api/clients/${clientId}/invite`)
+        .set('Authorization', `Bearer ${owner.accessToken}`)
+        .set('X-Organization-Id', owner.orgId)
+        .send({}),
+    );
+    expect(result.status).toBe(201);
+    expect(result.body.email).toBe(directEmail.toLowerCase());
+    const raw = tokenFromLogs(logs, 'Client invitation URL');
+    const resolved = await http.get(`/api/invitations/${raw}`);
+    expect(resolved.status).toBe(200);
+    expect(resolved.body.email).toBe(directEmail.toLowerCase());
   });
 
   it('agency discovery requires opt-in AND approval; request blocked otherwise', async () => {

@@ -159,7 +159,19 @@ async function onboardedClient(name: string) {
     .post('/api/onboarding/activate')
     .set('Authorization', `Bearer ${user.accessToken}`)
     .send({ token: raw });
+      // Decision 023 (GA 2026-10-19): content creation requires at least one active SocialAccount for the client.
+      // This fixture gives the client one here so content creation reaches the API boundary (201) instead of SOCIAL_ACCOUNT_REQUIRED (409).
+      await prisma.socialAccount.create({
+      data: {
+      clientId,
+      platform: 'INSTAGRAM',
+      handle: `@${name}-active`,
+      displayName: `Active ${name} social account`,
+      isActive: true,
+      },
+      });
   return { ...user, clientId };
+
 }
 
 /**
@@ -371,7 +383,8 @@ describe('Content Phase 2 - 3-scenario pipeline', () => {
       .set('X-Client-Id', client.clientId)
       .send({ to: 'AWAITING_MANAGER_APPROVAL' });
     expect(returned.status).toBe(201);
-    expect(returned.body.status).toBe('AWAITING_MANAGER_APPROVAL');
+    expect(returned.body.state).toBe('draft_in_progress');
+    expect(returned.body).not.toHaveProperty('status');
 
     // The Agency re-submits after the rework.
     const resubmitted = await http
@@ -424,10 +437,20 @@ describe('Content Phase 2 - FINAL_CONFIRMED lock and immutability', () => {
       .set('X-Client-Id', client.clientId)
       .send({ note: 'locked by owner' });
     expect(locked.status).toBe(201);
-    expect(locked.body.status).toBe('FINAL_CONFIRMED');
-    expect(locked.body.finalConfirmedAt).not.toBeNull();
-    expect(locked.body.finalConfirmedByUserId).toBe(client.id);
-    expect(locked.body.finalConfirmedRevisionId).not.toBeNull();
+    expect(locked.body.state).toBe('confirmed');
+    expect(locked.body).not.toHaveProperty('status');
+    expect(locked.body).not.toHaveProperty('finalConfirmedAt');
+    const lockedRow = await prisma.content.findUniqueOrThrow({
+      where: { id: contentId },
+      select: {
+        finalConfirmedAt: true,
+        finalConfirmedByUserId: true,
+        finalConfirmedRevisionId: true,
+      },
+    });
+    expect(lockedRow.finalConfirmedAt).not.toBeNull();
+    expect(lockedRow.finalConfirmedByUserId).toBe(client.id);
+    expect(lockedRow.finalConfirmedRevisionId).not.toBeNull();
 
     // The triple is a real, readable immutable snapshot of the exact text.
     const revisions = await http
@@ -440,21 +463,16 @@ describe('Content Phase 2 - FINAL_CONFIRMED lock and immutability', () => {
       contentHash: string;
       body: string;
     };
-    expect(frozen.id).toBe(locked.body.finalConfirmedRevisionId);
+    expect(frozen.id).toBe(lockedRow.finalConfirmedRevisionId);
     expect(frozen.body).toBe('Frozen text');
     expect(frozen.contentHash).toMatch(/^[0-9a-f]{64}$/);
 
-    // The audit trail records the lock with the CLIENT_OWNER actor.
+    // Internal status events are not exposed on the client API.
     const events = await http
       .get(`/api/client/me/content/${contentId}/status-events`)
       .set('Authorization', `Bearer ${client.accessToken}`)
       .set('X-Client-Id', client.clientId);
-    const lockEvent = (events.body as Array<Record<string, unknown>>).find(
-      (e) => e.toStatus === 'FINAL_CONFIRMED',
-    );
-    expect(lockEvent).toBeDefined();
-    expect(lockEvent?.fromStatus).toBe('UNDER_CLIENT_REVIEW');
-    expect(lockEvent?.actorRole).toBe('CLIENT_OWNER');
+    expect(events.status).toBe(404);
 
     // A second lock is refused: no silent re-snapshot of an immutable item.
     const relock = await http
@@ -467,9 +485,8 @@ describe('Content Phase 2 - FINAL_CONFIRMED lock and immutability', () => {
   }, 40000);
 
   it('refuses every edit and change request once locked, for both actors', async () => {
-    const { agency, client, base, contentId } = await itemUnderClientReview(
-      'frozen',
-    );
+    const { agency, client, base, contentId } =
+      await itemUnderClientReview('frozen');
 
     await http
       .post(`/api/client/me/content/${contentId}/final-confirmed-lock`)
@@ -516,6 +533,76 @@ describe('Content Phase 2 - FINAL_CONFIRMED lock and immutability', () => {
 });
 
 describe('Content Phase 2 - Change Requests', () => {
+  it('returns a requested draft to agency rework and preserves its request association', async () => {
+    const agency = await seedOrgUser('linked-rework-agency', 'OWNER');
+    const client = await onboardedClient('linked-rework-client');
+    await linkAgency(client, agency);
+
+    const request = await http
+      .post('/api/client/me/raw-data')
+      .set('Authorization', `Bearer ${client.accessToken}`)
+      .set('X-Client-Id', client.clientId)
+      .send({ source: 'CLIENT_FORM', extractedText: 'Request brief' });
+    expect(request.status).toBe(201);
+
+    const base = `/api/clients/${client.clientId}/content`;
+    const created = await http
+      .post(`${base}/from-request/${request.body.id as string}`)
+      .set('Authorization', `Bearer ${agency.accessToken}`)
+      .set('X-Organization-Id', agency.orgId)
+      .send({ title: 'First draft', body: 'Version one' });
+    expect(created.status).toBe(201);
+    const contentId = created.body.id as string;
+
+    await http
+      .post(`${base}/${contentId}/status`)
+      .set('Authorization', `Bearer ${agency.accessToken}`)
+      .set('X-Organization-Id', agency.orgId)
+      .send({ to: 'AWAITING_MANAGER_APPROVAL' });
+    await http
+      .post(`${base}/${contentId}/status`)
+      .set('Authorization', `Bearer ${agency.accessToken}`)
+      .set('X-Organization-Id', agency.orgId)
+      .send({ to: 'UNDER_CLIENT_REVIEW' });
+
+    const change = await http
+      .post(`/api/client/me/content/${contentId}/change-requests`)
+      .set('Authorization', `Bearer ${client.accessToken}`)
+      .set('X-Client-Id', client.clientId)
+      .send({ requestDetails: 'Please revise the headline.' });
+    expect(change.status).toBe(201);
+    expect(change.body.requestDetails).toBe('Please revise the headline.');
+
+    const rework = await prisma.content.findUniqueOrThrow({
+      where: { id: contentId },
+      select: { status: true, sourceRequestId: true },
+    });
+    expect(rework.status).toBe('AWAITING_MANAGER_APPROVAL');
+    expect(rework.sourceRequestId).toBe(request.body.id);
+
+    const revised = await http
+      .patch(`${base}/${contentId}`)
+      .set('Authorization', `Bearer ${agency.accessToken}`)
+      .set('X-Organization-Id', agency.orgId)
+      .send({ body: 'Revised version' });
+    expect(revised.status).toBe(200);
+
+    const resubmitted = await http
+      .post(`${base}/${contentId}/status`)
+      .set('Authorization', `Bearer ${agency.accessToken}`)
+      .set('X-Organization-Id', agency.orgId)
+      .send({ to: 'UNDER_CLIENT_REVIEW' });
+    expect(resubmitted.status).toBe(201);
+    expect(
+      (
+        await prisma.content.findUniqueOrThrow({
+          where: { id: contentId },
+          select: { sourceRequestId: true },
+        })
+      ).sourceRequestId,
+    ).toBe(request.body.id);
+  }, 40000);
+
   it('creates, lists on both scopes, and enforces the SCENARIO_1 cap of 2', async () => {
     const agency = await seedOrgUser('cr-agency', 'OWNER');
     const client = await onboardedClient('cr-client');
@@ -654,14 +741,20 @@ describe('Content Phase 2 - Change Requests', () => {
     expect(afterApproval.status).toBe(400);
     expect(afterApproval.body.code).toBe('CONTENT_IMMUTABLE');
 
-    // The Agency has no create route for change requests at all (they are
-    // CLIENT_OWNER-raised by design).
+    // The Agency-scoped change-request route exists (Decision 009), but the
+    // approved state machine has no APPROVED -> UNDER_CLIENT_REVIEW edge, so
+    // the service refuses the transition with 400 and no ChangeRequest row is
+    // written - the Agency still cannot raise a change request post-approval.
     const agencyCreate = await http
       .post(`${base}/${contentId}/change-requests`)
       .set('Authorization', `Bearer ${agency.accessToken}`)
       .set('X-Organization-Id', agency.orgId)
       .send({ requestDetails: 'agency raised' });
-    expect(agencyCreate.status).toBe(404);
+    expect(agencyCreate.status).toBe(400);
+    const agencyRaised = await prisma.changeRequest.count({
+      where: { contentId },
+    });
+    expect(agencyRaised).toBe(0);
   }, 40000);
 });
 
@@ -739,6 +832,7 @@ describe('Content Phase 2 - Internal Notes and the Client data boundary', () => 
     expect(clientDetail.body.id).toBe(contentId);
     expect(clientDetail.body).not.toHaveProperty('agencyId');
     expect(clientDetail.body).not.toHaveProperty('internalNotes');
+    expect(clientDetail.body).not.toHaveProperty('status');
 
     // The same holds for the Client's LIST read, row by row.
     const clientList = await http
@@ -750,6 +844,7 @@ describe('Content Phase 2 - Internal Notes and the Client data boundary', () => 
     for (const row of clientList.body as Array<Record<string, unknown>>) {
       expect(row).not.toHaveProperty('agencyId');
       expect(row).not.toHaveProperty('internalNotes');
+      expect(row).not.toHaveProperty('status');
     }
 
     // No Client route exposes the notes thread at all.
@@ -938,9 +1033,12 @@ describe('Content - Client self-service reads and cross-client isolation', () =>
       .set('X-Client-Id', client.clientId);
     expect(drafts.status).toBe(200);
     expect(drafts.body).toHaveLength(2);
-    for (const row of drafts.body as Array<Record<string, unknown>>) {
-      expect(row.status).toBe('DRAFT');
-    }
+    // The client-safe projection never exposes raw `status` (it is mapped to
+    // `state` + action flags), so the filter is asserted by identity: exactly
+    // Story B and Story C - the two items still in DRAFT - come back.
+    expect(
+      (drafts.body as Array<{ id: string }>).map((r) => r.id).sort(),
+    ).toEqual([ids[1], ids[2]].sort());
 
     const inReview = await http
       .get('/api/client/me/content?status=IN_REVIEW')
@@ -1008,3 +1106,5 @@ describe('Content - Client self-service reads and cross-client isolation', () =>
     expect(strangerList.body).toHaveLength(0);
   }, 40000);
 });
+
+

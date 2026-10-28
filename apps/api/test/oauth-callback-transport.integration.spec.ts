@@ -17,6 +17,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
+import { OAuthStateService } from '../src/social-accounts/oauth/oauth-state.service.js';
 
 if (!process.env.JWT_ACCESS_SECRET)
   process.env.JWT_ACCESS_SECRET = 'integration-callback-access-32';
@@ -44,6 +45,24 @@ function locationOf(res: request.Response): URL | null {
   const raw = res.headers.location;
   if (typeof raw !== 'string' || raw.length === 0) return null;
   return new URL(raw);
+}
+
+/**
+ * Mint a real CLIENT-persona state directly through the state service.
+ *
+ * Needed because only a VERIFIED payload produces the query-bearing destination
+ * (`/client/social-accounts?clientId=...`) this test is about. It uses the real
+ * signing + Redis single-use path; nothing is stubbed or forged.
+ */
+async function mintClientState(): Promise<string> {
+  const states = app.get(OAuthStateService);
+  return states.mint({
+    sub: 'user-some-owner',
+    organizationId: 'org-somewhere',
+    clientId: '11111111-1111-4111-8111-111111111111',
+    platform: 'INSTAGRAM',
+    source: 'CLIENT',
+  });
 }
 
 beforeAll(async () => {
@@ -112,5 +131,28 @@ describe('OAuth callback transport', () => {
     // The submitted state is never reflected back to the browser.
     expect(location).not.toContain(secretish);
     expect(res.text ?? '').not.toContain(secretish);
+  });
+
+  it('keeps `status` a real query parameter when the destination already has one', async () => {
+    // The CLIENT persona destination is `/client/social-accounts?clientId=...`,
+    // which already contains a `?`. A second literal `?` used to be appended,
+    // which folded `status` into the clientId value and made the redirect look
+    // like it carried no outcome - so the UI could never show "connected".
+    //
+    // NO `code` is sent, so this stops at the consent-denied branch: the point
+    // is the redirect SHAPE, and this keeps the test free of any write.
+    const state = await mintClientState();
+    const res = await http
+      .get('/api/social-accounts/callback/INSTAGRAM')
+      .query({ state })
+      .redirects(0);
+
+    const location = locationOf(res);
+    expect(location).not.toBeNull();
+    // `clientId` survived intact and `status` is its own parameter.
+    expect(location?.searchParams.get('clientId')).toBe(
+      '11111111-1111-4111-8111-111111111111',
+    );
+    expect(location?.searchParams.get('status')).toBe('oauth_denied');
   });
 });

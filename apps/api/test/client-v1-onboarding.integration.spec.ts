@@ -59,6 +59,11 @@ beforeAll(async () => {
   await prisma.refreshToken.deleteMany({});
   await prisma.emailVerificationToken.deleteMany({});
   await prisma.organizationMembership.deleteMany({});
+  // AdminStepUpChallenge / AdminStepUpSession reference User with
+  // onDelete: Restrict, so they must be cleared BEFORE user.deleteMany()
+  // or the FK fires (observed: AdminStepUpChallenge_userId_fkey).
+  await prisma.adminStepUpChallenge.deleteMany({});
+  await prisma.adminStepUpSession.deleteMany({});
   await prisma.user.deleteMany({});
   await prisma.organization.deleteMany({});
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();

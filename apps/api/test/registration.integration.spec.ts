@@ -13,7 +13,10 @@ import type { VerificationProvider } from '../src/registration/providers/verific
 import { clearDevConsoleOutbox, readDevConsoleOutbox } from '../src/registration/providers/dev-console.provider.js';
 import { ReminderService } from '../src/registration/reminder/reminder.service.js';
 import { REDIS_CLIENT } from '../src/redis/redis.constants.js';
+jest.setTimeout(30000);
 import { PrismaService } from '../src/prisma/prisma.service.js';
+import { hashResumeToken } from '../src/registration/pending-registration.service.js';
+import { assertDisposableTestDatabase } from '../src/common/disposable-database.js';
 
 /**
  * Registration Phase v1.0 integration tests.
@@ -41,6 +44,13 @@ if (!process.env.JWT_ACCESS_TTL) process.env.JWT_ACCESS_TTL = '900';
 if (!process.env.JWT_REFRESH_TTL) process.env.JWT_REFRESH_TTL = '604800';
 process.env.AUTH_DEV_AUTO_VERIFY_REGISTER = 'false';
 
+// Fail closed BEFORE any database connection or setup: this suite clears
+// shared tables, so it must only ever run against a disposable test database
+// whose name ends in `_test` / `_itest` (same policy as
+// client-operations-v1.integration.spec.ts). It never touches the
+// development database on 5432.
+assertDisposableTestDatabase(process.env.DATABASE_URL);
+
 const PASSWORD = 'StrongPassword123!';
 const runTag = `reg-v1-${randomUUID()}`;
 const testEmail = (name: string) => `regv1.${name}.${runTag}@example.test`;
@@ -51,13 +61,23 @@ let moduleRef: TestingModule;
 let redis: Redis;
 
 const baseStart = (name: string, overrides: Record<string, unknown> = {}) => ({
-  fullName: `Reg User ${name}`,
-  email: testEmail(name),
-  phone: '9876543210',
-  accountType: 'CLIENT',
-  discoveryAnswers: { root: 'own', ownBranch: 'personal' },
-  ...overrides,
-});
+    fullName: `Reg User ${name}`,
+    email: testEmail(name),
+    phone: '9876543210',
+    accountType: 'CLIENT',
+    // Accepted discovery snapshot (Option A): the frontend's
+    // discoveryAnswersSnapshot always sets discoveryAccepted: true and a
+    // definite classification before /start is submitted. The completion
+    // gate now enforces this, so every test that completes registration
+    // must send an accepted snapshot.
+    discoveryAnswers: {
+      root: 'own',
+      ownBranch: 'personal',
+      classification: 'CLIENT',
+      discoveryAccepted: true,
+    },
+    ...overrides,
+  });
 
 /** Flush the five registration rate-limit buckets (fresh 15-min window). */
 async function flushRateLimits(): Promise<void> {
@@ -279,9 +299,41 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
     const again = await http
       .post('/api/auth/registration/start')
       .send(baseStart('dup-user'));
-    expect(again.status).toBe(403);
+    expect(again.status).toBe(409);
+    expect((again.body as { code?: string }).code).toBe('EMAIL_IN_USE');
     expect(JSON.stringify(again.body)).toContain('Email already in use');
   });
+
+  it('resolves a Prisma P2002 race at password() with a 409 + EMAIL_IN_USE code', async () => {
+    const { token } = await startPending('p2002-race');
+    await verifyChannel(token, 'EMAIL');
+    await verifyChannel(token, 'WHATSAPP');
+
+    // Seed a conflicting User directly so the password completion's
+    // `user.create` deterministically hits the unique index (P2002). The
+    // local DB serializes a true-concurrency race as a 404 (the winner
+    // deletes the pending before the loser reaches user.create); the
+    // deterministic insert is the reliable way to exercise the P2002 branch.
+    await prisma.user.create({
+      data: { email: testEmail('p2002-race') },
+    });
+
+    await flushRateLimits();
+
+    const [first, second] = await Promise.all([
+      http
+        .post('/api/auth/registration/password')
+        .send({ resumeToken: token, password: PASSWORD }),
+      http
+        .post('/api/auth/registration/password')
+        .send({ resumeToken: token, password: PASSWORD }),
+    ]);
+
+    const loser = first.status === 409 ? first : second;
+    expect(loser.status).toBe(409);
+    expect((loser.body as { code?: string }).code).toBe('EMAIL_IN_USE');
+  });
+
   it('resumes an active pending for the same email without a second row or timer reset (L6)', async () => {
     const { token } = await startPending('dup-pending');
     const row1 = await prisma.pendingRegistration.findUniqueOrThrow({
@@ -367,6 +419,249 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
     expect(user.accountType).toBe('SERVICE_PROVIDER');
   });
 
+  // ------------------------------------------------------------------
+  // Discovery acceptance gate (approved Option A)
+  //
+  // Discovery is accepted ONLY when discoveryAnswers is a non-null,
+  // non-array object with discoveryAccepted === true AND a definite
+  // classification (exactly CLIENT or SERVICE_PROVIDER). `root` and
+  // `clientType` are deliberately NOT independent conditions - an
+  // ambiguous accepted answer legitimately yields clientType null.
+  // ------------------------------------------------------------------
+  describe('Discovery acceptance gate (Option A)', () => {
+    /**
+     * Start a pending, satisfy the dual-verification gate, then attempt
+     * Account Creation. Returns the password-stage HTTP response so a
+     * caller can assert on the completion outcome. `discoveryAnswers` is
+     * passed straight through as a /start override (undefined omits it).
+     */
+    async function attemptCompletion(
+      name: string,
+      discoveryAnswers: unknown,
+    ): Promise<{ token: string; res: { status: number; body: unknown } }> {
+      const { token } = await startPending(name, { discoveryAnswers });
+      await verifyChannel(token, 'EMAIL');
+      await verifyChannel(token, 'WHATSAPP');
+      const res = await http
+        .post('/api/auth/registration/password')
+        .send({ resumeToken: token, password: PASSWORD });
+      return { token, res: { status: res.status, body: res.body } };
+    }
+
+    const ACCEPTED_CLIENT = {
+      root: 'own',
+      ownBranch: 'personal',
+      classification: 'CLIENT',
+      discoveryAccepted: true,
+    };
+
+    it('rejects completion when discoveryAnswers is omitted entirely', async () => {
+      const { res } = await attemptCompletion('disc-omitted', undefined);
+      expect(res.status).toBe(403);
+      // Uniform generic line - no discovery-specific detail leaks.
+      expect(JSON.stringify(res.body)).toContain('Invalid or expired code');
+      expect(
+        await prisma.user.count({ where: { email: testEmail('disc-omitted') } }),
+      ).toBe(0);
+    });
+
+    it('rejects completion for an empty {} discovery object', async () => {
+      const { res } = await attemptCompletion('disc-empty', {});
+      expect(res.status).toBe(403);
+      expect(
+        await prisma.user.count({ where: { email: testEmail('disc-empty') } }),
+      ).toBe(0);
+    });
+
+    it('rejects completion when discoveryAccepted is missing', async () => {
+      const { res } = await attemptCompletion('disc-no-accept', {
+        root: 'own',
+        ownBranch: 'personal',
+        classification: 'CLIENT',
+      });
+      expect(res.status).toBe(403);
+      expect(
+        await prisma.user.count({
+          where: { email: testEmail('disc-no-accept') },
+        }),
+      ).toBe(0);
+    });
+
+    it('rejects completion when discoveryAccepted is false', async () => {
+      const { res } = await attemptCompletion('disc-accept-false', {
+        classification: 'CLIENT',
+        discoveryAccepted: false,
+      });
+      expect(res.status).toBe(403);
+    });
+
+    it('rejects completion when classification is missing', async () => {
+      const { res } = await attemptCompletion('disc-no-classification', {
+        root: 'own',
+        discoveryAccepted: true,
+      });
+      expect(res.status).toBe(403);
+    });
+
+    it('rejects completion when classification is an invalid value', async () => {
+      const { res } = await attemptCompletion('disc-bad-classification', {
+        classification: 'MAYBE',
+        discoveryAccepted: true,
+      });
+      expect(res.status).toBe(403);
+    });
+
+    it('rejects completion for malformed field types/values (wrong types + wrong case)', async () => {
+      // Each is a JSON *record* (passes the DTO's record schema) but fails
+      // the server-side acceptance predicate: discoveryAccepted as the
+      // string 'true' (not boolean), classification lower-cased, or a number.
+      const malformed: Array<Record<string, unknown>> = [
+        { classification: 'CLIENT', discoveryAccepted: 'true' },
+        { classification: 'client', discoveryAccepted: true },
+        { classification: 123, discoveryAccepted: true },
+      ];
+      for (const [i, answers] of malformed.entries()) {
+        const name = `disc-malformed-${i}`;
+        const { res } = await attemptCompletion(name, answers);
+        expect(res.status).toBe(403);
+        expect(
+          await prisma.user.count({ where: { email: testEmail(name) } }),
+        ).toBe(0);
+      }
+    });
+
+    it('rejects null / array / scalar discoveryAnswers at /start with 400 (DTO record schema)', async () => {
+      await flushRateLimits();
+      const values: unknown[] = [null, [], ['CLIENT'], 'discovery', 42, true];
+      for (const [i, value] of values.entries()) {
+        const res = await http
+          .post('/api/auth/registration/start')
+          .send(baseStart(`disc-dto-${i}`, { discoveryAnswers: value }));
+        expect(res.status).toBe(400);
+      }
+    });
+
+    it('never creates a User when completion is rejected for invalid discovery (pending survives)', async () => {
+      const { token } = await attemptCompletion('disc-no-user', {});
+      expect(
+        await prisma.user.count({ where: { email: testEmail('disc-no-user') } }),
+      ).toBe(0);
+      // The pending row is NOT deleted on a rejected completion.
+      const pending = await prisma.pendingRegistration.findUnique({
+        where: { email: testEmail('disc-no-user') },
+      });
+      expect(pending).not.toBeNull();
+      expect(hashResumeToken(token)).toBe(pending!.resumeTokenHash);
+    });
+
+    it('completes successfully with a valid accepted discovery snapshot', async () => {
+      const { res } = await attemptCompletion('disc-valid', ACCEPTED_CLIENT);
+      expect(res.status).toBe(201);
+      expect(res.body).toEqual({ status: 'registration_complete' });
+      const user = await prisma.user.findUniqueOrThrow({
+        where: { email: testEmail('disc-valid') },
+      });
+      expect(user.accountType).toBe('CLIENT');
+    });
+
+    it('accepts an ambiguous accepted discovery and preserves clientType: null (never guessed)', async () => {
+      // 'both' is genuinely ambiguous: deriveClientType returns null so the
+      // persona is NEVER silently decided for the user (AGENTS.md §14).
+      const { res } = await attemptCompletion('disc-ambiguous', {
+        root: 'own',
+        ownBranch: 'both',
+        classification: 'CLIENT',
+        discoveryAccepted: true,
+      });
+      expect(res.status).toBe(201);
+      const user = await prisma.user.findUniqueOrThrow({
+        where: { email: testEmail('disc-ambiguous') },
+      });
+      expect(user.accountType).toBe('CLIENT');
+      expect(user.clientType).toBeNull();
+    });
+
+    it('resume preserves an existing accepted snapshot when incoming discovery is omitted or invalid', async () => {
+      const { token } = await startPending('disc-resume-preserve', {
+        discoveryAnswers: ACCEPTED_CLIENT,
+      });
+      const before = await prisma.pendingRegistration.findUniqueOrThrow({
+        where: { email: testEmail('disc-resume-preserve') },
+      });
+
+      // Resume 1: incoming discovery omitted -> stored snapshot preserved.
+      await flushRateLimits();
+      clearDevConsoleOutbox();
+      const omitResume = await http
+        .post('/api/auth/registration/start')
+        .send(
+          baseStart('disc-resume-preserve', {
+            resumeToken: token,
+            discoveryAnswers: undefined,
+          }),
+        );
+      expect(omitResume.status).toBe(201);
+      expect(omitResume.body.status).toBe('pending_resumed');
+      const afterOmit = await prisma.pendingRegistration.findUniqueOrThrow({
+        where: { email: testEmail('disc-resume-preserve') },
+      });
+      expect(afterOmit.discoveryAnswers).toEqual(before.discoveryAnswers);
+
+      // Resume 2: incoming discovery present but NOT accepted -> the
+      // already-accepted stored snapshot is STILL preserved verbatim.
+      const token2 = omitResume.body.resumeToken as string;
+      await flushRateLimits();
+      const invalidResume = await http
+        .post('/api/auth/registration/start')
+        .send(
+          baseStart('disc-resume-preserve', {
+            resumeToken: token2,
+            discoveryAnswers: { discoveryAccepted: false },
+          }),
+        );
+      expect(invalidResume.status).toBe(201);
+      const afterInvalid = await prisma.pendingRegistration.findUniqueOrThrow({
+        where: { email: testEmail('disc-resume-preserve') },
+      });
+      expect(afterInvalid.discoveryAnswers).toEqual(before.discoveryAnswers);
+    });
+
+    it('resume updates the stored snapshot when incoming discovery is valid and accepted', async () => {
+      const { token } = await startPending('disc-resume-update', {
+        discoveryAnswers: ACCEPTED_CLIENT,
+      });
+      const before = await prisma.pendingRegistration.findUniqueOrThrow({
+        where: { email: testEmail('disc-resume-update') },
+      });
+      expect(before.discoveryAnswers).toEqual(
+        expect.objectContaining({ classification: 'CLIENT' }),
+      );
+
+      await flushRateLimits();
+      clearDevConsoleOutbox();
+      const newAccepted = {
+        root: 'mixed',
+        mixedBranch: 'clients',
+        classification: 'SERVICE_PROVIDER',
+        discoveryAccepted: true,
+      };
+      const updated = await http
+        .post('/api/auth/registration/start')
+        .send(
+          baseStart('disc-resume-update', {
+            resumeToken: token,
+            accountType: 'SERVICE_PROVIDER',
+            discoveryAnswers: newAccepted,
+          }),
+        );
+      expect(updated.status).toBe(201);
+      const after = await prisma.pendingRegistration.findUniqueOrThrow({
+        where: { email: testEmail('disc-resume-update') },
+      });
+      expect(after.discoveryAnswers).toEqual(newAccepted);
+    });
+  });
+
   it('normalizes approved phone shapes and rejects everything else (OPEN-2)', async () => {
     await flushRateLimits();
     const ok = await http.post('/api/auth/registration/start').send(
@@ -402,6 +697,8 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
     expect(third.status).toBe(403);
     expect(JSON.stringify(third.body)).toContain('locked');
     expect(third.body.retryAfterSeconds).toBeGreaterThan(0);
+    // Stable machine-readable code for the temporary lock (Decision 016).
+    expect((third.body as { code?: string }).code).toBe('OTP_LOCKED');
 
     // The lock does NOT delete the registration.
     const row = await prisma.pendingRegistration.findUniqueOrThrow({
@@ -429,6 +726,8 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
       .send({ resumeToken: token, channel: 'EMAIL' });
     expect(fourth.status).toBe(403);
     expect(JSON.stringify(fourth.body)).toContain('Resend limit reached');
+    // Stable machine-readable code for the exhausted resend budget.
+    expect((fourth.body as { code?: string }).code).toBe('OTP_RESEND_LIMIT');
   });
 
   it('never stores or returns the raw OTP (hash-only persistence, no bypass)', async () => {

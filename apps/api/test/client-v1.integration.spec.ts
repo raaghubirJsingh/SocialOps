@@ -63,6 +63,11 @@ beforeAll(async () => {
   await prisma.refreshToken.deleteMany({});
   await prisma.emailVerificationToken.deleteMany({});
   await prisma.organizationMembership.deleteMany({});
+  // AdminStepUpChallenge / AdminStepUpSession reference User with
+  // onDelete: Restrict, so they must be cleared BEFORE user.deleteMany()
+  // or the FK fires (observed: AdminStepUpChallenge_userId_fkey).
+  await prisma.adminStepUpChallenge.deleteMany({});
+  await prisma.adminStepUpSession.deleteMany({});
   await prisma.user.deleteMany({});
   const orgCount = await prisma.organization.count();
   console.log('DIAG_ORG_COUNT_BEFORE_CLEANUP', orgCount);
@@ -157,5 +162,121 @@ describe('Client V1 — access control + status authority (locked D1)', () => {
       .set('X-Organization-Id', owner.organizationId)
       .send({ status: 'ACTIVE' });
     expect(denied.status).toBe(403);
+  });
+});
+
+describe('Client V1 — server-side list search (GET /api/clients?q=)', () => {
+  let ownerA: SeededUser;
+  let ownerB: SeededUser;
+
+  const getList = (token: string, orgId: string, q?: string) =>
+    http
+      .get(q === undefined ? '/api/clients' : `/api/clients?q=${encodeURIComponent(q)}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Organization-Id', orgId);
+
+  const createClient = (
+    token: string,
+    orgId: string,
+    body: Record<string, unknown>,
+  ) =>
+    http
+      .post('/api/clients')
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Organization-Id', orgId)
+      .send(body);
+
+  beforeAll(async () => {
+    ownerA = await seedUser('search-a', 'OWNER');
+    ownerB = await seedUser('search-b', 'OWNER');
+    // Agency A: searchable across every supported field.
+    await createClient(ownerA.accessToken, ownerA.organizationId, {
+      type: 'BUSINESS',
+      name: 'Zephyr Holdings',
+      directEmail: testEmail('zephyr-contact'),
+      directPhone: '+15550001234',
+      primaryContactName: 'Priya Raman',
+    });
+    // Agency B: a term that must NEVER leak into Agency A's results.
+    await createClient(ownerB.accessToken, ownerB.organizationId, {
+      type: 'INDIVIDUAL',
+      name: 'Quorum Secret',
+      directEmail: testEmail('quorum'),
+      directPhone: '+15550009999',
+      primaryContactName: 'Quorum Contact',
+    });
+  });
+
+  it('matches within the correct agency on every searchable field', async () => {
+    const byName = await getList(ownerA.accessToken, ownerA.organizationId, 'zephyr');
+    expect(byName.status).toBe(200);
+    expect(byName.body.map((c: { name: string }) => c.name)).toContain('Zephyr Holdings');
+
+    const byEmail = await getList(ownerA.accessToken, ownerA.organizationId, 'zephyr-contact');
+    expect(byEmail.body.length).toBeGreaterThanOrEqual(1);
+
+    const byPhone = await getList(ownerA.accessToken, ownerA.organizationId, '0001234');
+    expect(byPhone.body.length).toBeGreaterThanOrEqual(1);
+
+    const byContact = await getList(ownerA.accessToken, ownerA.organizationId, 'Priya');
+    expect(byContact.body.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('matches case-insensitively', async () => {
+    const lower = await getList(ownerA.accessToken, ownerA.organizationId, 'zephyr holdings');
+    const upper = await getList(ownerA.accessToken, ownerA.organizationId, 'ZEPHYR HOLDINGS');
+    expect(lower.body.length).toBe(1);
+    expect(upper.body.length).toBe(1);
+    expect(lower.body[0].id).toBe(upper.body[0].id);
+  });
+
+  it('NEGATIVE: another agency term yields an empty list (no cross-tenant leak)', async () => {
+    const res = await getList(ownerA.accessToken, ownerA.organizationId, 'Quorum');
+    expect(res.status).toBe(200);
+    expect(res.body.length).toBe(0);
+  });
+
+  it('a TERMINATED relationship is excluded from that agency search', async () => {
+    const term = await createClient(ownerA.accessToken, ownerA.organizationId, {
+      type: 'INDIVIDUAL',
+      name: 'Departing Client',
+      directEmail: testEmail('departing'),
+      directPhone: '+15550007777',
+    });
+    const clientId = term.body.client.id;
+    const before = await getList(ownerA.accessToken, ownerA.organizationId, 'Departing');
+    expect(before.body.length).toBe(1);
+    const terminated = await http
+      .post(`/api/clients/${clientId}/agency-relationship/terminate`)
+      .set('Authorization', `Bearer ${ownerA.accessToken}`)
+      .set('X-Organization-Id', ownerA.organizationId);
+    expect(terminated.status).toBe(201);
+    const after = await getList(ownerA.accessToken, ownerA.organizationId, 'Departing');
+    expect(after.body.length).toBe(0);
+  });
+
+  it('handles wildcard and quote characters literally and rejects >100 chars', async () => {
+    // None of these terms appear literally in any seeded field, so a literal
+    // (parameterised) contains match returns an EMPTY list. If Prisma treated
+    // "%" or "_" as a LIKE wildcard, "%" would match every client (length >= 1)
+    // and this assertion would fail - proving the terms are handled literally.
+    for (const term of ['%', '_', "O'Brien", '100%"_done', '%%%%']) {
+      const res = await getList(ownerA.accessToken, ownerA.organizationId, term);
+      expect(res.status).toBe(200);
+      expect(res.body.length).toBe(0);
+    }
+    const tooLong = await getList(ownerA.accessToken, ownerA.organizationId, 'x'.repeat(101));
+    expect(tooLong.status).toBe(400);
+  });
+
+  it('empty and whitespace-only q behaves exactly like today (no filter)', async () => {
+    const noParam = await getList(ownerA.accessToken, ownerA.organizationId);
+    const empty = await getList(ownerA.accessToken, ownerA.organizationId, '');
+    const whitespace = await getList(ownerA.accessToken, ownerA.organizationId, '   ');
+    expect(empty.status).toBe(200);
+    expect(whitespace.status).toBe(200);
+    const ids = (body: { id: string }[]) => body.map((c) => c.id).sort();
+    expect(ids(empty.body)).toEqual(ids(noParam.body));
+    expect(ids(whitespace.body)).toEqual(ids(noParam.body));
   });
 });

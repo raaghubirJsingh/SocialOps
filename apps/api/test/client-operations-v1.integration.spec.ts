@@ -16,7 +16,12 @@ import request from 'supertest';
 
 import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
+import { assertDisposableTestDatabase } from '../src/common/disposable-database.js';
 import { createActiveUser } from './helpers/active-user.factory.js';
+
+// This suite clears shared tables. Fail closed before connecting or running
+// any cleanup unless the explicitly configured database uses the test suffix.
+assertDisposableTestDatabase(process.env.DATABASE_URL);
 
 if (!process.env.JWT_ACCESS_SECRET)
   process.env.JWT_ACCESS_SECRET = 'integration-cov1-access-32ch';
@@ -344,12 +349,127 @@ describe('Client Operations V1 - Social Accounts', () => {
       .set('X-Organization-Id', agencyA.orgId);
     expect(unknown.status).toBe(404);
   }, 30000);
+
+  it('requires a profileUrl to belong to the account platform', async () => {
+    const agency = await seedOrgUser('sa-agencyP', 'OWNER');
+    const client = await onboardedClient('sa-clientP');
+    await linkAgency(client, agency);
+    const base = `/api/clients/${client.clientId}/social-accounts`;
+    const auth = (req: ReturnType<typeof http.post>) =>
+      req
+        .set('Authorization', `Bearer ${agency.accessToken}`)
+        .set('X-Organization-Id', agency.orgId);
+
+    // --- create: a mismatched URL is a 400 with the approved code ---
+    const mismatch = await auth(http.post(base)).send({
+      platform: 'FACEBOOK',
+      profileUrl: 'https://instagram.com/definitely-not-facebook',
+    });
+    expect(mismatch.status).toBe(400);
+    expect(mismatch.body.code).toBe('SOCIAL_ACCOUNT_URL_PLATFORM_MISMATCH');
+
+    // --- create: a matching URL per platform is accepted (201) ---
+    const accepted = [
+      { platform: 'INSTAGRAM', profileUrl: 'https://www.instagram.com/pahnavastudio' },
+      { platform: 'FACEBOOK', profileUrl: 'https://web.facebook.com/pahnavastudio' },
+      { platform: 'FACEBOOK', profileUrl: 'https://fb.me/pahnavastudio' },
+      { platform: 'YOUTUBE', profileUrl: 'https://m.youtube.com/@channel' },
+      { platform: 'YOUTUBE', profileUrl: 'https://youtu.be/abc' },
+    ];
+    const createdRows: Record<string, { id: string; profileUrl: string }> = {};
+    for (const payload of accepted) {
+      const res = await auth(http.post(base)).send(payload);
+      expect(res.status).toBe(201);
+      expect(res.body.profileUrl).toBe(payload.profileUrl);
+      createdRows[payload.platform] = {
+        id: res.body.id as string,
+        profileUrl: payload.profileUrl,
+      };
+    }
+
+    // --- create: a null URL is still allowed (a URL is optional) ---
+    const noUrl = await auth(http.post(base)).send({
+      platform: 'FACEBOOK',
+      profileUrl: null,
+    });
+    expect(noUrl.status).toBe(201);
+    expect(noUrl.body.profileUrl).toBeNull();
+
+    // --- update: PATCH the INSTAGRAM account to a facebook.com URL -> 400 ---
+    const igId = createdRows.INSTAGRAM!.id;
+
+    const patchMismatch = await auth(http.patch(`${base}/${igId}`)).send({
+      profileUrl: 'https://www.facebook.com/someone',
+    });
+    expect(patchMismatch.status).toBe(400);
+    expect(patchMismatch.body.code).toBe('SOCIAL_ACCOUNT_URL_PLATFORM_MISMATCH');
+
+    // a matching URL on the same account still updates
+    const movedUrl = 'https://www.instagram.com/pahnavastudio-moved';
+    const patchOk = await auth(http.patch(`${base}/${igId}`)).send({
+      profileUrl: movedUrl,
+    });
+    expect(patchOk.status).toBe(200);
+    expect(patchOk.body.profileUrl).toBe(movedUrl);
+    expect(patchOk.body.platform).toBe('INSTAGRAM');
+
+    // --- mismatch WINS over uniqueness: a TAKEN instagram URL submitted on a
+    //     FACEBOOK account is a 400, never a 409 about the other row ---
+    const taken = movedUrl; // now held by the INSTAGRAM row above
+    const mismatchWins = await auth(http.post(base)).send({
+      platform: 'FACEBOOK',
+      profileUrl: taken,
+    });
+    expect(mismatchWins.status).toBe(400);
+    expect(mismatchWins.body.code).toBe('SOCIAL_ACCOUNT_URL_PLATFORM_MISMATCH');
+    // ...and it must not be the tenant-blind 409 either
+    expect(mismatchWins.body.code).not.toBe('SOCIAL_ACCOUNT_URL_UNAVAILABLE');
+
+    // the same taken URL on the CORRECT platform still answers 409
+    const takenRightPlatform = await auth(http.post(base)).send({
+      platform: 'INSTAGRAM',
+      profileUrl: taken,
+    });
+    expect(takenRightPlatform.status).toBe(409);
+    expect(takenRightPlatform.body.code).toBe('SOCIAL_ACCOUNT_URL_UNAVAILABLE');
+
+    // --- update WITHOUT profileUrl still works (legacy mismatched rows stay
+    //     editable), and clearing the URL with null is never validated ---
+    const patchOtherField = await auth(http.patch(`${base}/${igId}`)).send({
+      displayName: 'Renamed without touching the URL',
+    });
+    expect(patchOtherField.status).toBe(200);
+    expect(patchOtherField.body.displayName).toBe('Renamed without touching the URL');
+
+    const patchClear = await auth(http.patch(`${base}/${igId}`)).send({
+      profileUrl: null,
+    });
+    expect(patchClear.status).toBe(200);
+    expect(patchClear.body.profileUrl).toBeNull();
+
+    // --- the 400 body never reveals another tenant's data ---
+    const serialised = JSON.stringify(mismatchWins.body);
+    expect(serialised).not.toContain(client.clientId);
+    expect(serialised).not.toContain(agency.orgId);
+    expect(serialised).not.toMatch(/clientId|organizationId|orgId|tenant/i);
+  }, 30000);
 });
 
 describe('Client Operations V1 - Content workflows', () => {
   it('walks DRAFT -> review -> changes -> resubmit -> Final Confirmation, hashing the approved text', async () => {
     const agency = await seedOrgUser('ct-agency1', 'OWNER');
     const client = await onboardedClient('ct-client1');
+  // Decision 023 (GA 2026-10-19): content creation requires at least one active SocialAccount for the client.
+  // This fixture gives the client one here so content creation reaches the API boundary (201) instead of SOCIAL_ACCOUNT_REQUIRED (409).
+  await prisma.socialAccount.create({
+    data: {
+      clientId: client.clientId,
+      platform: 'INSTAGRAM',
+      handle: `@${client.clientId}-active`,
+      displayName: `Active ${client.clientId} social account`,
+      isActive: true,
+    },
+  });
     await linkAgency(client, agency);
     const base = `/api/clients/${client.clientId}/content`;
 
@@ -390,7 +510,8 @@ describe('Client Operations V1 - Content workflows', () => {
       .set('X-Client-Id', client.clientId)
       .send({ to: 'CHANGES_REQUESTED', note: 'tighten the opening' });
     expect(changes.status).toBe(201);
-    expect(changes.body.status).toBe('CHANGES_REQUESTED');
+    expect(changes.body.state).toBe('draft_in_progress');
+    expect(changes.body).not.toHaveProperty('status');
 
     // agency edits the requested text and resubmits
     const editedBody = 'Second draft body';
@@ -416,10 +537,24 @@ describe('Client Operations V1 - Content workflows', () => {
       .set('X-Client-Id', client.clientId)
       .send({ note: 'approved by owner' });
     expect(confirmed.status).toBe(201);
-    expect(confirmed.body.status).toBe('APPROVED');
-    expect(confirmed.body.finalConfirmedAt).not.toBeNull();
-    expect(confirmed.body.finalConfirmedByUserId).toBe(client.id);
-    expect(confirmed.body.finalConfirmedRevisionId).not.toBeNull();
+    // Decision 017: the preserved V1 final-confirmation door still produces an
+    // APPROVED row, but in the client-safe projection only FINAL_CONFIRMED
+    // renders as 'confirmed' - a legacy APPROVED row shows draft_in_progress
+    // (never confirmed) until it is reconfirmed via the Phase 2 lock.
+    expect(confirmed.body.state).toBe('draft_in_progress');
+    expect(confirmed.body).not.toHaveProperty('status');
+    expect(confirmed.body).not.toHaveProperty('finalConfirmedAt');
+    const confirmedRow = await prisma.content.findUniqueOrThrow({
+      where: { id: contentId },
+      select: {
+        finalConfirmedAt: true,
+        finalConfirmedByUserId: true,
+        finalConfirmedRevisionId: true,
+      },
+    });
+    expect(confirmedRow.finalConfirmedAt).not.toBeNull();
+    expect(confirmedRow.finalConfirmedByUserId).toBe(client.id);
+    expect(confirmedRow.finalConfirmedRevisionId).not.toBeNull();
 
     // the confirmed revision carries the SHA-256 of the exact approved text
     const revisions = await http
@@ -428,7 +563,7 @@ describe('Client Operations V1 - Content workflows', () => {
       .set('X-Client-Id', client.clientId);
     expect(revisions.status).toBe(200);
     const newest = revisions.body[0] as { contentHash: string; id: string };
-    expect(newest.id).toBe(confirmed.body.finalConfirmedRevisionId);
+    expect(newest.id).toBe(confirmedRow.finalConfirmedRevisionId);
     expect(newest.contentHash).toBe(sha256Hex(`${title}\n${editedBody}`));
 
     // the append-only trail records the review decisions and the confirmation
@@ -459,6 +594,17 @@ describe('Client Operations V1 - Content workflows', () => {
     const member = await seedOrgUser('ct-agency2-member', 'MEMBER');
     const otherAgency = await seedOrgUser('ct-agency3', 'OWNER');
     const client = await onboardedClient('ct-client2');
+  // Decision 023 (GA 2026-10-19): content creation requires at least one active SocialAccount for the client.
+  // This fixture gives the client one here so content creation reaches the API boundary (201) instead of SOCIAL_ACCOUNT_REQUIRED (409).
+  await prisma.socialAccount.create({
+    data: {
+      clientId: client.clientId,
+      platform: 'INSTAGRAM',
+      handle: `@${client.clientId}-active`,
+      displayName: `Active ${client.clientId} social account`,
+      isActive: true,
+    },
+  });
     await linkAgency(client, agency);
     const base = `/api/clients/${client.clientId}/content`;
 
@@ -540,7 +686,10 @@ describe('Client Operations V1 - Content workflows', () => {
       .set('X-Client-Id', client.clientId)
       .send({});
     expect(confirmed.status).toBe(201);
-    expect(confirmed.body.status).toBe('APPROVED');
+    // Decision 017: the legacy APPROVED row renders as draft_in_progress in
+    // the client-safe projection (only FINAL_CONFIRMED is 'confirmed').
+    expect(confirmed.body.state).toBe('draft_in_progress');
+    expect(confirmed.body).not.toHaveProperty('status');
 
     const revert = await http
       .patch(`${base}/${contentId}`)
@@ -594,6 +743,17 @@ describe('Client Operations V1 - RawData intake (insert-only)', () => {
     const agency = await seedOrgUser('rd-agency1', 'OWNER');
     const client = await onboardedClient('rd-client1');
     const otherClient = await onboardedClient('rd-client2');
+  // Decision 023 (GA 2026-10-19): content creation requires at least one active SocialAccount for the client.
+  // This fixture gives the client one here so content creation reaches the API boundary (201) instead of SOCIAL_ACCOUNT_REQUIRED (409).
+  await prisma.socialAccount.create({
+    data: {
+      clientId: otherClient.clientId,
+      platform: 'INSTAGRAM',
+      handle: `@${otherClient.clientId}-active`,
+      displayName: `Active ${otherClient.clientId} social account`,
+      isActive: true,
+    },
+  });
     await linkAgency(client, agency);
 
     // client intake of extracted text
@@ -697,3 +857,4 @@ describe('Client Operations V1 - RawData intake (insert-only)', () => {
     expect(strangerList.status).toBe(403);
   }, 40000);
 });
+

@@ -216,7 +216,9 @@ describe('Progressive gating - ACTIVE client content dependency', () => {
     const transitioned = await auth(
       http.post(`${base}/${contentId}/status`).send({ to: 'IN_REVIEW' }),
     );
-    expect(transitioned.status).toBe(200);
+    // The status-transition endpoint is a POST with no @HttpCode override, so
+    // NestJS defaults it to 201 — matching every other content spec.
+    expect(transitioned.status).toBe(201);
   }, 30000);
 
   it('keeps RawData independent of the social-account gate', async () => {
