@@ -206,6 +206,11 @@ model User {
   // SUPERADMIN request.
   adminStepUpChallenges AdminStepUpChallenge[]
   adminStepUpSessions   AdminStepUpSession[]
+
+  // Mandatory Login OTP: one active challenge per user at a time. Carries
+  // no authorization weight on its own; LoginOtpService verifies the
+  // challenge against the DB on every login.
+  loginOtpChallenges LoginOtpChallenge[]
 }
 
 /// Platform vs external Service-Provider classification (Decision 012).
@@ -729,6 +734,7 @@ enum PlatformPermission {
   PLATFORM_ROLE_GRANT
   PLATFORM_ROLE_REVOKE
   PLATFORM_AUDIT_READ
+  PLATFORM_SETTINGS_MANAGE
 }
 
 /// Verification channel for a SuperAdmin step-up OTP challenge.
@@ -1154,4 +1160,61 @@ model AdminAuditEvent {
   @@index([actorUserId, createdAt])
   @@index([targetType, targetId])
   @@index([action, createdAt])
+}
+
+/// System-wide configuration (Decision 022).
+/// Stores global settings that can be updated by a SuperAdmin.
+/// Values stored here take precedence over environment variables.
+model GlobalSetting {
+  id              String   @id @default(uuid()) @db.Uuid
+  key             String   @unique
+  value           String
+  /// Optional description for UI hints.
+  description     String?
+  updatedAt       DateTime @updatedAt
+  /// Audit link: which SuperAdmin last modified this setting.
+  updatedByUserId String?  @db.Uuid
+
+  @@index([key])
+}
+
+// ---------------------------------------------------------------------------
+// Mandatory Login OTP (single-box login with email OTP).
+//
+// Every sign-in path (SERVICE_PROVIDER, CLIENT, and Employee) requires a
+// valid email OTP in addition to the password. This model mirrors
+// AdminStepUpChallenge: one active challenge per user at a time, Argon2id
+// hash only, 5-minute expiry, single use, 3 wrong attempts -> 1-hour lock,
+// resend quota of 3. The 60-second resend cooldown is enforced server-side
+// via lastSentAt (see LoginOtpService).
+// ---------------------------------------------------------------------------
+
+/// Verification channel for a login OTP challenge. V1 EMAIL only.
+enum LoginOtpChannel {
+  EMAIL
+}
+
+/// A 6-digit numeric OTP challenge for a login attempt. Only the Argon2id
+/// hash of the code is stored; the raw OTP never touches the database.
+/// Exactly one active challenge per user: issuing a new challenge
+/// invalidates the previous one (userId unique).
+model LoginOtpChallenge {
+  id            String          @id @default(uuid()) @db.Uuid
+  userId        String          @db.Uuid
+  channel       LoginOtpChannel
+  codeHash      String
+  expiresAt     DateTime
+  usedAt        DateTime?
+  attempts      Int             @default(0)
+  resendCount   Int             @default(0)
+  lockedUntil   DateTime?
+  /// Timestamp of the last SUCCESSFUL OTP dispatch. Used to enforce the
+  /// 60-second resend cooldown (see LoginOtpService.resend).
+  lastSentAt    DateTime?
+  createdAt     DateTime        @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId])
+  @@index([expiresAt])
 }

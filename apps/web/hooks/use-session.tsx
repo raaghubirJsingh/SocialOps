@@ -7,13 +7,15 @@ import {
   login as loginRequest,
   logout as logoutRequest,
   refreshAccessToken,
+  verifyLoginOtp as verifyLoginOtpRequest,
+  resendLoginOtp as resendLoginOtpRequest,
 } from '@/lib/auth-client';
 import {
   setSessionSyncListener,
   setTokenRefreshInvoker,
 } from '@/lib/api';
 import { clearSession, loadSession } from '@/lib/session-storage';
-import type { LoginRequest, Session } from '@/types/auth';
+import type { LoginRequest, LoginResponse, Session } from '@/types/auth';
 
 /**
  * Session context for the authenticated user.
@@ -39,7 +41,9 @@ interface SessionContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: ApiError | null;
-  login: (input: LoginRequest) => Promise<Session>;
+  login: (input: LoginRequest) => Promise<LoginResponse>;
+  verifyLoginOtp: (input: { email: string; otp: string }) => Promise<Session>;
+  resendLoginOtp: (email: string) => Promise<{ sendStatus: 'sent' | 'unavailable'; resendRemaining: number }>;
   logout: () => Promise<void>;
   clearError: () => void;
 }
@@ -59,13 +63,60 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = React.useState<ApiError | null>(null);
 
   const login = React.useCallback(
-    async (input: LoginRequest): Promise<Session> => {
+    async (input: LoginRequest): Promise<LoginResponse> => {
       setIsLoading(true);
       setError(null);
       try {
         const next = await loginRequest(input);
+        // login() now returns either LoginOtpRequiredResponse or Session
+        // If it returns otp_required, we don't save a session yet
+        if ('accessToken' in next) {
+          setSession(next);
+        }
+        return next;
+      } catch (err) {
+        const apiError =
+          err instanceof ApiError
+            ? err
+            : new ApiError(0, 'Network error. Please try again.', null);
+        setError(apiError);
+        throw apiError;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [],
+  );
+
+  const verifyLoginOtp = React.useCallback(
+    async (input: { email: string; otp: string }): Promise<Session> => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const next = await verifyLoginOtpRequest(input);
         setSession(next);
         return next;
+      } catch (err) {
+        const apiError =
+          err instanceof ApiError
+            ? err
+            : new ApiError(0, 'Network error. Please try again.', null);
+        setError(apiError);
+        throw apiError;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [],
+  );
+
+  const resendLoginOtp = React.useCallback(
+    async (email: string): Promise<{ sendStatus: 'sent' | 'unavailable'; resendRemaining: number }> => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await resendLoginOtpRequest(email);
+        return result;
       } catch (err) {
         const apiError =
           err instanceof ApiError
@@ -136,10 +187,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       isLoading,
       error,
       login,
+      verifyLoginOtp,
+      resendLoginOtp,
       logout,
       clearError,
     }),
-    [session, isLoading, error, login, logout, clearError],
+    [session, isLoading, error, login, verifyLoginOtp, resendLoginOtp, logout, clearError],
   );
 
   return (

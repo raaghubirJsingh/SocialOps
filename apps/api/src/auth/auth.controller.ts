@@ -7,8 +7,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
   ApiBearerAuth,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
@@ -38,6 +40,8 @@ import type { ResendVerificationDto } from './dto/resend-verification.dto.js';
 import type { RegisterResult } from './dto/register-response.dto.js';
 import type { LoginResult } from './dto/login-response.dto.js';
 import type { TokenPair } from './auth.service.js';
+import { verifyLoginOtpSchema } from './dto/verify-login-otp.dto.js';
+import type { VerifyLoginOtpDto } from './dto/verify-login-otp.dto.js';
 
 /**
  * Stage B7 REST authentication endpoints.
@@ -119,31 +123,113 @@ export class AuthController {
   }
 
   /**
-   * Authenticate an existing user.
+   * Authenticate an existing user (step 1 of 2).
    *
    * Public authentication endpoint:
    * - No JWT required.
    * - No organization context required.
+   *
+   * Mandatory email OTP (single-box login): after the password is
+   * validated, this endpoint issues a login OTP challenge and returns
+   * `otp_required`. The user must verify the OTP via
+   * POST /api/auth/login/verify-otp before tokens are issued.
+   * No tokens are ever returned from this endpoint.
    */
   @Post('login')
   @PublicAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Authenticate with email and password and return tokens.',
+    summary:
+      'Authenticate with email and password (step 1 of 2). Returns otp_required with a challenge; verify via POST /api/auth/login/verify-otp.',
     description:
-      'Returns 401 on unknown email, wrong password, or inactive account. Returns 200 with a fresh token pair and the authenticated user identity (id, email, fullName, accountType) on success. accountType is product metadata (AGENTS.md §17) - not a role, not an authorization state.',
+      'Returns 401 on unknown email, wrong password, or inactive account. Returns 200 with { status: "otp_required", email, challengeExpiresAt } on success. The OTP must be verified via POST /api/auth/login/verify-otp before tokens are issued. accountType is product metadata (AGENTS.md §17) - not a role, not an authorization state.',
   })
   @ApiOkResponse({
     description:
-      'Authenticated. Returns access/refresh token pair and the user identity fields needed to render the post-login UI.',
+      'OTP challenge issued. Returns { status: "otp_required", email, challengeExpiresAt }. The frontend must present an OTP input and call POST /api/auth/login/verify-otp.',
   })
   @ApiUnauthorizedResponse({
     description: 'Invalid email or password.',
+  })
+  @ApiForbiddenResponse({
+    description: 'Account is deactivated or email not verified.',
   })
   login(
     @Body(new ZodValidationPipe(loginSchema)) dto: LoginDto,
   ): Promise<LoginResult> {
     return this.authService.login(dto);
+  }
+
+  /**
+   * Verify the login OTP and issue the token pair (step 2 of 2).
+   *
+   * Public authentication endpoint:
+   * - No JWT required.
+   * - No organization context required.
+   *
+   * This is the second factor of the mandatory email OTP login flow.
+   * The user has already validated their password (via POST /api/auth/
+   * login) and received an OTP challenge. This endpoint verifies the
+   * OTP and, on success, issues the access/refresh token pair.
+   */
+  @Post('login/verify-otp')
+  @PublicAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Verify the login OTP and issue the token pair (step 2 of 2).',
+    description:
+      'Returns 401 if the email is unknown or the account is inactive/unverified. Returns 400 if the OTP is invalid or expired. Returns 403 if the challenge is locked (3 wrong attempts -> 1 hour). Returns 200 with a fresh token pair and the authenticated user identity on success.',
+  })
+  @ApiOkResponse({
+    description:
+      'OTP verified. Returns access/refresh token pair and the user identity fields needed to render the post-login UI.',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Invalid email or password.',
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid or expired OTP.',
+  })
+  @ApiForbiddenResponse({
+    description: 'Challenge locked (3 wrong attempts -> 1 hour).',
+  })
+  verifyLoginOtp(
+    @Body(new ZodValidationPipe(verifyLoginOtpSchema))
+    dto: VerifyLoginOtpDto,
+  ): Promise<LoginResult> {
+    return this.authService.verifyLoginOtp(dto.email, dto.otp);
+  }
+
+  /**
+   * Resend the login OTP.
+   *
+   * Public authentication endpoint:
+   * - No JWT required.
+   * - No organization context required.
+   *
+   * Enforces a 60-second resend cooldown and a maximum of 3 successful
+   * resends. Returns 429 when the cooldown is active.
+   */
+  @Post('login/otp/resend')
+  @PublicAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Resend the login OTP.',
+    description:
+      'Enforces a 60-second resend cooldown and a maximum of 3 successful resends. Returns 429 when the cooldown is active. Returns 403 when the resend limit is reached or the challenge is locked.',
+  })
+  @ApiOkResponse({
+    description: 'OTP resent. Returns { sendStatus, resendRemaining }.',
+  })
+  @ApiForbiddenResponse({
+    description: 'Resend limit reached or challenge locked.',
+  })
+  resendLoginOtp(
+    @Body(new ZodValidationPipe(resendVerificationSchema))
+    dto: ResendVerificationDto,
+  ): Promise<{ sendStatus: 'sent' | 'unavailable'; resendRemaining: number }> {
+    return this.authService.resendLoginOtp(dto.email);
   }
 
   /**

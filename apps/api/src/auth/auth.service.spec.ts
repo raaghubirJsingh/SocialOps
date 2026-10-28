@@ -27,6 +27,12 @@ function makePrismaMock(overrides: Record<string, unknown> = {}) {
       updateMany: jest.fn(),
       create: jest.fn(),
     },
+    loginOtpChallenge: {
+      findUnique: jest.fn(),
+      upsert: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+    },
     $transaction: jest.fn(),
     ...overrides,
   };
@@ -49,6 +55,14 @@ function makeJwtMock() {
   } as unknown as JwtService;
 }
 
+function makeLoginOtpMock() {
+  return {
+    issueChallenge: jest.fn(async () => ({ sendStatus: 'sent' as const, expiresAt: new Date(Date.now() + 300_000) })),
+    verify: jest.fn(async () => ({ outcome: 'verified' as const })),
+    resend: jest.fn(async () => ({ sendStatus: 'sent' as const, resendRemaining: 2 })),
+  };
+}
+
 function makeService(prismaOverrides: Record<string, unknown> = {}) {
   process.env.JWT_ACCESS_SECRET = JWT_ACCESS_SECRET;
   process.env.JWT_REFRESH_SECRET = JWT_REFRESH_SECRET;
@@ -67,22 +81,25 @@ function makeService(prismaOverrides: Record<string, unknown> = {}) {
   const provisioning = {
     ensureForServiceProvider: jest.fn(async () => undefined),
   };
+  const loginOtp = makeLoginOtpMock();
   return {
     service: new AuthService(
       prisma,
       jwt,
       provisioning as unknown as OrganizationProvisioningService,
+      loginOtp as any, // cast to avoid Jest mock typing issues
     ),
     prisma,
     jwt,
     provisioning,
+    loginOtp,
   };
 }
 
 describe('AuthService', () => {
   describe('login', () => {
-    it('returns token pair and user identity for valid credentials', async () => {
-      const { service, prisma } = makeService();
+    it('returns otp_required for valid credentials (step 1 of 2)', async () => {
+      const { service, prisma, loginOtp } = makeService();
       const argon2 = await import('argon2');
       const hash = await argon2.hash('Password123!', { type: argon2.argon2id });
       (prisma.user.findUnique as ReturnType<typeof jest.fn>).mockResolvedValue({
@@ -101,19 +118,18 @@ describe('AuthService', () => {
       const result = await service.login({
         email: 'user@example.com', password: 'Password123!',
       });
-      expect(result.accessToken).toBeTruthy();
-      expect(result.refreshToken).toBeTruthy();
-      // The login response carries the user's identity so the
-      // frontend can greet by Full Name and filter the sidebar by
-      // accountType without an extra round-trip (AGENTS.md §17).
-      expect(result.user).toEqual({
-        id: 'user-1',
+      // Now returns otp_required, not tokens
+      expect(result).toEqual(expect.objectContaining({
+        status: 'otp_required',
         email: 'user@example.com',
-        fullName: 'Service Provider E2E',
-        accountType: 'SERVICE_PROVIDER',
-        // Derived from employeeProfile === null (Employee Module V1).
-        isEmployee: false,
-      });
+        challengeExpiresAt: expect.any(String),
+      }));
+      // Verify that LoginOtpService.issueChallenge was called
+      expect(loginOtp.issueChallenge).toHaveBeenCalledWith(
+        { id: 'user-1', email: 'user@example.com' },
+        'EMAIL',
+        { resetAttempts: false, countResend: false },
+      );
     });
 
     it('reports isEmployee true when an EmployeeProfile row exists', async () => {
@@ -138,8 +154,11 @@ describe('AuthService', () => {
       });
       // UI routing hint ONLY — EmployeeContextGuard remains the
       // server-side authority, re-verified per request.
-      expect(result.user.isEmployee).toBe(true);
-      expect(result.user.accountType).toBeNull();
+      expect(result).toEqual(expect.objectContaining({
+        status: 'otp_required',
+        email: 'employee@example.com',
+        challengeExpiresAt: expect.any(String),
+      }));
     });
 
     it('returns null fullName/accountType for a pre-migration user row', async () => {
@@ -159,8 +178,11 @@ describe('AuthService', () => {
       const result = await service.login({
         email: 'legacy@example.com', password: 'Password123!',
       });
-      expect(result.user.fullName).toBeNull();
-      expect(result.user.accountType).toBeNull();
+      expect(result).toEqual(expect.objectContaining({
+        status: 'otp_required',
+        email: 'legacy@example.com',
+        challengeExpiresAt: expect.any(String),
+      }));
     });
 
     it('does not leak passwordHash in the login response', async () => {
@@ -179,12 +201,15 @@ describe('AuthService', () => {
       const result = await service.login({
         email: 'user@example.com', password: 'Password123!',
       });
-      // The new response shape must NOT carry the Argon2id hash or any
+      // The otp_required response must NOT carry the Argon2id hash or any
       // other server-managed field (AGENTS.md §8).
       expect(result).not.toHaveProperty('passwordHash');
-      expect(result.user).not.toHaveProperty('passwordHash');
-      expect(result.user).not.toHaveProperty('isActive');
-      expect(result.user).not.toHaveProperty('emailVerifiedAt');
+      expect(result).not.toHaveProperty('isActive');
+      expect(result).not.toHaveProperty('emailVerifiedAt');
+      expect(result).not.toHaveProperty('fullName');
+      expect(result).not.toHaveProperty('accountType');
+      expect(result).not.toHaveProperty('accessToken');
+      expect(result).not.toHaveProperty('refreshToken');
     });
 
     it('rejects login for an unverified (emailVerifiedAt null) user', async () => {

@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-
   ForbiddenException,
   Injectable,
   Logger,
@@ -20,6 +19,13 @@ import type { RegisterResult } from './dto/register-response.dto.js';
 import type { LoginResult } from './dto/login-response.dto.js';
 import { isAuthDevAutoVerifyRegister } from './dev-auto-verify.js';
 import { maybeLogVerificationUrl } from './email-audit.js';
+import { LoginOtpService } from './login-otp.service.js';
+import type { LoginOtpChannel } from '@prisma/client';
+import {
+  LOGIN_OTP_INVALID_MESSAGE,
+  LOGIN_OTP_LOCKED_MESSAGE,
+  LOGIN_OTP_ERROR_CODES,
+} from './constants/login-otp.constants.js';
 
 export interface TokenPair {
   accessToken: string;
@@ -40,6 +46,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly organizationProvisioning: OrganizationProvisioningService,
+    private readonly loginOtp: LoginOtpService,
   ) {}
 
   private async hashPassword(password: string): Promise<string> {
@@ -355,6 +362,71 @@ export class AuthService {
     // first successful login. Idempotent.
     await this.organizationProvisioning.ensureForServiceProvider(user.id);
 
+    // Mandatory email OTP (single-box login): after the password is
+    // validated, issue a login OTP challenge. The user must verify the
+    // OTP before tokens are issued. This is the ONLY path to tokens.
+    const { expiresAt } = await this.loginOtp.issueChallenge(
+      { id: user.id, email: user.email },
+      'EMAIL',
+      { resetAttempts: false, countResend: false },
+    );
+
+    return {
+      status: 'otp_required',
+      email: user.email,
+      challengeExpiresAt: expiresAt.toISOString(),
+    };
+  }
+
+  /**
+   * Verify the login OTP and issue the token pair.
+   *
+   * This is the second factor of the mandatory email OTP login flow.
+   * The user has already validated their password (via /login) and
+   * received an OTP challenge. This method verifies the OTP and, on
+   * success, issues the access/refresh token pair and the user identity.
+   */
+  async verifyLoginOtp(
+    email: string,
+    otp: string,
+  ): Promise<LoginResult> {
+    // Look up the user by email. The user must exist and be active
+    // (the /login endpoint already validated these, but we re-check
+    // here for defense-in-depth and to resolve the userId).
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        isActive: true,
+        emailVerifiedAt: true,
+        fullName: true,
+        accountType: true,
+        employeeProfile: { select: { userId: true } },
+        isSocialOpsAdmin: true,
+      },
+    });
+
+    if (!user || !user.isActive || !user.emailVerifiedAt) {
+      // Uniform response: do not reveal whether the email exists
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    const result = await this.loginOtp.verify(user.id, 'EMAIL', otp);
+
+    if (result.outcome === 'invalid') {
+      throw new BadRequestException(LOGIN_OTP_INVALID_MESSAGE);
+    }
+
+    if (result.outcome === 'locked') {
+      throw new ForbiddenException({
+        code: LOGIN_OTP_ERROR_CODES.OTP_LOCKED,
+        message: LOGIN_OTP_LOCKED_MESSAGE,
+        retryAfterSeconds: result.retryAfterSeconds,
+      });
+    }
+
+    // Success: issue the token pair
     const tokens = await this.persistTokensForUser(user.id, user.email, user.accountType);
     return {
       accessToken: tokens.accessToken,
@@ -364,19 +436,37 @@ export class AuthService {
         email: user.email,
         fullName: user.fullName,
         accountType: user.accountType,
-        // Employee Module V1: derived from the 1:1 EmployeeProfile
-        // relation (UI routing hint only — the server-side authority
-        // is EmployeeContextGuard, verified per request).
         isEmployee: user.employeeProfile !== null,
-        // SuperAdmin Module (Decision 020): derived from the User
-        // row's isSocialOpsAdmin flag (UI routing hint only — every
-        // SUPERADMIN route independently re-verifies the flag and
-        // requires a fresh step-up session via AdminStepUpGuard).
         isSocialOpsAdmin: user.isSocialOpsAdmin,
       },
-      // Convenience mirror of `user.email` retained for backward
-      // compatibility with code that reads `session.email` directly.
       email: user.email,
+    };
+  }
+
+  /**
+   * Resend the login OTP for a user.
+   *
+   * This is a public endpoint (no JWT required). The user is identified
+   * by email. The resend enforces a 60-second cooldown and a maximum
+   * of 3 successful resends.
+   */
+  async resendLoginOtp(
+    email: string,
+  ): Promise<{ sendStatus: 'sent' | 'unavailable'; resendRemaining: number }> {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true, isActive: true, emailVerifiedAt: true },
+    });
+
+    if (!user || !user.isActive || !user.emailVerifiedAt) {
+      // Uniform response: do not reveal whether the email exists
+      return { sendStatus: 'unavailable', resendRemaining: 0 };
+    }
+
+    const result = await this.loginOtp.resend(user.id, 'EMAIL');
+    return {
+      sendStatus: result.sendStatus,
+      resendRemaining: result.resendRemaining,
     };
   }
 

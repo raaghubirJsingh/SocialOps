@@ -5,11 +5,11 @@ import type {
   AdminStepUpResendResponse,
   AdminStepUpVerifyRequest,
   AdminStepUpVerifyResponse,
-  AuthenticatedUser,
   GenericStatusResponse,
   LogoutRequest,
   LoginRequest,
-    RefreshRequest,
+  LoginResponse,
+  RefreshRequest,
   OtpResendRequest,
   OtpResendResponse,
   OtpVerifyRequest,
@@ -45,22 +45,7 @@ import { clearSession, saveSession } from './session-storage';
  * creating an import cycle back into this file.
  */
 
-/**
- * Login response shape from POST /api/auth/login.
- *
- * The endpoint returns the access/refresh token pair AND the
- * authenticated user identity fields (id, email, fullName,
- * accountType) needed to render the post-login UI. The identity
- * fields are non-secret product data, not authorization state
- * (AGENTS.md §7, §17).
- */
-interface LoginResponse {
-  accessToken: string;
-  refreshToken: string;
-  user: AuthenticatedUser;
-}
-
-export async function login(input: LoginRequest): Promise<Session> {
+export async function login(input: LoginRequest): Promise<LoginResponse> {
   const response = await apiFetch<LoginResponse>('/auth/login', {
     method: 'POST',
     body: input,
@@ -68,14 +53,67 @@ export async function login(input: LoginRequest): Promise<Session> {
   // The session identity comes from the backend login response, NOT
   // from the login form input. This ensures the displayed Full Name
   // and account type reflect the server's view (AGENTS.md §17).
-  const session: Session = {
-    accessToken: response.accessToken,
-    refreshToken: response.refreshToken,
-    user: response.user,
-    email: response.user.email,
-  };
-  saveSession(session);
-  return session;
+  if ('accessToken' in response) {
+    const session: Session = {
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken,
+      user: response.user,
+      email: response.user.email,
+    };
+    saveSession(session);
+  }
+  return response;
+}
+
+/**
+ * Mandatory email OTP (single-box login): step 2 of 2.
+ *
+ * POST /api/auth/login/verify-otp — verifies the OTP and issues the
+ * token pair. On success, saves the session and returns it.
+ */
+export interface VerifyLoginOtpRequest {
+  email: string;
+  otp: string;
+}
+
+export async function verifyLoginOtp(
+  input: VerifyLoginOtpRequest,
+): Promise<Session> {
+  const response = await apiFetch<LoginResponse>('/auth/login/verify-otp', {
+    method: 'POST',
+    body: input,
+  });
+  if ('accessToken' in response) {
+    const session: Session = {
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken,
+      user: response.user,
+      email: response.user.email,
+    };
+    saveSession(session);
+    return session;
+  }
+  throw new ApiError(400, 'Invalid or expired code', null);
+}
+
+/**
+ * Mandatory email OTP (single-box login): resend the OTP.
+ *
+ * POST /api/auth/login/otp/resend — enforces a 60-second cooldown
+ * and a maximum of 3 successful resends.
+ */
+export interface LoginOtpResendResponse {
+  sendStatus: 'sent' | 'unavailable';
+  resendRemaining: number;
+}
+
+export async function resendLoginOtp(
+  email: string,
+): Promise<LoginOtpResendResponse> {
+  return apiFetch<LoginOtpResendResponse>('/auth/login/otp/resend', {
+    method: 'POST',
+    body: { email },
+  });
 }
 
 /**
