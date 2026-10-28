@@ -16,6 +16,7 @@ module.exports = {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   maxWorkers: 1,
+  testTimeout: 30000,
   extensionsToTreatAsEsm: ['.ts'],
   transform: {
     '^.+\\.[tj]sx?$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json', useESM: true }],
