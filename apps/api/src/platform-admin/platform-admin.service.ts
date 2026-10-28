@@ -1,5 +1,6 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { AdminAuditEvent } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuthService } from '../auth/auth.service.js';
 import { GrantPlatformAdminDto, RevokePlatformAdminDto, BootstrapPlatformAdminDto, PlatformAdminListQueryDto, ALL_PLATFORM_PERMISSIONS } from './dto/platform-admin.dto.js';
@@ -348,5 +349,46 @@ export class PlatformAdminService {
         socialOpsAdminRevokedAt: true,
       },
     }) as Promise<PlatformAdminInfo | null>;
+  }
+
+  /**
+   * List cross-tenant audit events (paginated, cursor-based).
+   * Returns the insert-only AdminAuditEvent trail.
+   * Supports optional filtering by action and targetType.
+   */
+  async listAuditLogs(
+    page: number = 1,
+    limit: number = 25,
+    cursor?: string,
+    action?: string,
+    targetType?: string,
+    actorUserId?: string,
+  ): Promise<{
+    data: AdminAuditEvent[];
+    meta: { page: number; limit: number; total: number; hasNextPage: boolean; hasPrevPage: boolean };
+  }> {
+    const where: Prisma.AdminAuditEventWhereInput = {
+      ...(cursor ? { id: { gt: cursor } } : {}),
+      ...(action ? { action: { contains: action } } : {}),
+      ...(targetType ? { targetType } : {}),
+    };
+
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.adminAuditEvent.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit + 1,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      }),
+      this.prisma.adminAuditEvent.count({ where }),
+    ]);
+
+    const hasNextPage = data.length > limit;
+    if (hasNextPage) data.pop();
+
+    return {
+      data,
+      meta: { page, limit, total, hasNextPage, hasPrevPage: page > 1 },
+    };
   }
 }

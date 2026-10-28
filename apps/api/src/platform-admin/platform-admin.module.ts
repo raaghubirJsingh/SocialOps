@@ -2,11 +2,13 @@ import { Module } from '@nestjs/common';
 
 import { PrismaModule } from '../prisma/prisma.module.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { AdminStepUpModule } from '../admin/admin-step-up.module.js';
 import { PlatformAdminService } from './platform-admin.service.js';
 import { PlatformAdminController } from './platform-admin.controller.js';
 import { PlatformAdminOrganizationsService } from './platform-admin-organizations.service.js';
 import { PlatformAdminUsersService } from './platform-admin-users.service.js';
 import { PlatformAdminClientsService } from './platform-admin-clients.service.js';
+import { PlatformAdminEmployeesService } from './platform-admin-employees.service.js';
 import { PlatformPermissionGuard } from './guards/platform-permission.guard.js';
 
 /**
@@ -25,13 +27,14 @@ import { PlatformPermissionGuard } from './guards/platform-permission.guard.js';
  * Per-permission enforcement via PlatformPermissionGuard.
  */
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [PrismaModule, AuthModule, AdminStepUpModule],
   controllers: [PlatformAdminController],
   providers: [
     PlatformAdminService,
     PlatformAdminOrganizationsService,
     PlatformAdminUsersService,
     PlatformAdminClientsService,
+    PlatformAdminEmployeesService,
     PlatformPermissionGuard,
   ],
   exports: [
@@ -39,6 +42,7 @@ import { PlatformPermissionGuard } from './guards/platform-permission.guard.js';
     PlatformAdminOrganizationsService,
     PlatformAdminUsersService,
     PlatformAdminClientsService,
+    PlatformAdminEmployeesService,
   ],
 })
 export class PlatformAdminModule {}

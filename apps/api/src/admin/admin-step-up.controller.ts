@@ -3,12 +3,10 @@ import {
   Controller,
   HttpCode,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { CurrentUser } from '../rbac/decorators/current-user.decorator.js';
 import { Public } from '../rbac/decorators/public.decorator.js';
-import { AdminStepUpGuard } from './guards/admin-step-up.guard.js';
 import { AdminStepUpService } from './admin-step-up.service.js';
 
 import {
@@ -102,5 +100,18 @@ export class AdminStepUpController {
     resendRemaining: number;
   }> {
     return this.adminStepUpService.resend(user.sub, dto.channel);
+  }
+
+  /**
+   * Logout: revoke all active step-up sessions for the authenticated user.
+   *
+   * This is the server-side revocation that invalidates the step-up session
+   * token immediately (rather than waiting for TTL expiry). The frontend
+   * calls this before clearing local step-up session state during logout.
+   */
+  @Post('logout')
+  @HttpCode(204)
+  async logout(@CurrentUser() user: JwtAccessPayload): Promise<void> {
+    await this.adminStepUpService.revokeAllSessions(user.sub);
   }
 }

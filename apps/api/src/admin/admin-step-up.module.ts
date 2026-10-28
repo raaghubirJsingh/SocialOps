@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { PrismaModule } from '../prisma/prisma.module.js';
+import { AdminStepUpController } from './admin-step-up.controller.js';
 import { AdminStepUpService } from './admin-step-up.service.js';
 
 /**
@@ -12,6 +13,7 @@ import { AdminStepUpService } from './admin-step-up.service.js';
  */
 @Module({
   imports: [PrismaModule],
+  controllers: [AdminStepUpController],
   providers: [AdminStepUpService],
   exports: [AdminStepUpService],
 })

@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 
 import type { JwtAccessPayload } from '../auth/types/jwt-payload.type.js';
+import type { AdminAuditEvent } from '@prisma/client';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { CurrentUser } from '../rbac/decorators/current-user.decorator.js';
 import { Public } from '../rbac/decorators/public.decorator.js';
@@ -21,6 +22,7 @@ import { PlatformAdminService, PaginatedPlatformAdmins, PlatformAdminInfo } from
 import { PlatformAdminOrganizationsService } from './platform-admin-organizations.service.js';
 import { PlatformAdminUsersService } from './platform-admin-users.service.js';
 import { PlatformAdminClientsService } from './platform-admin-clients.service.js';
+import { PlatformAdminEmployeesService } from './platform-admin-employees.service.js';
 import {
   grantPlatformAdminSchema,
   revokePlatformAdminSchema,
@@ -60,6 +62,7 @@ import type {
  * - GET /admin/users/:id                   — Get single user (GLOBAL_USER_READ)
  * - GET /admin/clients                     — List all clients (GLOBAL_CLIENT_READ)
  * - GET /admin/clients/:id                 — Get single client (GLOBAL_CLIENT_READ)
+ * - GET /admin/employees                   — List all employee profiles (GLOBAL_EMPLOYEE_READ)
  *
  * Decision 020 §4 field exclusions applied:
  * - User.phone excluded from all user reads
@@ -76,6 +79,7 @@ export class PlatformAdminController {
     private readonly organizationsService: PlatformAdminOrganizationsService,
     private readonly usersService: PlatformAdminUsersService,
     private readonly clientsService: PlatformAdminClientsService,
+    private readonly employeesService: PlatformAdminEmployeesService,
   ) {}
 
   // ============================================
@@ -248,5 +252,59 @@ export class PlatformAdminController {
     @Query('includeSensitive') includeSensitive?: string,
   ) {
     return this.clientsService.getById(id, includeSensitive === 'true', user.sub);
+  }
+
+  // ============================================
+  // Global Read: Employees
+  // ============================================
+
+  @Get('employees')
+  @UseGuards(AdminStepUpGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission('GLOBAL_EMPLOYEE_READ')
+  async listEmployees(
+    @CurrentUser() user: JwtAccessPayload,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    return this.employeesService.listAll(
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 25,
+      cursor,
+      user.sub,
+    );
+  }
+
+  // ============================================
+  // Global Read: Audit Logs
+  // ============================================
+
+  /**
+   * List cross-tenant audit events (paginated, cursor-based).
+   * Returns the insert-only AdminAuditEvent trail.
+   * Requires PLATFORM_AUDIT_READ permission.
+   */
+  @Get('audit-logs')
+  @UseGuards(AdminStepUpGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission('PLATFORM_AUDIT_READ')
+  async listAuditLogs(
+    @CurrentUser() user: JwtAccessPayload,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+    @Query('action') action?: string,
+    @Query('targetType') targetType?: string,
+  ): Promise<{
+    data: AdminAuditEvent[];
+    meta: { page: number; limit: number; total: number; hasNextPage: boolean; hasPrevPage: boolean };
+  }> {
+    return this.platformAdminService.listAuditLogs(
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 25,
+      cursor,
+      action,
+      targetType,
+      user.sub,
+    );
   }
 }

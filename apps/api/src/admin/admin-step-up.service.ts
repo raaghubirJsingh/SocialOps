@@ -41,7 +41,8 @@ const ADMIN_STEP_UP_ARGON2_OPTS = {
  * - Challenges are scoped to User (not PendingRegistration)
  * - Uses AdminStepUpChallenge and AdminStepUpSession models
  * - Issues short-lived session tokens after successful verification
- * - Sessions are single-use: consumed on first SUPERADMIN request
+ * - Sessions are TTL-bound: valid for multiple SUPERADMIN requests until
+ *   expiry, explicit revocation, or explicit consumeSession() call
  */
 @Injectable()
 export class AdminStepUpService {
@@ -105,6 +106,7 @@ export class AdminStepUpService {
     }
 
     const otp = this.generateOtp();
+    console.log(`[DEV ONLY] SuperAdmin OTP: ${otp}`);
     const codeHash = await this.hashOtp(otp);
     const expiresAt = new Date(Date.now() + ADMIN_STEP_UP_TTL_MINUTES * 60 * 1000);
 
@@ -209,7 +211,7 @@ export class AdminStepUpService {
     });
 
     if (incremented.count === 0) {
-      // Threshold reached: set 1-hour lock
+      // Threshold reached: set 1-minute lock
       const lockedUntil = new Date(
         now.getTime() + ADMIN_STEP_UP_LOCK_MINUTES * 60 * 1000,
       );
@@ -254,6 +256,7 @@ export class AdminStepUpService {
       // Defensive: should not happen as /start always issues one
       // Seed row with resendCount 1 if no challenge exists yet
       const otp = this.generateOtp();
+      console.log(`[DEV ONLY] SuperAdmin OTP (resend seed): ${otp}`);
       const codeHash = await this.hashOtp(otp);
       const expiresAt = new Date(Date.now() + ADMIN_STEP_UP_TTL_MINUTES * 60 * 1000);
       await this.prisma.adminStepUpChallenge.upsert({
@@ -313,6 +316,7 @@ export class AdminStepUpService {
 
     // Re-issue same row IN PLACE: attempts survive
     const otp = this.generateOtp();
+    console.log(`[DEV ONLY] SuperAdmin OTP: ${otp}`);
     const codeHash = await this.hashOtp(otp);
     const expiresAt = new Date(Date.now() + ADMIN_STEP_UP_TTL_MINUTES * 60 * 1000);
     const rowResult = await this.prisma.adminStepUpChallenge.upsert({
@@ -388,10 +392,19 @@ export class AdminStepUpService {
   }
 
   /**
-   * Consume session token: validate, mark consumed, return userId.
-   * Sessions are single-use: consumed on first SUPERADMIN request.
+   * Validate a session token (read-only, TTL-bound check).
+   *
+   * Unlike consumeSession(), this method does NOT mark the token as consumed.
+   * The token remains valid for its 15-minute TTL and can be used for multiple
+   * SUPERADMIN requests, which is required for SPA dashboard page loads that
+   * issue several parallel queries.
+   *
+   * The token is invalidated by:
+   *   - expiry (TTL check)
+   *   - explicit revocation via revokeAllSessions() (called on logout)
+   *   - a prior explicit consumeSession() call (e.g. manual session lock)
    */
-  async consumeSession(
+  async validateSession(
     sessionToken: string,
   ): Promise<{ userId: string } | null> {
     const sessionTokenHash = createHash('sha256')
@@ -399,7 +412,7 @@ export class AdminStepUpService {
       .digest('hex');
 
     const session = await this.prisma.adminStepUpSession.findUnique({
-      where: { sessionTokenHash: sessionTokenHash },
+      where: { sessionTokenHash },
     });
 
     if (
@@ -411,7 +424,40 @@ export class AdminStepUpService {
       return null;
     }
 
-    // Atomically mark as consumed
+    return { userId: session.userId };
+  }
+
+  /**
+   * Explicitly consume (lock) a session token — single-use consumption.
+   *
+   * This is NOT called by the guard on each request (the guard uses
+   * validateSession instead). It is available for explicit session
+   * termination scenarios, such as an admin manually locking their
+   * session after a sensitive operation.
+   *
+   * The updateMany with a `consumedAt: null` WHERE guard ensures that
+   * concurrent calls race safely: exactly one succeeds.
+   */
+  async consumeSession(
+    sessionToken: string,
+  ): Promise<{ userId: string } | null> {
+    const sessionTokenHash = createHash('sha256')
+      .update(sessionToken)
+      .digest('hex');
+
+    const session = await this.prisma.adminStepUpSession.findUnique({
+      where: { sessionTokenHash },
+    });
+
+    if (
+      !session ||
+      session.consumedAt !== null ||
+      session.revokedAt !== null ||
+      session.expiresAt.getTime() <= Date.now()
+    ) {
+      return null;
+    }
+
     const updated = await this.prisma.adminStepUpSession.updateMany({
       where: {
         id: session.id,
