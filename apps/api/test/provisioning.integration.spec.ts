@@ -4,6 +4,7 @@ import { PrismaService } from '../src/prisma/prisma.service.js';
 import { AuthService } from '../src/auth/auth.service.js';
 import { OrganizationProvisioningService } from '../src/memberships/organization-provisioning.service.js';
 import { createActiveUser } from './helpers/active-user.factory.js';
+import { readDevConsoleOutbox, clearDevConsoleOutbox } from '../src/registration/providers/dev-console.provider.js';
 
 /**
  * Service Provider tenant provisioning integration tests.
@@ -30,6 +31,35 @@ const prisma = new PrismaService();
 const jwtService = new JwtService();
 const organizationProvisioning = new OrganizationProvisioningService(prisma);
 const authService = new AuthService(prisma, jwtService, organizationProvisioning);
+
+/** Perform the two-step login: login -> verify OTP -> return tokens. */
+async function twoStepLogin(email: string, password: string) {
+  // Step 1: login returns otp_required
+  const step1 = await authService.login({ email, password });
+  if ('status' in step1 && step1.status !== 'otp_required') {
+    throw new Error(`Expected otp_required, got ${JSON.stringify(step1)}`);
+  }
+
+  // Step 2: read OTP from dev console outbox
+  const outbox = readDevConsoleOutbox();
+  const lastMsg = outbox.find((m) => m.channel === 'EMAIL' && m.message.to === email);
+  if (!lastMsg) {
+    throw new Error(`No OTP message in outbox for ${email}`);
+  }
+  // Body is JSON like: "Your SocialOps login code is 123456. It is valid..."
+  const match = lastMsg.message.body.match(/login code is (\d{6})/);
+  if (!match) {
+    throw new Error(`Could not extract OTP from: ${lastMsg.message.body}`);
+  }
+  const otp = match[1];
+
+  // Step 3: verify OTP
+  const step2 = await authService.verifyLoginOtp(email, otp);
+  if ('status' in step2) {
+    throw new Error(`OTP verification failed: ${JSON.stringify(step2)}`);
+  }
+  return step2;
+}
 
 const runTag = `provisioning-${randomUUID()}`;
 const testEmail = (name: string) => `${name}.${runTag}@example.test`;
@@ -78,7 +108,7 @@ describe('Service Provider tenant provisioning (integration)', () => {
     const email = testEmail('sp-once');
     const user = await registerUser({ email, fullName: 'Solo Provider', accountType: 'SERVICE_PROVIDER' });
 
-    await authService.login({ email, password: 'Password123!' });
+    await twoStepLogin(email, 'Password123!');
 
     const memberships = await prisma.organizationMembership.findMany({
       where: { userId: user.id },
@@ -95,9 +125,9 @@ describe('Service Provider tenant provisioning (integration)', () => {
     const email = testEmail('sp-idempotent');
     const user = await registerUser({ email, fullName: 'Idempotent Provider', accountType: 'SERVICE_PROVIDER' });
 
-    await authService.login({ email, password: 'Password123!' });
-    await authService.login({ email, password: 'Password123!' });
-    await authService.login({ email, password: 'Password123!' });
+    await twoStepLogin(email, 'Password123!');
+    await twoStepLogin(email, 'Password123!');
+    await twoStepLogin(email, 'Password123!');
 
     const memberships = await prisma.organizationMembership.findMany({
       where: { userId: user.id },
@@ -110,7 +140,7 @@ describe('Service Provider tenant provisioning (integration)', () => {
     const email = testEmail('client-no-provision');
     const user = await registerUser({ email, fullName: 'Just a Person', accountType: 'CLIENT' });
 
-    await authService.login({ email, password: 'Password123!' });
+    await twoStepLogin(email, 'Password123!');
 
     const memberships = await prisma.organizationMembership.findMany({
       where: { userId: user.id },
@@ -123,7 +153,7 @@ describe('Service Provider tenant provisioning (integration)', () => {
     const email = testEmail('sp-memberships-me');
     const user = await registerUser({ email, fullName: 'Memberships Me Provider', accountType: 'SERVICE_PROVIDER' });
 
-    const loginResult = await authService.login({ email, password: 'Password123!' });
+    const loginResult = await twoStepLogin(email, 'Password123!');
     expect(loginResult.accessToken).toBeTruthy();
 
     // The /memberships/me endpoint performs this exact Prisma query
@@ -149,8 +179,8 @@ describe('Service Provider tenant provisioning (integration)', () => {
     const userA = await registerUser({ email: emailA, fullName: 'Provider A', accountType: 'SERVICE_PROVIDER' });
     const userB = await registerUser({ email: emailB, fullName: 'Provider B', accountType: 'SERVICE_PROVIDER' });
 
-    await authService.login({ email: emailA, password: 'Password123!' });
-    await authService.login({ email: emailB, password: 'Password123!' });
+    await twoStepLogin(emailA, 'Password123!');
+    await twoStepLogin(emailB, 'Password123!');
 
     const membershipsA = await prisma.organizationMembership.findMany({
       where: { userId: userA.id },

@@ -83,7 +83,19 @@ async function registerAndCaptureToken(
 async function registerVerifiedAndLogin(email: string, password: string) {
   const rawToken = await registerAndCaptureToken(email, password);
   await authService.verifyEmail(rawToken);
-  return authService.login({ email, password } as LoginDto);
+  const step1 = await authService.login({ email, password } as LoginDto);
+  if ('status' in step1 && step1.status === 'otp_required') {
+    const outbox = readDevConsoleOutbox();
+    const lastMsg = outbox.find((m) => m.channel === 'EMAIL' && m.message.to === email);
+    if (!lastMsg) throw new Error(`No OTP message in outbox for ${email}`);
+    const match = lastMsg.message.body.match(/login code is (\d{6})/);
+    if (!match) throw new Error(`Could not extract OTP from: ${lastMsg.message.body}`);
+    const otp = match[1];
+    const step2 = await authService.verifyLoginOtp(email, otp);
+    if ('status' in step2) throw new Error(`OTP verification failed: ${JSON.stringify(step2)}`);
+    return step2;
+  }
+  return step1;
 }
 
 const runTag = `stageb6-${randomUUID()}`;
@@ -269,7 +281,7 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
 
     await authService.verifyEmail(rawToken);
 
-    const ok = await authService.login({ email, password } as LoginDto);
+    const ok = await registerVerifiedAndLogin(email, password);
     expect(ok.accessToken).toBeTruthy();
     expect(ok.refreshToken).toBeTruthy();
 
@@ -329,7 +341,7 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
     // verify-email -> login issues the JWT pair.
     const rawToken = await registerAndCaptureToken(email, password);
     await authService.verifyEmail(rawToken);
-    const loggedIn = await authService.login({ email, password } as LoginDto);
+    const loggedIn = await registerVerifiedAndLogin(email, password);
 
     const decodedAccess = jwtService.verify(loggedIn.accessToken, {
       secret: process.env.JWT_ACCESS_SECRET,

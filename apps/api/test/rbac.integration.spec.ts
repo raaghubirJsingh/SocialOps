@@ -19,6 +19,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
 import { createActiveUser } from './helpers/active-user.factory.js';
+import { readDevConsoleOutbox } from '../src/registration/providers/dev-console.provider.js';
 import { RequireMinimumRole } from '../src/rbac/decorators/require-roles.decorator.js';
 import { RoleGuard } from '../src/rbac/guards/role.guard.js';
 import { OrganizationContextService } from '../src/rbac/organization-context.service.js';
@@ -33,6 +34,23 @@ if (!process.env.JWT_REFRESH_TTL) process.env.JWT_REFRESH_TTL = '604800';
 // required) regardless of the local .env configuration. Mirrors the setup
 // in auth.integration.spec.ts.
 process.env.AUTH_DEV_AUTO_VERIFY_REGISTER = 'false';
+
+/** Two-step login: login -> read OTP from dev console -> verify OTP -> tokens. */
+async function twoStepLogin(auth: AuthService, email: string, password: string) {
+  const step1 = await auth.login({ email, password });
+  if ('status' in step1 && step1.status !== 'otp_required') {
+    throw new Error(`Expected otp_required, got ${JSON.stringify(step1)}`);
+  }
+  const outbox = readDevConsoleOutbox();
+  const lastMsg = outbox.find((m) => m.channel === 'EMAIL' && m.message.to === email);
+  if (!lastMsg) throw new Error(`No OTP message in outbox for ${email}`);
+  const match = lastMsg.message.body.match(/login code is (\d{6})/);
+  if (!match) throw new Error(`Could not extract OTP from: ${lastMsg.message.body}`);
+  const otp = match[1];
+  const step2 = await auth.verifyLoginOtp(email, otp);
+  if ('status' in step2) throw new Error(`OTP verification failed: ${JSON.stringify(step2)}`);
+  return step2;
+}
 
 const prisma = new PrismaClient();
 const runTag = `stageb7-${randomUUID()}`;
@@ -115,7 +133,7 @@ async function seedUser(
     data: { isActive: true, emailVerifiedAt: new Date() },
   });
 
-  const tokens = await authService.login({ email, password });
+  const tokens = await twoStepLogin(authService, email, password);
 
   const user = await prisma.user.findUnique({ where: { email: testEmail(name) } });
   if (!user) throw new Error(`seeded user not found: ${testEmail(name)}`);
@@ -187,7 +205,7 @@ describe('RBAC foundation (real PostgreSQL + real JWT)', () => {
     expect(res.body).not.toHaveProperty('refreshToken');
   });
 
-  it('POST /api/auth/login remains accessible without organization context (200)', async () => {
+  it('POST /api/auth/login returns otp_required without organization context (200)', async () => {
     const email = testEmail('regress-login');
     const password = 'LoginMe123!';
     // Legacy register is retired (L11): create the login fixture directly
@@ -202,8 +220,9 @@ describe('RBAC foundation (real PostgreSQL + real JWT)', () => {
 
     const res = await http.post('/api/auth/login').send({ email, password });
     expect(res.status).toBe(200);
-    expect(res.body.accessToken).toBeTruthy();
-    expect(res.body.refreshToken).toBeTruthy();
+    expect(res.body.status).toBe('otp_required');
+    expect(res.body.email).toBe(email);
+    expect(res.body.challengeExpiresAt).toBeTruthy();
   });
 
   it('POST /api/auth/logout requires a valid JWT (401 without) but does NOT require X-Organization-Id (204 with valid token)', async () => {
@@ -226,15 +245,31 @@ describe('RBAC foundation (real PostgreSQL + real JWT)', () => {
       password: 'LogoutMe123!',
     });
 
-    const login = await http
+    // Two-step login via HTTP
+    const step1 = await http
       .post('/api/auth/login')
       .send({ email: testEmail('regress-logout'), password: 'LogoutMe123!' });
-    expect(login.status).toBe(200);
+    expect(step1.status).toBe(200);
+    expect(step1.body.status).toBe('otp_required');
+
+    const outbox = readDevConsoleOutbox();
+    const lastMsg = outbox.find((m) => m.channel === 'EMAIL' && m.message.to === testEmail('regress-logout'));
+    if (!lastMsg) throw new Error(`No OTP message in outbox for ${testEmail('regress-logout')}`);
+    const match = lastMsg.message.body.match(/login code is (\d{6})/);
+    if (!match) throw new Error(`Could not extract OTP from: ${lastMsg.message.body}`);
+    const otp = match[1];
+
+    const step2 = await http
+      .post('/api/auth/login/verify-otp')
+      .send({ email: testEmail('regress-logout'), otp });
+    expect(step2.status).toBe(200);
+    expect(step2.body.accessToken).toBeTruthy();
+    expect(step2.body.refreshToken).toBeTruthy();
 
     const res = await http
       .post('/api/auth/logout')
-      .set('Authorization', `Bearer ${login.body.accessToken}`)
-      .send({ refreshToken: login.body.refreshToken });
+      .set('Authorization', `Bearer ${step2.body.accessToken}`)
+      .send({ refreshToken: step2.body.refreshToken });
     expect(res.status).toBe(204);
   });
 
@@ -323,7 +358,7 @@ describe('RBAC foundation (real PostgreSQL + real JWT)', () => {
       password,
     });
 
-    const login = await authService.login({ email, password });
+    const login = await twoStepLogin(authService, email, password);
     const userId = login.user.id;
 
     const deactivatedOrgId = testOrgId();

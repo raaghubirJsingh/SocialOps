@@ -13,6 +13,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
 import { createActiveUser } from './helpers/active-user.factory.js';
+import { readDevConsoleOutbox } from '../src/registration/providers/dev-console.provider.js';
 
 const dbName = new URL(process.env.DATABASE_URL ?? '').pathname.slice(1);
 if (!/(^|_)(test|itest)$/.test(dbName)) {
@@ -30,6 +31,23 @@ if (!process.env.JWT_ACCESS_TTL) process.env.JWT_ACCESS_TTL = '900';
 if (!process.env.JWT_REFRESH_TTL) process.env.JWT_REFRESH_TTL = '604800';
 process.env.AUTH_DEV_AUTO_VERIFY_REGISTER = 'false';
 process.env.BOOT_ARTIFACTS_ALLOWED = 'true';
+
+/** Two-step login: login -> read OTP from dev console -> verify OTP -> tokens. */
+async function twoStepLogin(auth: AuthService, email: string, password: string) {
+  const step1 = await auth.login({ email, password });
+  if ('status' in step1 && step1.status !== 'otp_required') {
+    throw new Error(`Expected otp_required, got ${JSON.stringify(step1)}`);
+  }
+  const outbox = readDevConsoleOutbox();
+  const lastMsg = outbox.find((m) => m.channel === 'EMAIL' && m.message.to === email);
+  if (!lastMsg) throw new Error(`No OTP message in outbox for ${email}`);
+  const match = lastMsg.message.body.match(/login code is (\d{6})/);
+  if (!match) throw new Error(`Could not extract OTP from: ${lastMsg.message.body}`);
+  const otp = match[1];
+  const step2 = await auth.verifyLoginOtp(email, otp);
+  if ('status' in step2) throw new Error(`OTP verification failed: ${JSON.stringify(step2)}`);
+  return step2;
+}
 
 const prisma = new PrismaClient();
 const runTag = `gate-${randomUUID()}`;
@@ -56,7 +74,7 @@ async function seedOrgUser(name: string, role: OrganizationRole) {
   await prisma.organizationMembership.create({
     data: { organizationId: orgId, userId: user.id, role },
   });
-  const login = await auth.login({ email, password: PASSWORD });
+  const login = await twoStepLogin(auth, email, PASSWORD);
   return { id: user.id, email, orgId, accessToken: login.accessToken };
 }
 
