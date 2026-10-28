@@ -121,6 +121,34 @@ export function useStartOAuthConnect(
 }
 
 /**
+ * Row-scoped OAuth connect start.
+ *
+ * Targets ONE existing SocialAccount so a successful callback UPDATES that row
+ * with the platformAccountId discovered from the platform, instead of creating a
+ * second row for the same connection. This is the flow the Connect button on a
+ * card uses; `useStartOAuthConnect` (platform-scoped) is kept for the
+ * connect-by-platform affordance.
+ *
+ * `retry: 0` matches the sibling hooks: a failed authorization or an
+ * unconfigured provider must NOT be silently replayed.
+ */
+export function useStartOAuthConnectForAccount(
+  scope: SocialAccountScope,
+  clientId: string,
+) {
+  return useMutation<OAuthConnectResponse, Error, string>({
+    mutationFn: (socialAccountId) =>
+      scope === 'agency'
+        ? socialAccountApi.startOAuthConnectForAccount(clientId, socialAccountId)
+        : socialAccountApi.startOAuthConnectMineForAccount(
+            clientId,
+            socialAccountId,
+          ),
+    retry: 0,
+  });
+}
+
+/**
  * Disconnect a social account: removes ONLY the stored credential, keeping the
  * metadata row (the account simply reports `hasCredential: false` afterwards).
  *

@@ -64,6 +64,21 @@ export const socialAccountApi = {
       `/clients/${clientId}/social-accounts/${platform}/connect`,
     ),
 
+  /**
+   * Row-scoped agency connect start. Identical handshake, but the target
+   * SocialAccount is named up front so the callback UPDATES that row with the
+   * discovered platformAccountId instead of creating a second one. The platform
+   * is NOT a parameter - the server reads it from the row, so a caller cannot
+   * aim the wrong provider at it.
+   */
+  startOAuthConnectForAccount: (
+    clientId: string,
+    socialAccountId: string,
+  ): Promise<OAuthConnectResponse> =>
+    apiFetch<OAuthConnectResponse>(
+      `/clients/${clientId}/social-accounts/${socialAccountId}/connect`,
+    ),
+
   // ---- client self-service scope (owner binding re-verified server-side) ----
   listMine: (clientId: string): Promise<SocialAccountDto[]> =>
     apiFetch<SocialAccountDto[]>('/client/me/social-accounts', {
@@ -114,6 +129,20 @@ export const socialAccountApi = {
   ): Promise<OAuthConnectResponse> =>
     apiFetch<OAuthConnectResponse>(
       `/client/me/social-accounts/${platform}/connect`,
+      { headers: { 'X-Client-Id': clientId } },
+    ),
+
+  /**
+   * Row-scoped client self-service connect start. Same `X-Client-Id` tenant
+   * context as every other `mine` call; the backend re-verifies the binding and
+   * proves the row belongs to this client before minting any state.
+   */
+  startOAuthConnectMineForAccount: (
+    clientId: string,
+    socialAccountId: string,
+  ): Promise<OAuthConnectResponse> =>
+    apiFetch<OAuthConnectResponse>(
+      `/client/me/social-accounts/${socialAccountId}/connect`,
       { headers: { 'X-Client-Id': clientId } },
     ),
 

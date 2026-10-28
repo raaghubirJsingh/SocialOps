@@ -21,6 +21,8 @@ import type {
   AcceptManagementRequestResponse,
   CreateClientRequest,
   CreateClientResponse,
+  InviteClientRequest,
+  InviteClientResponse,
 } from '@/types/client';
 
 export const clientApi = {
@@ -33,8 +35,14 @@ export const clientApi = {
    * registry) against the caller's membership, and the response contains
    * ONLY Clients with an ACTIVE ClientAgencyRelationship to that
    * organization. Requires an active organization - never call without one.
+   *
+   * Optional `q` is a server-side, case-insensitive substring search (the
+   * backend ANDs it with the tenant scope, so it can never widen results).
+   * Omit it for the full list. The term is sent only as a URL query parameter
+   * and is never persisted.
    */
-  listClients: (): Promise<ClientDto[]> => apiFetch<ClientDto[]>('/clients'),
+  listClients: (q?: string): Promise<ClientDto[]> =>
+    apiFetch<ClientDto[]>(`/clients${q ? `?q=${encodeURIComponent(q)}` : ''}`),
 
   /**
    * Agency-side: create an unbound, PENDING Client for the ACTIVE
@@ -64,6 +72,29 @@ export const clientApi = {
    */
   getClientHistory: (clientId: string): Promise<ClientEventDto[]> =>
     apiFetch<ClientEventDto[]>(`/clients/${clientId}/history`),
+
+  /**
+   * Agency-side: invite a Client owner for a PENDING, unbound Client of the
+   * ACTIVE organization.
+   *
+   * POST /api/clients/:id/invite. Backend authorization: organization role
+   * OWNER or ADMIN (RoleGuard + @RequireMinimumRole('ADMIN')) and a PENDING
+   * Client (non-PENDING -> 409 CLIENT_ALREADY_ONBOARDED). The organization
+   * scope comes from the verified `X-Organization-Id` header attached
+   * automatically by apiFetch; only the invitee email is sent in the body.
+   *
+   * The response NEVER contains the raw invitation token: delivery is the
+   * gated local-development log only (no email provider). The UI must never
+   * display or store a token.
+   */
+  inviteClient: (
+    clientId: string,
+    data: InviteClientRequest,
+  ): Promise<InviteClientResponse> =>
+    apiFetch<InviteClientResponse>(`/clients/${clientId}/invite`, {
+      method: 'POST',
+      body: data,
+    }),
 
   /**
    * Public: resolve an invitation token.

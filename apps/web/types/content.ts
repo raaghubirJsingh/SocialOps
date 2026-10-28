@@ -86,6 +86,24 @@ export interface ContentDto {
   updatedAt: string;
 }
 
+export type ClientContentState =
+  | 'draft_in_progress'
+  | 'ready_for_review'
+  | 'confirmed'
+  | 'closed';
+
+/** Status-free projection for client self-service Content reads. */
+export interface ClientContentViewDto {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+  state: ClientContentState;
+  canRequestChanges: boolean;
+  canConfirmContent: boolean;
+}
+
 /** Insert-only snapshot (immutable): the confirmation pins one of these. */
 export interface ContentRevisionDto {
   id: string;
@@ -143,6 +161,24 @@ export interface RawDataDto {
   capturedAt: string;
   capturedByUserId: string | null;
   createdAt: string;
+}
+
+export interface ClientContentRequestDto {
+  id: string;
+  mimeType: string | null;
+  originalFileName: string | null;
+  extractedText: string | null;
+  metadata: unknown;
+  byteSize: number | null;
+  capturedAt: string;
+  createdAt: string;
+  requestedContent: ClientContentViewDto | null;
+}
+
+export interface ContentPublishingApprovalDto {
+  id: string;
+  contentId: string;
+  approvedAt: string;
 }
 
 /** `status` is never accepted: every item is born DRAFT. */

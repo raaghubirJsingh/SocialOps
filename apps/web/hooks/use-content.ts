@@ -1,6 +1,11 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 
 import { useActiveOrganization } from '@/hooks/use-active-organization';
@@ -8,6 +13,7 @@ import { useSession } from '@/hooks/use-session';
 import { contentApi } from '@/lib/content-api';
 import { queryKeys } from '@/lib/query-keys';
 import type {
+  ClientContentViewDto,
   ConfirmFinalRequest,
   ContentDto,
   ContentRevisionDto,
@@ -77,14 +83,24 @@ function invalidateContent(
 }
 
 export function useContentList(
+  scope: 'agency',
+  clientId: string,
+  status?: ContentStatus | 'ALL',
+): UseQueryResult<ContentDto[], Error>;
+export function useContentList(
+  scope: 'mine',
+  clientId: string,
+  status?: ContentStatus | 'ALL',
+): UseQueryResult<ClientContentViewDto[], Error>;
+export function useContentList(
   scope: ContentScope,
   clientId: string,
   status: ContentStatus | 'ALL' = 'ALL',
-) {
+): UseQueryResult<ContentDto[] | ClientContentViewDto[], Error> {
   const { activeOrganizationId } = useActiveOrganization();
   const enabled = useContentQueryEnabled(scope, clientId);
 
-  return useQuery<ContentDto[]>({
+  return useQuery<ContentDto[] | ClientContentViewDto[]>({
     queryKey: queryKeys.contentList(
       scope,
       activeOrganizationId,
@@ -104,14 +120,24 @@ export function useContentList(
 }
 
 export function useContentDetail(
+  scope: 'agency',
+  clientId: string,
+  contentId: string,
+): UseQueryResult<ContentDto, Error>;
+export function useContentDetail(
+  scope: 'mine',
+  clientId: string,
+  contentId: string,
+): UseQueryResult<ClientContentViewDto, Error>;
+export function useContentDetail(
   scope: ContentScope,
   clientId: string,
   contentId: string,
-) {
+): UseQueryResult<ContentDto | ClientContentViewDto, Error> {
   const { activeOrganizationId } = useActiveOrganization();
   const enabled = useContentQueryEnabled(scope, clientId) && Boolean(contentId);
 
-  return useQuery<ContentDto>({
+  return useQuery<ContentDto | ClientContentViewDto>({
     queryKey: queryKeys.contentDetail(
       scope,
       activeOrganizationId,
@@ -148,7 +174,7 @@ export function useContentRevisions(
 
 /** Append-only status-transition audit trail (newest first). */
 export function useContentStatusEvents(
-  scope: ContentScope,
+  scope: 'agency',
   clientId: string,
   contentId: string,
 ) {
@@ -157,9 +183,7 @@ export function useContentStatusEvents(
   return useQuery<ContentStatusEventDto[]>({
     queryKey: queryKeys.contentStatusEvents(scope, clientId, contentId),
     queryFn: () =>
-      scope === 'agency'
-        ? contentApi.statusEventsForClient(clientId, contentId)
-        : contentApi.statusEventsMine(clientId, contentId),
+      contentApi.statusEventsForClient(clientId, contentId),
     enabled,
     retry: 0,
   });
@@ -169,7 +193,7 @@ export function useCreateContent(scope: ContentScope, clientId: string) {
   const queryClient = useQueryClient();
   const { activeOrganizationId } = useActiveOrganization();
 
-  return useMutation<ContentDto, Error, CreateContentRequest>({
+  return useMutation<ContentDto | ClientContentViewDto, Error, CreateContentRequest>({
     mutationFn: (body) =>
       scope === 'agency'
         ? contentApi.createForClient(clientId, body)
@@ -179,12 +203,39 @@ export function useCreateContent(scope: ContentScope, clientId: string) {
   });
 }
 
-export function useUpdateContent(scope: ContentScope, clientId: string) {
+export function useCreateContentFromRequest(clientId: string) {
   const queryClient = useQueryClient();
   const { activeOrganizationId } = useActiveOrganization();
 
   return useMutation<
     ContentDto,
+    Error,
+    { requestId: string; body: CreateContentRequest }
+  >({
+    mutationFn: ({ requestId, body }) =>
+      contentApi.createFromRequestForClient(clientId, requestId, body),
+    onSettled: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.contentList(
+          'agency',
+          activeOrganizationId,
+          clientId,
+          'ALL',
+        ),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.rawData('agency', activeOrganizationId, clientId),
+      });
+    },
+  });
+}
+
+export function useUpdateContent(scope: ContentScope, clientId: string) {
+  const queryClient = useQueryClient();
+  const { activeOrganizationId } = useActiveOrganization();
+
+  return useMutation<
+    ContentDto | ClientContentViewDto,
     Error,
     { contentId: string; body: UpdateContentRequest }
   >({
@@ -208,7 +259,7 @@ export function useTransitionContent(scope: ContentScope, clientId: string) {
   const { activeOrganizationId } = useActiveOrganization();
 
   return useMutation<
-    ContentDto,
+    ContentDto | ClientContentViewDto,
     Error,
     { contentId: string; body: TransitionContentRequest }
   >({
@@ -244,7 +295,7 @@ export function useConfirmFinalContent(clientId: string) {
   const queryClient = useQueryClient();
 
   return useMutation<
-    ContentDto,
+    ClientContentViewDto,
     Error,
     { contentId: string; body: ConfirmFinalRequest }
   >({

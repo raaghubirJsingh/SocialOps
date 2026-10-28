@@ -233,12 +233,15 @@ export async function refreshAccessToken(session: Session): Promise<TokenPair> {
  * The step-up flow:
  * 1. POST /admin/step-up/challenge  — issue OTP to user's email
  * 2. POST /admin/step-up/verify     — verify OTP, returns sessionToken
- * 3. Use sessionToken as Bearer token on SUPERADMIN routes
+ * 3. Use sessionToken as `X-Admin-Session-Token` header on SUPERADMIN routes
  * 4. POST /admin/step-up/resend     — resend OTP (max 3 times)
+ * 5. POST /admin/step-up/logout     — revoke all active step-up sessions
  *
  * The sessionToken is a raw token (not a JWT) that must be stored by
- * the client and sent as `Authorization: Bearer <sessionToken>` on
- * protected admin routes. It is single-use and consumed on first use.
+ * the client and sent in the `X-Admin-Session-Token` header on
+ * protected admin routes. It is TTL-bound (15 min) and is NOT single-use;
+ * it remains valid for multiple requests until expiry, revocation, or
+ * explicit consumption.
  */
 export async function adminStepUpChallenge(
   input: AdminStepUpChallengeRequest,
@@ -255,6 +258,12 @@ export async function adminStepUpVerify(
   return apiFetch<AdminStepUpVerifyResponse>('/admin/step-up/verify', {
     method: 'POST',
     body: input,
+  });
+}
+
+export async function adminStepUpLogout(): Promise<void> {
+  await apiFetch<void>('/admin/step-up/logout', {
+    method: 'POST',
   });
 }
 

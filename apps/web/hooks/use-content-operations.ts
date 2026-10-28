@@ -33,6 +33,7 @@ import { contentApi } from '@/lib/content-api';
 import { queryKeys } from '@/lib/query-keys';
 import type {
   ChangeRequestDto,
+  ClientContentViewDto,
   ConfirmFinalRequest,
   ContentDto,
   ContentRevisionDto,
@@ -140,7 +141,7 @@ export function useClientContent(clientId: string, contentId: string) {
   const { activeOrganizationId } = useActiveOrganization();
   const { isAuthenticated, isLoading } = useSession();
   const enabled = opsEnabled(isLoading, isAuthenticated, activeOrganizationId, false, clientId, contentId);
-  return useQuery<ContentDto>({
+  return useQuery<ClientContentViewDto>({
     queryKey: ['content', 'detail', 'mine', clientId, contentId],
     queryFn: () => contentApi.getMine(clientId, contentId),
     enabled,
@@ -167,18 +168,23 @@ export function useSubmitChangeRequest(clientId: string, contentId: string) {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ['content', 'detail', 'mine', clientId, contentId] });
       void queryClient.invalidateQueries({ queryKey: ['content', 'change-requests', 'mine', clientId, contentId] });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.contentRequests(clientId),
+      });
     },
   });
 }
 
 export function useConfirmFinalLock(clientId: string, contentId: string) {
   const queryClient = useQueryClient();
-  return useMutation<ContentDto, Error, ConfirmFinalRequest>({
+  return useMutation<ClientContentViewDto, Error, ConfirmFinalRequest>({
     mutationFn: (body) => contentApi.confirmFinalLockMine(clientId, contentId, body),
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ['content', 'detail', 'mine', clientId, contentId] });
       void queryClient.invalidateQueries({ queryKey: ['content', 'change-requests', 'mine', clientId, contentId] });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.contentRequests(clientId),
+      });
     },
   });
 }
-

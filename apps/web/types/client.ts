@@ -201,6 +201,30 @@ export interface AcceptInvitationResponse {
   mobileVerificationExpiresAt: string;
 }
 
+/**
+ * Agency-side invitation (POST /api/clients/:id/invite).
+ *
+ * The body is EMPTY - the recipient is the Client's saved `directEmail`,
+ * resolved server-side from the tenant-scoped Client row, never supplied
+ * by the frontend. The backend's strict `inviteClientSchema` rejects any
+ * unexpected field. The organization scope comes from the verified
+ * `X-Organization-Id` header attached by apiFetch.
+ */
+export type InviteClientRequest = Record<string, never>;
+
+/**
+ * Response of POST /api/clients/:id/invite. Mirrors the backend
+ * `IssuedInvitation` (apps/api/src/clients/client-invitation.service.ts):
+ * it deliberately NEVER contains the raw invitation token - that value is
+ * only written to the gated local-development log. The UI must never
+ * receive, display, or store the token.
+ */
+export interface InviteClientResponse {
+  invitationId: string;
+  email: string;
+  expiresAt: string;
+}
+
 export interface OrganizationSummary {
   id: string;
   name: string;

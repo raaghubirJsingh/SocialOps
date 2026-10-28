@@ -44,4 +44,10 @@ export const queryKeys = {
     organizationId: string | null,
     clientId: string,
   ) => ['raw-data', scope, organizationId, clientId] as const,
+
+  contentRequests: (clientId: string) =>
+    ['content-requests', 'mine', clientId] as const,
+
+  contentRequest: (clientId: string, requestId: string) =>
+    ['content-requests', 'mine', clientId, requestId] as const,
 } as const;

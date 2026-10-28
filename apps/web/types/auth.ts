@@ -43,7 +43,7 @@ export type ClientType = 'INDIVIDUAL' | 'BUSINESS';
 export interface AuthenticatedUser {
   id: string;
   email: string;
-    fullName: string | null;
+  fullName: string | null;
   accountType: AccountType | null;
   /**
    * Employee Module V1: true when a 1:1 EmployeeProfile row exists for
@@ -52,6 +52,11 @@ export interface AuthenticatedUser {
    * server-side authority is EmployeeContextGuard, verified per request.
    */
   isEmployee: boolean;
+  /**
+   * SuperAdmin Module (Decision 020): true when User.isSocialOpsAdmin
+   * is set. UI routing convenience only — not authorization state.
+   */
+  isSocialOpsAdmin?: boolean;
 }
 
 /**

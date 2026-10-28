@@ -15,6 +15,7 @@
 import { apiFetch } from './api';
 import type {
   ChangeRequestDto,
+  ClientContentViewDto,
   ConfirmFinalRequest,
   ContentDto,
   ContentRevisionDto,
@@ -49,6 +50,16 @@ export const contentApi = {
       method: 'POST',
       body,
     }),
+
+  createFromRequestForClient: (
+    clientId: string,
+    requestId: string,
+    body: CreateContentRequest,
+  ): Promise<ContentDto> =>
+    apiFetch<ContentDto>(
+      `/clients/${clientId}/content/from-request/${requestId}`,
+      { method: 'POST', body },
+    ),
 
   getForClient: (clientId: string, contentId: string): Promise<ContentDto> =>
     apiFetch<ContentDto>(`/clients/${clientId}/content/${contentId}`),
@@ -121,24 +132,38 @@ export const contentApi = {
       `/clients/${clientId}/content/${contentId}/internal-notes`,
     ),
 
+  /** Agency-only internal note creation (MEMBER+, non-destructive commentary). */
+  createInternalNoteForClient: (
+    clientId: string,
+    contentId: string,
+    body: { body: string },
+  ): Promise<InternalNoteDto> =>
+    apiFetch<InternalNoteDto>(
+      `/clients/${clientId}/content/${contentId}/internal-notes`,
+      { method: 'POST', body },
+    ),
+
   // ---- client self-service scope ----
-  listMine: (clientId: string, status?: ContentStatus): Promise<ContentDto[]> =>
-    apiFetch<ContentDto[]>(`/client/me/content${statusQuery(status)}`, {
+  listMine: (
+    clientId: string,
+    status?: ContentStatus,
+  ): Promise<ClientContentViewDto[]> =>
+    apiFetch<ClientContentViewDto[]>(`/client/me/content${statusQuery(status)}`, {
       headers: { 'X-Client-Id': clientId },
     }),
 
   createMine: (
     clientId: string,
     body: CreateContentRequest,
-  ): Promise<ContentDto> =>
-    apiFetch<ContentDto>('/client/me/content', {
+  ): Promise<ClientContentViewDto> =>
+    apiFetch<ClientContentViewDto>('/client/me/content', {
       method: 'POST',
       body,
       headers: { 'X-Client-Id': clientId },
     }),
 
-  getMine: (clientId: string, contentId: string): Promise<ContentDto> =>
-    apiFetch<ContentDto>(`/client/me/content/${contentId}`, {
+  getMine: (clientId: string, contentId: string): Promise<ClientContentViewDto> =>
+    apiFetch<ClientContentViewDto>(`/client/me/content/${contentId}`, {
       headers: { 'X-Client-Id': clientId },
     }),
 
@@ -146,8 +171,8 @@ export const contentApi = {
     clientId: string,
     contentId: string,
     body: UpdateContentRequest,
-  ): Promise<ContentDto> =>
-    apiFetch<ContentDto>(`/client/me/content/${contentId}`, {
+  ): Promise<ClientContentViewDto> =>
+    apiFetch<ClientContentViewDto>(`/client/me/content/${contentId}`, {
       method: 'PATCH',
       body,
       headers: { 'X-Client-Id': clientId },
@@ -157,8 +182,8 @@ export const contentApi = {
     clientId: string,
     contentId: string,
     body: TransitionContentRequest,
-  ): Promise<ContentDto> =>
-    apiFetch<ContentDto>(`/client/me/content/${contentId}/status`, {
+  ): Promise<ClientContentViewDto> =>
+    apiFetch<ClientContentViewDto>(`/client/me/content/${contentId}/status`, {
       method: 'POST',
       body,
       headers: { 'X-Client-Id': clientId },
@@ -173,15 +198,6 @@ export const contentApi = {
       { headers: { 'X-Client-Id': clientId } },
     ),
 
-  statusEventsMine: (
-    clientId: string,
-    contentId: string,
-  ): Promise<ContentStatusEventDto[]> =>
-    apiFetch<ContentStatusEventDto[]>(
-      `/client/me/content/${contentId}/status-events`,
-      { headers: { 'X-Client-Id': clientId } },
-    ),
-
   /**
    * FINAL CONFIRMATION - the only door to APPROVED (CLIENT OWNER only).
    * Writes the confirmation triple atomically with an immutable revision.
@@ -190,8 +206,8 @@ export const contentApi = {
     clientId: string,
     contentId: string,
     body: ConfirmFinalRequest,
-  ): Promise<ContentDto> =>
-    apiFetch<ContentDto>(
+  ): Promise<ClientContentViewDto> =>
+    apiFetch<ClientContentViewDto>(
       `/client/me/content/${contentId}/final-confirmation`,
       { method: 'POST', body, headers: { 'X-Client-Id': clientId } },
     ),
@@ -204,8 +220,8 @@ export const contentApi = {
     clientId: string,
     contentId: string,
     body: ConfirmFinalRequest,
-  ): Promise<ContentDto> =>
-    apiFetch<ContentDto>(
+  ): Promise<ClientContentViewDto> =>
+    apiFetch<ClientContentViewDto>(
       `/client/me/content/${contentId}/final-confirmed-lock`,
       { method: 'POST', body, headers: { 'X-Client-Id': clientId } },
     ),
