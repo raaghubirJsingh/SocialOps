@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useState } from 'react';
 
 import { ClientSectionNav } from '@/components/clients/client-section-nav';
+import { ClientContextHeader } from '@/components/clients/client-context-header';
 import { MetadataOnlyNotice } from '@/components/shared/metadata-only-notice';
 import {
   SocialAccountForm,
@@ -26,8 +27,10 @@ import {
   useCreateSocialAccount,
   useSocialAccounts,
   useDisconnectSocialAccount,
+  useStartOAuthConnectForAccount,
   useUpdateSocialAccount,
 } from '@/hooks/use-social-accounts';
+import { ApiError } from '@/lib/api';
 import { describeApiError } from '@/lib/api-error-messages';
 import type { SocialAccountDto } from '@/types/social-account';
 
@@ -42,10 +45,13 @@ import type { SocialAccountDto } from '@/types/social-account';
  *     OWNER or ADMIN - a UI convenience; the backend RoleGuard +
  *     @RequireMinimumRole('ADMIN') remain authoritative.
  *
- * OAUTH CONNECT: this page deliberately renders NO OAuth connect affordances.
- * V1 is metadata-only (Decision 013 is deferred), so the only write path is
- * the manual "Add account" form below. The metadata-only notice still heads
- * the section, because these rows are declared, not platform-verified.
+ * OAUTH CONNECT: each card's "Connect"/"Reconnect" button starts the ROW-SCOPED
+ * handshake for that SocialAccount. The backend proves an ACTIVE relationship
+ * and that the row belongs to this client, then puts the row id inside the
+ * signed state so the callback UPDATES that same row with the platformAccountId
+ * discovered from the platform - no duplicate row, and no manual id entry.
+ * The metadata-only notice still heads the section: the platform id is only
+ * present after a successful handshake.
  */
 type FormState =
   | { mode: 'closed' }
@@ -68,6 +74,34 @@ export default function AgencyClientSocialAccountsPage() {
   const updateMutation = useUpdateSocialAccount('agency', clientId);
   const disconnectMutation = useDisconnectSocialAccount('agency', clientId);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+  const connectForAccount = useStartOAuthConnectForAccount('agency', clientId);
+  const [connectingId, setConnectingId] = useState<string | null>(null);
+
+  /**
+   * Full-page redirect to the platform's authorize URL. An OAuth authorization
+   * code can only be obtained by navigating the browser, never by a background
+   * fetch, so this MUST end in window.location.assign.
+   *
+   * On success the platform calls the backend callback, which updates THIS row
+   * (its id travelled inside the signed state) and attaches the credential.
+   */
+  const handleStartConnect = async (account: SocialAccountDto) => {
+    setServerError(null);
+    setConnectingId(account.id);
+    try {
+      const { authorizeUrl } = await connectForAccount.mutateAsync(account.id);
+      window.location.assign(authorizeUrl);
+    } catch (error) {
+      setServerError(
+        describeApiError(
+          error,
+          `Unable to start the ${account.platform} connection. Please try again.`,
+        ),
+      );
+    } finally {
+      setConnectingId(null);
+    }
+  };
 
   /**
    * Disconnect removes ONLY the stored credential; the metadata row is kept by
@@ -96,6 +130,14 @@ export default function AgencyClientSocialAccountsPage() {
   const canManage =
     activeMembership?.role === 'OWNER' || activeMembership?.role === 'ADMIN';
 
+  // A 404 from the client-scoped list means the client is not selectable in
+  // this organization (no ACTIVE ClientAgencyRelationship). Hide the section
+  // tabs: without a valid client they are meaningless.
+  const clientMissing =
+    accountsQuery.isError &&
+    accountsQuery.error instanceof ApiError &&
+    accountsQuery.error.status === 404;
+
   if (sessionLoading || !isAuthenticated) {
     return (
       <div className="flex items-center justify-center p-6">
@@ -108,8 +150,29 @@ export default function AgencyClientSocialAccountsPage() {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <p className="text-sm text-slate-400">
-          Select an organization first to manage client social accounts.
+          {membershipsQuery.isPending
+            ? 'Loading your organizations…'
+            : 'Select an organization first to manage client social accounts.'}
         </p>
+        <Link
+          href="/clients"
+          className="rounded text-sm text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
+        >
+          ← Back to clients
+        </Link>
+      </div>
+    );
+  }
+
+  if (clientMissing) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4">
+        <div
+          role="alert"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
+        >
+          Client not found in this organization.
+        </div>
         <Link
           href="/clients"
           className="rounded text-sm text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
@@ -162,13 +225,14 @@ export default function AgencyClientSocialAccountsPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
+      <ClientContextHeader clientId={clientId} />
       <ClientSectionNav clientId={clientId} active="social-accounts" />
 
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-100">
+          <h3 className="text-2xl font-semibold tracking-tight text-slate-100">
             Social accounts
-          </h2>
+          </h3>
           <p className="text-sm text-slate-400">
             Platforms this client operates. Metadata only — recorded from what the
             client or agency declares.
@@ -183,17 +247,31 @@ export default function AgencyClientSocialAccountsPage() {
 
       <MetadataOnlyNotice />
 
+      {/*
+        Page-level error surface. `serverError` is ALSO handed to the form below,
+        but the form only renders while it is open - so a failure from a
+        CARD-level action (Connect / Disconnect), which never opens the form,
+        used to be set into state and never rendered anywhere. The user saw
+        nothing at all. This alert closes that gap.
+      */}
+      {serverError && (
+        <div
+          role="alert"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
+        >
+          {serverError}
+        </div>
+      )}
+
       {formState.mode !== 'closed' && canManage && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              {formState.mode === 'create'
-                ? 'Add a social account'
-                : 'Edit social account'}
+              {formState.mode === 'create' ? 'Add a social account' : 'Edit social account'}
             </CardTitle>
             <CardDescription>
-              Only non-secret metadata is stored. No password or access token is
-              ever collected.
+              Recorded for this client only. Only non-secret metadata is stored. No
+              password or access token is ever collected.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -236,6 +314,10 @@ export default function AgencyClientSocialAccountsPage() {
           onDisconnect={(account) => {
             void handleDisconnect(account);
           }}
+          onStartConnect={(account) => {
+            void handleStartConnect(account);
+          }}
+          connectingId={connectForAccount.isPending ? connectingId : null}
           disconnectingId={disconnectMutation.isPending ? disconnectingId : null}
         />
       )}

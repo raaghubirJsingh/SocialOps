@@ -8,9 +8,14 @@ interface ContentListProps {
   items: import('@/types/content').ContentDto[];
   /** Where each row links (agency detail vs client detail route). */
   detailHref: (contentId: string) => string;
-  emptyDescription: string;
+  emptyDescription?: string;
   /** Optional CTA rendered in the empty state (e.g. wizard entry point). */
   emptyAction?: ReactNode;
+  /**
+   * Optional empty-state title. Defaults to "Nothing here yet"; client-facing
+   * callers override it when submitted Content Requests already exist.
+   */
+  emptyTitle?: string;
 }
 
 /**
@@ -23,13 +28,16 @@ export function ContentList({
   detailHref,
   emptyDescription,
   emptyAction,
+  emptyTitle = 'Nothing here yet',
 }: ContentListProps) {
   if (items.length === 0) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Nothing here yet</CardTitle>
-          <CardDescription>{emptyDescription}</CardDescription>
+          <CardTitle className="text-base">{emptyTitle}</CardTitle>
+          {emptyDescription ? (
+            <CardDescription>{emptyDescription}</CardDescription>
+          ) : null}
         </CardHeader>
         {emptyAction ? (
           <CardContent className="pt-0">{emptyAction}</CardContent>

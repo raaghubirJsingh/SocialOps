@@ -101,14 +101,14 @@ export function ClientDashboardShell({ client }: ClientDashboardShellProps) {
           </Card>
         </Link>
         <Link
-          href={`/client/raw-data?clientId=${client.id}`}
+          href={`/client/content?clientId=${client.id}`}
           className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
         >
           <Card className="h-full transition-all duration-300 motion-safe:hover:-translate-y-1 hover:border-blue-500/30 hover:bg-white/[0.06]">
             <CardHeader>
-              <CardTitle>Raw data</CardTitle>
+              <CardTitle>Requests</CardTitle>
               <CardDescription>
-                Paste briefs or notes as immutable intake records.
+                Send your agency content requests and track what happens next.
               </CardDescription>
             </CardHeader>
           </Card>

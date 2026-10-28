@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -14,7 +13,6 @@ import {
 } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
-  CONTENT_SCENARIO_1_CHANGE_REQUEST_LIMIT,
   useClientChangeRequests,
   useClientContent,
   useConfirmFinalLock,
@@ -22,22 +20,22 @@ import {
 } from '@/hooks/use-content-operations';
 import { describeApiError } from '@/lib/api-error-messages';
 
-/**
- * Phase 4 (Integration) — Client review portal, wired to the real Phase 2 API.
- *
- * - Content renders from GET /client/me/content/:contentId.
- * - The change-request counter is the live `changeRequests` array length.
- * - "Submit change" POSTs .../change-requests and surfaces the 400
- *   CHANGE_REQUEST_LIMIT_EXCEEDED rejection when the Scenario-1 cap is hit.
- * - "Confirm & lock" POSTs .../final-confirmed-lock (only door to
- *   FINAL_CONFIRMED).
- */
 export interface ClientReviewPortalProps {
   clientId: string;
   contentId: string;
 }
 
-export function ClientReviewPortal({ clientId, contentId }: ClientReviewPortalProps) {
+const CLIENT_STATE_LABELS = {
+  draft_in_progress: 'Draft in progress',
+  ready_for_review: 'Ready for your review',
+  confirmed: 'Content confirmed',
+  closed: 'Closed',
+} as const;
+
+export function ClientReviewPortal({
+  clientId,
+  contentId,
+}: ClientReviewPortalProps) {
   const [acknowledged, setAcknowledged] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -46,20 +44,10 @@ export function ClientReviewPortal({ clientId, contentId }: ClientReviewPortalPr
   const contentQuery = useClientContent(clientId, contentId);
   const changeRequestsQuery = useClientChangeRequests(clientId, contentId);
   const submitChange = useSubmitChangeRequest(clientId, contentId);
-  const confirmLock = useConfirmFinalLock(clientId, contentId);
+  const confirmContent = useConfirmFinalLock(clientId, contentId);
 
   const content = contentQuery.data ?? null;
   const changeRequests = changeRequestsQuery.data ?? [];
-  const used = changeRequests.length;
-  const isScenario1 = content?.scenarioType === 'SCENARIO_1';
-  const remaining = isScenario1
-    ? Math.max(0, CONTENT_SCENARIO_1_CHANGE_REQUEST_LIMIT - used)
-    : CONTENT_SCENARIO_1_CHANGE_REQUEST_LIMIT;
-  const percent = isScenario1
-    ? Math.min(100, Math.round((used / CONTENT_SCENARIO_1_CHANGE_REQUEST_LIMIT) * 100))
-    : 0;
-  const canRequest = !isScenario1 || remaining > 0;
-  const isLocked = content?.status === 'FINAL_CONFIRMED';
   const configured = Boolean(clientId) && Boolean(contentId);
 
   async function handleSubmitChange() {
@@ -68,83 +56,85 @@ export function ClientReviewPortal({ clientId, contentId }: ClientReviewPortalPr
     try {
       await submitChange.mutateAsync({ requestDetails: draft });
       setDraft('');
-      setSuccess('Change request submitted.');
+      setSuccess('Your change request has been sent.');
     } catch (err) {
       setError(describeApiError(err, 'Could not submit the change request.'));
     }
   }
 
-  async function handleConfirmLock() {
+  async function handleConfirmContent() {
     setError(null);
     setSuccess(null);
     try {
-      await confirmLock.mutateAsync({});
-      setSuccess('Content confirmed and locked.');
+      await confirmContent.mutateAsync({});
+      setSuccess('Content confirmed.');
     } catch (err) {
-      setError(describeApiError(err, 'Could not confirm and lock the content.'));
+      setError(describeApiError(err, 'Could not confirm the content.'));
     }
   }
 
-  if (isLocked) {
-    return (
-      <Card surface="glass">
-        <CardHeader>
-          <CardTitle className="text-base">Content confirmed and locked</CardTitle>
-          <CardDescription>
-            The content is now strictly immutable — no further revisions or
-            change requests.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Badge variant="success">Final confirmed</Badge>
-        </CardContent>
-      </Card>
-    );
-  }
   return (
     <Card surface="glass">
       <CardHeader>
         <div className="flex flex-wrap items-center gap-2">
-          <CardTitle className="text-base">Review portal</CardTitle>
+          <CardTitle className="text-base">Your content</CardTitle>
           {content ? (
-            <Badge variant="warning">{content.status.replaceAll('_', ' ')}</Badge>
+            <span className="rounded-full border border-white/[0.08] px-2 py-0.5 text-xs text-slate-300">
+              {CLIENT_STATE_LABELS[content.state]}
+            </span>
           ) : null}
         </div>
         <CardDescription>
-          Your agency prepared the content below. Request changes or confirm it
-          as final.
+          Review the latest draft from your SocialOps team and choose what
+          happens next.
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-5">
         {!configured ? (
-          <div role="status" className="rounded-lg border border-amber-900/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-300">
-            Pass a clientId and contentId to load this portal.
+          <div
+            role="status"
+            className="rounded-lg border border-amber-900/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-300"
+          >
+            A client and content request are needed to load this review.
           </div>
         ) : null}
         {contentQuery.isLoading ? (
-          <div role="status" className="text-sm text-slate-400">Loading content…</div>
+          <div role="status" className="text-sm text-slate-400">
+            Loading draft…
+          </div>
         ) : null}
         {contentQuery.isError ? (
-          <div role="alert" className="rounded-lg border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-300">
-            {describeApiError(contentQuery.error, 'Could not load content.')}
+          <div
+            role="alert"
+            className="rounded-lg border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-300"
+          >
+            {describeApiError(contentQuery.error, 'Could not load the draft.')}
           </div>
         ) : null}
         {error ? (
-          <div role="alert" className="rounded-lg border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-300">
+          <div
+            role="alert"
+            className="rounded-lg border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-300"
+          >
             {error}
           </div>
         ) : null}
         {success ? (
-          <div role="status" className="rounded-lg border border-emerald-900/60 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-300">
+          <div
+            role="status"
+            className="rounded-lg border border-emerald-900/60 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-300"
+          >
             {success}
           </div>
         ) : null}
 
         {content ? (
           <article className="rounded-md border border-white/[0.06] bg-slate-950/60 p-4">
-            <p className="text-sm font-medium text-slate-100">{content.title}</p>
-            <p className="mt-1 whitespace-pre-line text-sm text-slate-300">
+            <h3 className="text-sm font-medium text-slate-100">
+              {content.title}
+            </h3>
+            <p className="mt-2 whitespace-pre-line text-sm text-slate-300">
               {content.body}
             </p>
           </article>
@@ -152,53 +142,53 @@ export function ClientReviewPortal({ clientId, contentId }: ClientReviewPortalPr
 
         <Separator />
 
-        <section aria-label="Change request allowance" className="space-y-2">
+        <section aria-label="Your change requests" className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-slate-100">Change requests</h3>
-            <Badge variant={remaining > 0 ? 'info' : 'danger'}>
-              {isScenario1
-                ? `${used} of ${CONTENT_SCENARIO_1_CHANGE_REQUEST_LIMIT} change requests used`
-                : `${used} change request${used === 1 ? '' : 's'}`}
-            </Badge>
+            <h3 className="text-sm font-semibold text-slate-100">
+              Change requests
+            </h3>
+            <span className="text-xs text-slate-400">
+              {changeRequests.length}{' '}
+              {changeRequests.length === 1 ? 'request sent' : 'requests sent'}
+            </span>
           </div>
-          {isScenario1 ? (
-            <div
-              role="progressbar"
-              aria-valuenow={used}
-              aria-valuemin={0}
-              aria-valuemax={CONTENT_SCENARIO_1_CHANGE_REQUEST_LIMIT}
-              aria-label={`${used} of ${CONTENT_SCENARIO_1_CHANGE_REQUEST_LIMIT} change requests used`}
-              className="h-2 w-full overflow-hidden rounded-full bg-slate-800"
-            >
-              <div
-                className="h-full rounded-full bg-blue-500 transition-all"
-                style={{ width: `${percent}%` }}
-              />
-            </div>
-          ) : null}
-
           {changeRequests.map((request) => (
             <div
               key={request.id}
               className="rounded-md border border-white/[0.06] bg-slate-950/60 px-3 py-2"
             >
-              <p className="text-xs text-slate-400">{request.createdAt}</p>
-              <p className="mt-1 text-sm text-slate-200">{request.requestDetails}</p>
+              <p className="text-xs text-slate-400">
+                {new Date(request.createdAt).toLocaleString()}
+              </p>
+              <p className="mt-1 text-sm text-slate-200">
+                {request.requestDetails}
+              </p>
             </div>
           ))}
-          {isScenario1 ? (
-            <p className="text-xs text-slate-400">
-              {remaining > 0
-                ? `You have ${remaining} change ${remaining === 1 ? 'request' : 'requests'} left on this content.`
-                : 'You have used all change requests on this content.'}
-            </p>
-          ) : null}
         </section>
 
-        <Separator />
+        {content?.canRequestChanges ? (
+          <>
+            <Separator />
+            <section aria-label="Request changes" className="space-y-3">
+              <label
+                htmlFor="change-request-details"
+                className="text-sm font-semibold text-slate-100"
+              >
+                Request Changes
+              </label>
+              <textarea
+                id="change-request-details"
+                className="min-h-20 w-full rounded-md border border-white/[0.12] bg-white/[0.04] px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
+                placeholder="Describe what you would like changed…"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+              />
+            </section>
+          </>
+        ) : null}
 
-        <section aria-label="Final confirmation" className="space-y-3">
-          <h3 className="text-sm font-semibold text-slate-100">Final confirmation</h3>
+        {content?.canConfirmContent ? (
           <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-200">
             <input
               type="checkbox"
@@ -206,46 +196,38 @@ export function ClientReviewPortal({ clientId, contentId }: ClientReviewPortalPr
               checked={acknowledged}
               onChange={(event) => setAcknowledged(event.target.checked)}
             />
-            I understand this content becomes strictly immutable upon
-            confirmation
+            I am happy with this content and want to confirm it.
           </label>
-        </section>
+        ) : null}
       </CardContent>
 
       <CardFooter className="flex flex-wrap gap-2">
-        <div className="flex w-full flex-col gap-2">
-          <textarea
-            aria-label="Change request details"
-            className="min-h-20 w-full rounded-md border border-white/[0.12] bg-white/[0.04] px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
-            placeholder="Describe the change you would like…"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={
-                !configured ||
-                !canRequest ||
-                submitChange.isPending ||
-                draft.trim().length === 0
-              }
-              onClick={() => void handleSubmitChange()}
-            >
-              {submitChange.isPending ? 'Submitting…' : 'Submit change'}
-            </Button>
-            <Button
-              type="button"
-              disabled={!configured || !acknowledged || confirmLock.isPending}
-              onClick={() => void handleConfirmLock()}
-            >
-              {confirmLock.isPending ? 'Locking…' : 'Confirm and lock'}
-            </Button>
-          </div>
-        </div>
+        {content?.canRequestChanges ? (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={
+              !configured ||
+              submitChange.isPending ||
+              draft.trim().length === 0
+            }
+            onClick={() => void handleSubmitChange()}
+          >
+            {submitChange.isPending ? 'Sending…' : 'Request Changes'}
+          </Button>
+        ) : null}
+        {content?.canConfirmContent ? (
+          <Button
+            type="button"
+            disabled={
+              !configured || !acknowledged || confirmContent.isPending
+            }
+            onClick={() => void handleConfirmContent()}
+          >
+            {confirmContent.isPending ? 'Confirming…' : 'Confirm Content'}
+          </Button>
+        ) : null}
       </CardFooter>
     </Card>
   );
 }
-

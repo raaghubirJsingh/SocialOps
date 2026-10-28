@@ -57,6 +57,8 @@ interface ContentFormProps {
   mode: 'create' | 'edit';
   /** The item being edited (edit mode only). */
   initial?: ContentDto;
+  /** Prefilled title/body for create mode (e.g. manual draft-from-intake). */
+  initialDraft?: { title: string; body: string };
   onSubmit: (values: { title: string; body: string }) => Promise<void>;
   onCancel: () => void;
   isSubmitting: boolean;
@@ -66,6 +68,7 @@ interface ContentFormProps {
 export function ContentForm({
   mode,
   initial,
+  initialDraft,
   onSubmit,
   onCancel,
   isSubmitting,
@@ -78,8 +81,8 @@ export function ContentForm({
   } = useForm<FormValues>({
     resolver,
     defaultValues: {
-      title: initial?.title ?? '',
-      body: initial?.body ?? '',
+      title: initial?.title ?? initialDraft?.title ?? '',
+      body: initial?.body ?? initialDraft?.body ?? '',
     },
   });
 

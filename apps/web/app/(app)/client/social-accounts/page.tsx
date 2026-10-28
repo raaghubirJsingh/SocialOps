@@ -22,6 +22,7 @@ import {
   useCreateSocialAccount,
   useSocialAccounts,
   useDisconnectSocialAccount,
+  useStartOAuthConnectForAccount,
   useUpdateSocialAccount,
 } from '@/hooks/use-social-accounts';
 import { useSession } from '@/hooks/use-session';
@@ -41,9 +42,13 @@ import type { SocialAccountDto } from '@/types/social-account';
  * reach another client's data.
  *
  * As the owner, the client may always manage its own records (no role gate).
- * OAuth connect affordances are deliberately absent: V1 is metadata-only
- * (Decision 013 is deferred), so the only write path on this page is the
- * manual "Add account" form below.
+ *
+ * OAuth connect: each card's "Connect"/"Reconnect" button starts the ROW-SCOPED
+ * handshake for that SocialAccount. The backend re-verifies the `X-Client-Id`
+ * binding, proves the row belongs to this client, and carries the row id inside
+ * the signed state, so the callback UPDATES that same row with the
+ * platformAccountId discovered from the platform - no duplicate row, and no
+ * manual platform id entry. The metadata-only notice still heads the section.
  */
 type FormState =
   | { mode: 'closed' }
@@ -63,6 +68,31 @@ export default function ClientSocialAccountsPage() {
   const updateMutation = useUpdateSocialAccount('mine', clientId);
   const disconnectMutation = useDisconnectSocialAccount('mine', clientId);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+  const connectForAccount = useStartOAuthConnectForAccount('mine', clientId);
+  const [connectingId, setConnectingId] = useState<string | null>(null);
+
+  /**
+   * Full-page redirect to the platform's authorize URL - OAuth cannot be
+   * completed by a background fetch. On success the backend callback updates
+   * THIS row with the discovered platformAccountId.
+   */
+  const handleStartConnect = async (account: SocialAccountDto) => {
+    setServerError(null);
+    setConnectingId(account.id);
+    try {
+      const { authorizeUrl } = await connectForAccount.mutateAsync(account.id);
+      window.location.assign(authorizeUrl);
+    } catch (error) {
+      setServerError(
+        describeApiError(
+          error,
+          `Unable to start the ${account.platform} connection. Please try again.`,
+        ),
+      );
+    } finally {
+      setConnectingId(null);
+    }
+  };
 
   /**
    * Disconnect removes ONLY the stored credential; the metadata row is kept by
@@ -170,6 +200,22 @@ export default function ClientSocialAccountsPage() {
 
       <MetadataOnlyNotice />
 
+      {/*
+        Page-level error surface. `serverError` is ALSO handed to the form below,
+        but the form only renders while it is open - so a failure from a
+        CARD-level action (Connect / Disconnect), which never opens the form,
+        used to be set into state and never rendered anywhere. The user saw
+        nothing at all. This alert closes that gap.
+      */}
+      {serverError && (
+        <div
+          role="alert"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
+        >
+          {serverError}
+        </div>
+      )}
+
       {formState.mode !== 'closed' && (
         <Card>
           <CardHeader>
@@ -223,6 +269,10 @@ export default function ClientSocialAccountsPage() {
           onDisconnect={(account) => {
             void handleDisconnect(account);
           }}
+          onStartConnect={(account) => {
+            void handleStartConnect(account);
+          }}
+          connectingId={connectForAccount.isPending ? connectingId : null}
           disconnectingId={disconnectMutation.isPending ? disconnectingId : null}
         />
       )}

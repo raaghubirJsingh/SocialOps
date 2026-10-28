@@ -1,10 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { ClientSectionNav } from '@/components/clients/client-section-nav';
+import { InviteClientForm } from '@/components/clients/invite-client-form';
 import {
   Card,
   CardContent,
@@ -12,7 +14,9 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { useActiveOrganization } from '@/hooks/use-active-organization';
+import { useMyMemberships } from '@/hooks/use-my-memberships';
 import { useSession } from '@/hooks/use-session';
 import { ApiError } from '@/lib/api';
 import { clientApi } from '@/lib/client-api';
@@ -57,6 +61,9 @@ export default function ClientDetailPage() {
   const { clientId } = useParams<{ clientId: string }>();
   const { activeOrganizationId } = useActiveOrganization();
   const { isAuthenticated, isLoading: sessionLoading } = useSession();
+  const membershipsQuery = useMyMemberships();
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const queryClient = useQueryClient();
 
   // Both queries stay disabled until the org context exists.
   const orgReady = Boolean(activeOrganizationId && clientId);
@@ -75,6 +82,23 @@ export default function ClientDetailPage() {
     retry: 0,
   });
 
+  // UI convenience only (mirrors the Clients list page): the backend
+  // RoleGuard + @RequireMinimumRole('ADMIN') remain the authority on
+  // POST /api/clients/:id/invite.
+  const activeMembership = membershipsQuery.data?.memberships.find(
+    (membership) => membership.organization.id === activeOrganizationId,
+  );
+  const canManage =
+    activeMembership?.role === 'OWNER' || activeMembership?.role === 'ADMIN';
+
+  // The invite affordance is only meaningful for a PENDING, unbound client.
+  const canInvite = Boolean(
+    canManage &&
+      clientQuery.data &&
+      !clientQuery.data.ownerUserId &&
+      clientQuery.data.onboardingStatus === 'PENDING',
+  );
+
   if (sessionLoading || !isAuthenticated) {
     return (
       <div className="flex items-center justify-center p-6">
@@ -87,7 +111,9 @@ export default function ClientDetailPage() {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <p className="text-sm text-slate-400">
-          Select an organization first to view client details.
+          {membershipsQuery.isPending
+            ? 'Loading your organizations…'
+            : 'Select an organization first to view client details.'}
         </p>
         <Link href="/clients" className="text-sm text-blue-400 hover:underline">
           ← Back to clients
@@ -180,8 +206,36 @@ export default function ClientDetailPage() {
               <p className="text-slate-400">
                 Last updated: {formatDateTime(client.updatedAt)}
               </p>
+              {canInvite && !showInviteForm && (
+                <div className="pt-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setShowInviteForm(true)}
+                  >
+                    Invite client owner
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
+
+          {showInviteForm && canInvite && client && (
+            <InviteClientForm
+              clientId={clientId}
+              clientEmail={client.directEmail}
+              onInvited={() => {
+                // Re-read the client so the "Bound" state reflects reality.
+                void queryClient.invalidateQueries({
+                  queryKey: ['client', activeOrganizationId, clientId],
+                });
+                void queryClient.invalidateQueries({
+                  queryKey: ['client-history', activeOrganizationId, clientId],
+                });
+              }}
+              onCancel={() => setShowInviteForm(false)}
+            />
+          )}
         </div>
       ) : null}
 

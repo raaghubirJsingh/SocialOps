@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import Link from 'next/link';
 
 import { CreateClientForm } from '@/components/clients/create-client-form';
@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { useActiveOrganization } from '@/hooks/use-active-organization';
 import { useMyMemberships } from '@/hooks/use-my-memberships';
 import { useSession } from '@/hooks/use-session';
@@ -58,13 +59,27 @@ export default function AgencyClientsPage() {
   const membershipsQuery = useMyMemberships();
   const queryClient = useQueryClient();
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Debounce the search term (~300ms) without a dependency. The query key
+  // uses the DEBOUNCED value so typing does not fire a request per keystroke;
+  // `placeholderData: keepPreviousData` keeps the current list visible while
+  // the new search resolves (no flicker).
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(searchInput), 300);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
+  const trimmedSearch = debouncedSearch.trim();
 
   const clientsQuery = useQuery<ClientDto[]>({
-    queryKey: ['clients', activeOrganizationId],
-    queryFn: () => clientApi.listClients(),
+    queryKey: ['clients', activeOrganizationId, trimmedSearch],
+    queryFn: () => clientApi.listClients(trimmedSearch || undefined),
     // Never issue a request without an active organization: the backend
     // rejects every call without the X-Organization-Id header.
     enabled: Boolean(activeOrganizationId),
+    placeholderData: keepPreviousData,
     retry: 0,
   });
 
@@ -164,6 +179,24 @@ export default function AgencyClientsPage() {
         )}
       </header>
 
+      <div role="search" className="max-w-md">
+        <Input
+          type="search"
+          aria-label="Search clients"
+          placeholder="Search by name, email, phone or contact"
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value)}
+        />
+        {/* Polite, screen-reader-only announcement of the current result count. */}
+        <p aria-live="polite" className="sr-only">
+          {clientsQuery.data
+            ? `${clientsQuery.data.length} client${clientsQuery.data.length === 1 ? '' : 's'}${
+                trimmedSearch ? ` match "${trimmedSearch}"` : ''
+              }`
+            : ''}
+        </p>
+      </div>
+
       {showCreateForm && canManage && (
         <CreateClientForm onCreated={handleCreated} onCancel={() => setShowCreateForm(false)} />
       )}
@@ -184,11 +217,15 @@ export default function AgencyClientsPage() {
       ) : clientsQuery.data.length === 0 ? (
         <Card>
           <CardHeader>
-            <CardTitle>No clients yet</CardTitle>
+            <CardTitle>
+              {trimmedSearch ? 'No clients match your search' : 'No clients yet'}
+            </CardTitle>
             <CardDescription>
-              {canManage
-                ? 'Create your first client to start managing their social media operations.'
-                : 'This organization has not onboarded any clients yet.'}
+              {trimmedSearch
+                ? `No clients match "${trimmedSearch}". Try a different name, email, phone or contact.`
+                : canManage
+                  ? 'Create your first client to start managing their social media operations.'
+                  : 'This organization has not onboarded any clients yet.'}
             </CardDescription>
           </CardHeader>
         </Card>

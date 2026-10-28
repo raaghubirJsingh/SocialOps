@@ -27,9 +27,8 @@ interface ClientContentCardProps {
 /**
  * Content snapshot for the client persona. Every number is computed from
  * the real `GET /client/me/content` response by the caller — this card only
- * presents them. "Approved · final" reflects the APPROVED status, which in
- * V1 is reachable ONLY through the client-owner final confirmation (the
- * approval gate itself); publishing is still a deferred module.
+ * presents them. The server maps internal workflow states into these
+ * client-facing summary counts.
  */
 export function ClientContentCard({
   stats,
@@ -53,7 +52,7 @@ export function ClientContentCard({
           </Link>
         </div>
         <CardDescription>
-          Items shared with you — you approve what is final.
+          Your submitted requests, drafts, and confirmations.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -83,7 +82,7 @@ export function ClientContentCard({
                   className="h-2 w-2 rounded-full bg-amber-400"
                   aria-hidden="true"
                 />
-                Under review
+                Ready for your review
               </dt>
               <dd className="text-sm font-semibold tabular-nums text-slate-100">
                 {stats.underReview}
@@ -95,7 +94,7 @@ export function ClientContentCard({
                   className="h-2 w-2 rounded-full bg-emerald-400"
                   aria-hidden="true"
                 />
-                Approved · final
+                Confirmed content
               </dt>
               <dd className="text-sm font-semibold tabular-nums text-slate-100">
                 {stats.approved}

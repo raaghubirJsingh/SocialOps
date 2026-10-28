@@ -43,12 +43,11 @@ export function ClientOverview({ clientId }: ClientOverviewProps) {
 
   const content = contentQuery.data ?? [];
   const contentStats = {
-    total: content.filter((item) => item.status !== 'ARCHIVED').length,
+    total: content.filter((item) => item.state !== 'closed').length,
     underReview: content.filter(
-      (item) =>
-        item.status === 'IN_REVIEW' || item.status === 'CHANGES_REQUESTED',
+      (item) => item.state === 'ready_for_review',
     ).length,
-    approved: content.filter((item) => item.status === 'APPROVED').length,
+    approved: content.filter((item) => item.state === 'confirmed').length,
   };
 
   const accounts = socialQuery.data ?? [];
@@ -111,13 +110,13 @@ function StatGrid(props: {
       />
       <OverviewStatCard
         icon={CheckCircle2}
-        label="Approved · final"
+        label="Confirmed content"
         value={contentReady ? stats.approved : '—'}
         hint="Confirmed by you"
       />
       <OverviewStatCard
         icon={Clock3}
-        label="Under review"
+        label="Ready for review"
         value={contentReady ? stats.underReview : '—'}
         hint="Awaiting your decision"
       />
