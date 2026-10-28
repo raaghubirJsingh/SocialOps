@@ -29,6 +29,32 @@ export const SOCIAL_PLATFORM_LABELS: Readonly<
   YOUTUBE: 'YouTube',
 });
 
+/**
+ * Hosts a profile URL may belong to, per platform (approved rule: a social
+ * account URL must belong to its platform - a Facebook account may not carry
+ * an instagram.com URL).
+ *
+ * This map is the SINGLE SOURCE OF TRUTH and deliberately sits next to
+ * SOCIAL_PLATFORMS so a platform can never be added without deciding its
+ * hosts, and vice versa. Keyed by SocialPlatformValue, so TypeScript itself
+ * rejects a key for a platform that does not exist - the compiler is the
+ * guard against inventing a platform here.
+ *
+ * These are the DOMAINS only. Sub-domain matching (web.facebook.com,
+ * m.youtube.com) is handled by the matcher in lib/profile-url-platform.ts,
+ * which accepts the exact domain or any name ending in "." + domain.
+ *
+ * Only the three approved V1 platforms appear. Nothing is inferred from a
+ * handle, and no host is resolved or fetched - this is a pure string rule.
+ */
+export const SOCIAL_PLATFORM_ALLOWED_HOSTS: Readonly<
+  Record<SocialPlatformValue, readonly string[]>
+> = Object.freeze({
+  INSTAGRAM: Object.freeze(['instagram.com']),
+  FACEBOOK: Object.freeze(['facebook.com', 'fb.com', 'fb.me']),
+  YOUTUBE: Object.freeze(['youtube.com', 'youtu.be']),
+});
+
 /** Runtime guard: true only for an approved V1 platform value. */
 export function isSocialPlatform(value: unknown): value is SocialPlatformValue {
   return (

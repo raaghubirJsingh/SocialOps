@@ -22,6 +22,21 @@ export interface OAuthStatePayload {
   organizationId: string;
   clientId: string;
   platform: SocialPlatformValue;
+  /**
+   * OPTIONAL target row for a row-scoped connect (GET .../:socialAccountId/connect).
+   *
+   * When present, `completeConnect` UPDATES that existing SocialAccount with the
+   * platformAccountId discovered from the token exchange instead of upserting by
+   * the (clientId, platform, platformAccountId) composite - which cannot match a
+   * row whose platformAccountId is still NULL, and would therefore create a
+   * DUPLICATE row.
+   *
+   * It travels INSIDE the HMAC-signed payload, so it inherits authenticity,
+   * expiry and single-use for free, and is re-proven against PostgreSQL at
+   * callback time. It is optional so the original platform-scoped connect
+   * (which mints a state without a row) keeps working unchanged.
+   */
+  socialAccountId?: string | null;
   source: 'AGENCY' | 'CLIENT';
   nonce: string;
   iat: number;

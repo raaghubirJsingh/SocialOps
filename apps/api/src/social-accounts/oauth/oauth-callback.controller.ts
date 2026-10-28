@@ -106,7 +106,13 @@ export class SocialAccountOAuthCallbackController {
     const to = (destination: string, status: string, platform?: string) => {
       const params = new URLSearchParams({ status });
       if (platform) params.set('platform', platform);
-      res.redirect(`${frontendBase}${destination}?${params.toString()}`);
+      // `destinationFor` may already carry a query string (the CLIENT persona
+      // appends ?clientId=), so the separator is CONDITIONAL. Appending a
+      // second literal '?' made `status` part of the clientId value, silently
+      // dropping the status marker the UI reads - the client-persona redirect
+      // looked like it had no outcome at all.
+      const separator = destination.includes('?') ? '&' : '?';
+      res.redirect(`${frontendBase}${destination}${separator}${params.toString()}`);
     };
 
     if (!isSocialPlatform(rawPlatform) || !state) {

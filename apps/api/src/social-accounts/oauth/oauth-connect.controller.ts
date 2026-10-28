@@ -11,7 +11,7 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import type { Client } from '@prisma/client';
+import type { Client, SocialPlatform } from '@prisma/client';
 
 import { CurrentClient } from '../../clients/decorators/current-client.decorator.js';
 import { ClientAccessGuard } from '../../clients/guards/client-access.guard.js';
@@ -44,6 +44,46 @@ export function requirePlatformParam(raw: string) {
 }
 
 /**
+ * ONE connect route, two targets.
+ *
+ * `GET .../social-accounts/{platform}/connect` and
+ * `GET .../social-accounts/{socialAccountId}/connect` have the IDENTICAL
+ * Express shape, so they CANNOT be two separate decorated routes: the first
+ * registered always wins and would answer every request with "Unsupported
+ * platform" (a real 400 observed in integration before this was fixed).
+ *
+ * The segment is therefore resolved by CONTENT, not by route order:
+ *   - a V1 platform name  -> the original platform-scoped flow, byte-for-byte
+ *     unchanged (backward compatible);
+ *   - anything else       -> the row-scoped flow, which takes the platform FROM
+ *     the row, so a caller cannot aim an Instagram row at Facebook.
+ *
+ * A segment that is neither a V1 platform nor a UUID is a uniform 400: an
+ * unsupported platform and a malformed row id are both invalid targets, and the
+ * message never reveals which rows exist.
+ */
+export function resolveConnectTarget(segment: string):
+  | { kind: 'platform'; platform: SocialPlatform }
+  | { kind: 'account'; socialAccountId: string } {
+  if (isSocialPlatform(segment)) {
+    return { kind: 'platform', platform: segment };
+  }
+  if (!isUuid(segment)) {
+    throw new BadRequestException(
+      `Unsupported platform. V1 platforms: ${SOCIAL_PLATFORMS.join(', ')}`,
+    );
+  }
+  return { kind: 'account', socialAccountId: segment };
+}
+
+/** RFC 4122 shape check (any version) - mirrors ParseUUIDPipe's acceptance. */
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+/**
  * Agency-side OAuth connect start (Decision 013).
  *
  * Authorization chain matches the metadata controller: global JwtAuthGuard +
@@ -58,14 +98,14 @@ export function requirePlatformParam(raw: string) {
 export class SocialAccountOAuthConnectAgencyController {
   constructor(private readonly oauth: SocialAccountsOAuthService) {}
 
-  @Get(':platform/connect')
+  @Get(':platformOrAccountId/connect')
   @UseGuards(RoleGuard)
   @RequireMinimumRole('ADMIN')
   @ApiOperation({
     summary:
       'Start an OAuth connect for a Client social account (returns authorize URL).',
     description:
-      'Mints a signed, single-use CSRF state bound to the authenticated user, the verified organization and the in-scope client. The browser follows authorizeUrl; completion lands on the public callback route. Platform credentials never pass through this API.',
+      'Mints a signed, single-use CSRF state bound to the authenticated user, the verified organization and the in-scope client. The browser follows authorizeUrl; completion lands on the public callback route. Platform credentials never pass through this API. Pass a V1 platform name for the platform-scoped flow, or an existing SocialAccount id to connect that specific row in place (the platform is then read from the row, and the callback updates that row instead of creating a second one).',
   })
   @ApiOkResponse({
     description: '{ authorizeUrl, expiresIn } - redirect the browser.',
@@ -74,14 +114,25 @@ export class SocialAccountOAuthConnectAgencyController {
     @CurrentUser() user: JwtAccessPayload,
     @CurrentOrganization() organization: RequestOrganizationContext,
     @Param('clientId') clientId: string,
-    @Param('platform') rawPlatform: string,
+    @Param('platformOrAccountId') segment: string,
   ) {
-    const platform = requirePlatformParam(rawPlatform);
+    const target = resolveConnectTarget(segment);
+    // ROW-SCOPED: the row proves its own platform and membership, so there is no
+    // platform parameter to tamper with. A state minted here carries the row id,
+    // so the callback UPDATES that row instead of upserting a duplicate.
+    if (target.kind === 'account') {
+      return this.oauth.startConnectAgencyForAccount(
+        user,
+        organization.id,
+        clientId,
+        target.socialAccountId,
+      );
+    }
     return this.oauth.startConnectAgency(
       user,
       organization.id,
       clientId,
-      platform,
+      target.platform,
     );
   }
 }
@@ -101,21 +152,33 @@ export class SocialAccountOAuthConnectAgencyController {
 export class SocialAccountOAuthConnectMeController {
   constructor(private readonly oauth: SocialAccountsOAuthService) {}
 
-  @Get(':platform/connect')
+  /**
+ * ONE connect route, two targets - see `resolveConnectTarget` above for why
+ * the platform and row-scoped variants cannot be two separate decorated routes.
+ */
+@Get(':platformOrAccountId/connect')
   @Public()
   @UseGuards(ClientAccessGuard)
   @ApiOperation({
     summary:
       'Start an OAuth connect for one of my own social accounts (returns authorize URL).',
+    description:
+      'Pass a V1 platform name for the platform-scoped flow, or one of your existing SocialAccount ids to connect that row in place; the platform is then read from the row and a successful callback updates that row instead of creating a second one.',
   })
   @ApiOkResponse({
     description: '{ authorizeUrl, expiresIn } - redirect the browser.',
   })
   connectMe(
     @CurrentClient() client: Client,
-    @Param('platform') rawPlatform: string,
+    @Param('platformOrAccountId') segment: string,
   ) {
-    const platform = requirePlatformParam(rawPlatform);
-    return this.oauth.startConnectClient(client.id, platform);
+    const target = resolveConnectTarget(segment);
+    if (target.kind === 'account') {
+      return this.oauth.startConnectClientForAccount(
+        client.id,
+        target.socialAccountId,
+      );
+    }
+    return this.oauth.startConnectClient(client.id, target.platform);
   }
 }
