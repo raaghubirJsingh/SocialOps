@@ -11,6 +11,7 @@ import {
   isAllowedUploadContentType,
   MAX_UPLOAD_BYTES,
   type AllowedUploadContentType,
+  type ClientContentRequestDto,
   type CreateRawDataRequest,
   type RawDataDto,
   type UploadedFileRef,
@@ -55,6 +56,29 @@ export function useRawData(scope: RawDataScope, clientId: string) {
   });
 }
 
+export function useContentRequests(clientId: string) {
+  const { isAuthenticated, isLoading } = useSession();
+
+  return useQuery<ClientContentRequestDto[]>({
+    queryKey: queryKeys.contentRequests(clientId),
+    queryFn: () => rawDataApi.listContentRequestsMine(clientId),
+    enabled: !isLoading && isAuthenticated && Boolean(clientId),
+    retry: 0,
+  });
+}
+
+export function useContentRequest(clientId: string, requestId: string) {
+  const { isAuthenticated, isLoading } = useSession();
+
+  return useQuery<ClientContentRequestDto>({
+    queryKey: queryKeys.contentRequest(clientId, requestId),
+    queryFn: () => rawDataApi.getContentRequestMine(clientId, requestId),
+    enabled:
+      !isLoading && isAuthenticated && Boolean(clientId) && Boolean(requestId),
+    retry: 0,
+  });
+}
+
 export function useCreateRawData(scope: RawDataScope, clientId: string) {
   const queryClient = useQueryClient();
   const { activeOrganizationId } = useActiveOrganization();
@@ -64,10 +88,16 @@ export function useCreateRawData(scope: RawDataScope, clientId: string) {
       scope === 'agency'
         ? rawDataApi.createForClient(clientId, body)
         : rawDataApi.createMine(clientId, body),
-    onSettled: () =>
-      queryClient.invalidateQueries({
+    onSettled: async () => {
+      await queryClient.invalidateQueries({
         queryKey: queryKeys.rawData(scope, activeOrganizationId, clientId),
-      }),
+      });
+      if (scope === 'mine') {
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.contentRequests(clientId),
+        });
+      }
+    },
   });
 }
 

@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, ScenarioType } from '@prisma/client';
+import { ContentStatus, Prisma, ScenarioType } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CHANGE_REQUEST_SELECT } from './content.select.js';
@@ -88,7 +88,7 @@ export class ChangeRequestService {
         }
       }
 
-      return tx.changeRequest.create({
+      const changeRequest = await tx.changeRequest.create({
         data: {
           contentId,
           requestedById,
@@ -96,6 +96,26 @@ export class ChangeRequestService {
         },
         select: CHANGE_REQUEST_SELECT,
       });
+
+      if (content.status === ContentStatus.UNDER_CLIENT_REVIEW) {
+        await tx.content.update({
+          where: { id: contentId },
+          data: { status: ContentStatus.AWAITING_MANAGER_APPROVAL },
+        });
+        await tx.contentStatusEvent.create({
+          data: {
+            contentId,
+            clientId,
+            fromStatus: ContentStatus.UNDER_CLIENT_REVIEW,
+            toStatus: ContentStatus.AWAITING_MANAGER_APPROVAL,
+            actorUserId: requestedById,
+            actorRole: 'CLIENT_OWNER',
+            note: requestDetails,
+          },
+        });
+      }
+
+      return changeRequest;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   }
 

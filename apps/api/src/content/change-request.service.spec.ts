@@ -15,7 +15,8 @@ const asMock = (fn: unknown) => fn as ReturnType<typeof jest.fn>;
 function makeTxMock() {
   return {
     $queryRaw: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
-    content: { findFirst: jest.fn() },
+    content: { findFirst: jest.fn(), update: jest.fn() },
+    contentStatusEvent: { create: jest.fn() },
     changeRequest: { count: jest.fn(), create: jest.fn() },
   };
 }
@@ -129,6 +130,64 @@ describe('ChangeRequestService.create - SCENARIO_1 cap of 2 (LOCKED)', () => {
         }),
       }),
     );
+  });
+
+  it('returns client-reviewed content to agency approval in the same transaction', async () => {
+    const tx = makeTxMock();
+    asMock(tx.content.findFirst).mockResolvedValue(
+      baseContent({ status: ContentStatus.UNDER_CLIENT_REVIEW }),
+    );
+    asMock(tx.changeRequest.count).mockResolvedValue(0);
+    asMock(tx.changeRequest.create).mockResolvedValue({ id: 'cr-review' });
+    const { service } = makeService(tx);
+
+    await service.create({
+      contentId: CONTENT_ID,
+      clientId: CLIENT_ID,
+      requestedById: USER_ID,
+      requestDetails: 'Please revise the headline',
+    });
+
+    expect(tx.content.update).toHaveBeenCalledWith({
+      where: { id: CONTENT_ID },
+      data: { status: ContentStatus.AWAITING_MANAGER_APPROVAL },
+    });
+    expect(tx.contentStatusEvent.create).toHaveBeenCalledWith({
+      data: {
+        contentId: CONTENT_ID,
+        clientId: CLIENT_ID,
+        fromStatus: ContentStatus.UNDER_CLIENT_REVIEW,
+        toStatus: ContentStatus.AWAITING_MANAGER_APPROVAL,
+        actorUserId: USER_ID,
+        actorRole: 'CLIENT_OWNER',
+        note: 'Please revise the headline',
+      },
+    });
+    expect(tx.changeRequest.create.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.content.update.mock.invocationCallOrder[0],
+    );
+    expect(tx.content.update.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.contentStatusEvent.create.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('preserves the legacy IN_REVIEW change-request behavior', async () => {
+    const tx = makeTxMock();
+    asMock(tx.content.findFirst).mockResolvedValue(baseContent());
+    asMock(tx.changeRequest.count).mockResolvedValue(0);
+    asMock(tx.changeRequest.create).mockResolvedValue({ id: 'cr-legacy' });
+    const { service } = makeService(tx);
+
+    await service.create({
+      contentId: CONTENT_ID,
+      clientId: CLIENT_ID,
+      requestedById: USER_ID,
+      requestDetails: 'Legacy review change',
+    });
+
+    expect(tx.changeRequest.create).toHaveBeenCalled();
+    expect(tx.content.update).not.toHaveBeenCalled();
+    expect(tx.contentStatusEvent.create).not.toHaveBeenCalled();
   });
 
   it('blocks the 3rd request for SCENARIO_1 with 400', async () => {

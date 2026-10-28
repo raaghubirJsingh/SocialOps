@@ -107,6 +107,41 @@ export class RawDataMeController {
     );
   }
 
+  @Get('content-requests')
+  @Public()
+  @UseGuards(ClientAccessGuard)
+  @ApiOperation({ summary: 'List my Content Requests and linked drafts.' })
+  @ApiOkResponse({
+    description: 'Insert-only Content Requests with safe linked-draft views.',
+  })
+  listContentRequests(
+    @CurrentClient() client: Client,
+    @Query(new ZodValidationPipe(listRawDataQuerySchema)) query: unknown,
+  ) {
+    return this.rawDataService.listContentRequestsForClient(
+      client.id,
+      normaliseListRawDataQuery(query as ListRawDataQueryDto),
+    );
+  }
+
+  @Get('content-requests/:requestId')
+  @Public()
+  @UseGuards(ClientAccessGuard)
+  @ApiOperation({ summary: 'Read one Content Request and its linked draft.' })
+  @ApiOkResponse({
+    description: 'The immutable request with a safe linked-draft view.',
+  })
+  @ApiNotFoundResponse({ description: 'Not found for this Client.' })
+  getContentRequest(
+    @CurrentClient() client: Client,
+    @Param('requestId', ParseUUIDPipe) requestId: string,
+  ) {
+    return this.rawDataService.findContentRequestForClient(
+      client.id,
+      requestId,
+    );
+  }
+
   @Get(':rawDataId')
   @Public()
   @UseGuards(ClientAccessGuard)

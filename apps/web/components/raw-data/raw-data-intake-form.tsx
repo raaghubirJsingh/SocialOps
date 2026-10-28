@@ -19,6 +19,12 @@ interface RawDataIntakeFormProps {
   onCancel: () => void;
   isSubmitting: boolean;
   error: string | null;
+  /**
+   * Submit CTA copy. Defaults keep the agency wording ("Record intake");
+   * client-facing callers pass the Content Request wording instead.
+   */
+  submitLabel?: string;
+  submittingLabel?: string;
 }
 
 /**
@@ -37,6 +43,8 @@ export function RawDataIntakeForm({
   onCancel,
   isSubmitting,
   error,
+  submitLabel = 'Record intake',
+  submittingLabel = 'Recording…',
 }: RawDataIntakeFormProps) {
   const [source, setSource] = useState<RawDataSource>('CLIENT_FORM');
   const [contentId, setContentId] = useState('');
@@ -160,7 +168,7 @@ export function RawDataIntakeForm({
 
       <div className="flex gap-3">
         <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? 'Recording…' : 'Record intake'}
+          {isSubmitting ? submittingLabel : submitLabel}
         </Button>
         <Button
           type="button"

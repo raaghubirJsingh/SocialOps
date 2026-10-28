@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useState } from 'react';
 
 import { ClientSectionNav } from '@/components/clients/client-section-nav';
+import { ClientContextHeader } from '@/components/clients/client-context-header';
 import { RawDataIntakeForm } from '@/components/raw-data/raw-data-intake-form';
 import { RawDataList } from '@/components/raw-data/raw-data-list';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,7 @@ import { useContentList } from '@/hooks/use-content';
 import { useMyMemberships } from '@/hooks/use-my-memberships';
 import { useCreateRawData, useRawData } from '@/hooks/use-raw-data';
 import { useSession } from '@/hooks/use-session';
+import { ApiError } from '@/lib/api';
 import { describeApiError } from '@/lib/api-error-messages';
 import type { CreateRawDataRequest } from '@/types/content';
 
@@ -51,6 +53,14 @@ export default function AgencyClientRawDataPage() {
   const canManage =
     activeMembership?.role === 'OWNER' || activeMembership?.role === 'ADMIN';
 
+  // A 404 from the client-scoped list means the client is not selectable in
+  // this organization (no ACTIVE ClientAgencyRelationship). Hide the section
+  // tabs: without a valid client they are meaningless.
+  const clientMissing =
+    rawDataQuery.isError &&
+    rawDataQuery.error instanceof ApiError &&
+    rawDataQuery.error.status === 404;
+
   if (sessionLoading || !isAuthenticated) {
     return (
       <div className="flex items-center justify-center p-6">
@@ -63,8 +73,29 @@ export default function AgencyClientRawDataPage() {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <p className="text-sm text-slate-400">
-          Select an organization first to manage client intake.
+          {membershipsQuery.isPending
+            ? 'Loading your organizations…'
+            : 'Select an organization first to manage client intake.'}
         </p>
+        <Link
+          href="/clients"
+          className="rounded text-sm text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
+        >
+          ← Back to clients
+        </Link>
+      </div>
+    );
+  }
+
+  if (clientMissing) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4">
+        <div
+          role="alert"
+          className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
+        >
+          Client not found in this organization.
+        </div>
         <Link
           href="/clients"
           className="rounded text-sm text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
@@ -89,13 +120,14 @@ export default function AgencyClientRawDataPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
+      <ClientContextHeader clientId={clientId} />
       <ClientSectionNav clientId={clientId} active="raw-data" />
 
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-100">
+          <h3 className="text-2xl font-semibold tracking-tight text-slate-100">
             Raw data
-          </h2>
+          </h3>
           <p className="text-sm text-slate-400">
             Immutable intake records for this client. Insert-only: rows can never
             be edited or deleted.
@@ -111,7 +143,7 @@ export default function AgencyClientRawDataPage() {
       {showForm && canManage && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Record intake</CardTitle>
+            <CardTitle className="text-base">Record intake for this client</CardTitle>
             <CardDescription>
               Paste text and/or provide metadata. The integrity hash is computed
               server-side.
@@ -149,7 +181,16 @@ export default function AgencyClientRawDataPage() {
           </CardContent>
         </Card>
       ) : (
-        <RawDataList records={rawDataQuery.data} />
+        <RawDataList
+          records={rawDataQuery.data}
+          detailHref={(rawDataId) => `/clients/${clientId}/raw-data/${rawDataId}`}
+          draftHref={
+            canManage
+              ? (rawDataId) =>
+                  `/clients/${clientId}/content?fromRawData=${rawDataId}`
+              : undefined
+          }
+        />
       )}
     </div>
   );

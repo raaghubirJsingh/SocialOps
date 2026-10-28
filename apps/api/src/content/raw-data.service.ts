@@ -8,7 +8,11 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { S3Service } from '../s3/s3.service.js';
 import { isAllowedUploadContentType } from '../s3/s3.constants.js';
-import { RAW_DATA_SELECT } from './content.select.js';
+import {
+  CLIENT_CONTENT_REQUEST_SELECT,
+  RAW_DATA_SELECT,
+  toClientContentView,
+} from './content.select.js';
 import { rawDataHashOf } from './content-hash.js';
 import type {
   CreateRawDataDto,
@@ -50,6 +54,48 @@ export class RawDataService {
       orderBy: { capturedAt: 'desc' },
       take: filters.take,
     });
+  }
+
+  async listContentRequestsForClient(
+    clientId: string,
+    filters: ListRawDataQuery,
+  ) {
+    const records = await this.prisma.rawData.findMany({
+      where: {
+        clientId,
+        source: 'CLIENT_FORM',
+      },
+      select: CLIENT_CONTENT_REQUEST_SELECT,
+      orderBy: { capturedAt: 'desc' },
+      take: filters.take,
+    });
+
+    return records.map(({ requestedContent, ...request }) => ({
+      ...request,
+      requestedContent: requestedContent
+        ? toClientContentView(requestedContent)
+        : null,
+    }));
+  }
+
+  async findContentRequestForClient(clientId: string, requestId: string) {
+    const request = await this.prisma.rawData.findFirst({
+      where: {
+        id: requestId,
+        clientId,
+        source: 'CLIENT_FORM',
+      },
+      select: CLIENT_CONTENT_REQUEST_SELECT,
+    });
+    if (!request) throw new NotFoundException('Content request not found');
+
+    const { requestedContent, ...record } = request;
+    return {
+      ...record,
+      requestedContent: requestedContent
+        ? toClientContentView(requestedContent)
+        : null,
+    };
   }
 
   async findOneForClient(clientId: string, rawDataId: string) {

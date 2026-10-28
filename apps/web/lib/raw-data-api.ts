@@ -12,8 +12,11 @@
  * bearer token and `X-Organization-Id` are never sent to the storage vendor.
  */
 import { apiFetch } from './api';
+import { contentApi } from './content-api';
 import type {
   CreateRawDataRequest,
+  ClientContentRequestDto,
+  InternalNoteDto,
   PresignedUploadRequest,
   PresignedUploadResponse,
   RawDataDto,
@@ -34,11 +37,30 @@ export const rawDataApi = {
       body,
     }),
 
+  getForClient: (clientId: string, rawDataId: string): Promise<RawDataDto> =>
+    apiFetch<RawDataDto>(`/clients/${clientId}/raw-data/${rawDataId}`),
+
   // ---- client self-service scope ----
   listMine: (clientId: string): Promise<RawDataDto[]> =>
     apiFetch<RawDataDto[]>('/client/me/raw-data', {
       headers: { 'X-Client-Id': clientId },
     }),
+
+  listContentRequestsMine: (
+    clientId: string,
+  ): Promise<ClientContentRequestDto[]> =>
+    apiFetch<ClientContentRequestDto[]>('/client/me/raw-data/content-requests', {
+      headers: { 'X-Client-Id': clientId },
+    }),
+
+  getContentRequestMine: (
+    clientId: string,
+    requestId: string,
+  ): Promise<ClientContentRequestDto> =>
+    apiFetch<ClientContentRequestDto>(
+      `/client/me/raw-data/content-requests/${requestId}`,
+      { headers: { 'X-Client-Id': clientId } },
+    ),
 
   createMine: (
     clientId: string,
@@ -80,7 +102,48 @@ export const rawDataApi = {
       body,
       headers: { 'X-Client-Id': clientId },
     }),
+
+  /**
+   * Provenance for a manually initiated draft-from-intake (V1).
+   *
+   * The Content row is created FIRST through the existing Content create
+   * mutation (server-forced DRAFT, server-resolved agencyId). This records
+   * `Drafted from client intake <rawDataId>` as an agency-only Internal Note
+   * on that Content via the existing internal-notes endpoint. RawData itself
+   * is never mutated.
+   */
+  recordDraftProvenance: (
+    clientId: string,
+    contentId: string,
+    rawDataId: string,
+  ): Promise<InternalNoteDto> =>
+    contentApi.createInternalNoteForClient(clientId, contentId, {
+      body: `Drafted from client intake ${rawDataId}`,
+    }),
 };
+
+/**
+ * V1 prefill derivation for a manual draft-from-intake.
+ *
+ * Title: first meaningful (non-blank) line of extractedText, max 300 chars.
+ * Body: full extractedText. Metadata is NEVER appended. scenarioType stays
+ * unset (null) — the agency classifies it separately if needed.
+ */
+export function deriveDraftPrefill(intake: RawDataDto): {
+  title: string;
+  body: string;
+} {
+  const text = (intake.extractedText ?? '').replace(/\r\n/g, '\n');
+  const firstLine =
+    text
+      .split('\n')
+      .map((line) => line.trim())
+      .find((line) => line.length > 0) ?? '';
+  return {
+    title: firstLine.slice(0, 300),
+    body: text.trim(),
+  };
+}
 
 /**
  * PUT the file bytes straight to object storage.

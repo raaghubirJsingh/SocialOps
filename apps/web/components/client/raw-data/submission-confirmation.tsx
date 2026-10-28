@@ -8,34 +8,37 @@ import type { RawDataDto } from '@/types/content';
 interface Props {
   onCreateAnother: () => void;
   record?: RawDataDto;
+  clientId: string;
 }
 
-export function SubmissionConfirmation({ onCreateAnother, record }: Props) {
+export function SubmissionConfirmation({ onCreateAnother, record, clientId }: Props) {
   const router = useRouter();
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Request submitted</CardTitle>
-        <CardDescription>Your content request has been recorded.</CardDescription>
+        <CardDescription>
+          Your content request has been sent to your agency.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-slate-300">
           {record ? (
             <>
-              Your intake record has been saved.
+              Your content request has been sent to your agency.
               <br />
               <span className="font-mono text-xs text-slate-400">
-                ID: {record.id} Â· captured {new Date(record.capturedAt).toLocaleString()}
+                Sent {new Date(record.capturedAt).toLocaleString()}
               </span>
             </>
           ) : (
-            'Your content request has been recorded.'
+            'Your content request has been sent to your agency.'
           )}
         </p>
         <div className="flex flex-wrap gap-3">
-          <Button type="button" onClick={() => router.push('/client/content')}>
-            Go to dashboard
+          <Button type="button" onClick={() => router.push(`/client/content?clientId=${clientId}`)}>
+            View my requests
           </Button>
           <Button type="button" variant="secondary" onClick={onCreateAnother}>
             Create another

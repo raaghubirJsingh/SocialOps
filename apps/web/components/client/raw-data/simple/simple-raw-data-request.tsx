@@ -223,7 +223,7 @@ export function SimpleRawDataRequest({ clientId }: { clientId: string }) {
   if (isLoading) return <p className="text-sm text-slate-400">Loading…</p>;
   if (!session) return <p className="text-sm text-slate-400">Please sign in to create a request.</p>;
   if (submitted) {
-    return <SubmissionConfirmation onCreateAnother={startOver} record={record ?? undefined} />;
+    return <SubmissionConfirmation onCreateAnother={startOver} record={record ?? undefined} clientId={clientId} />;
   }
 
   return (

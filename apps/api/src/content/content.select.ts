@@ -1,3 +1,56 @@
+export type ClientContentState =
+  | 'draft_in_progress'
+  | 'ready_for_review'
+  | 'confirmed'
+  | 'closed';
+
+export interface ClientContentView {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: Date;
+  updatedAt: Date;
+  state: ClientContentState;
+  canRequestChanges: boolean;
+  canConfirmContent: boolean;
+  clientId: string;
+}
+
+export function toClientContentView(content: {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: Date;
+  updatedAt: Date;
+  clientId: string;
+  status: string;
+}): ClientContentView {
+  // Decision 017 retired APPROVED: the only V1 confirmation state is
+  // FINAL_CONFIRMED. A legacy APPROVED row therefore renders as
+  // draft_in_progress (never confirmed) until it is reconfirmed.
+  const confirmed = content.status === 'FINAL_CONFIRMED';
+  const closed = content.status === 'ARCHIVED';
+  const readyForReview = content.status === 'UNDER_CLIENT_REVIEW';
+
+  return {
+    id: content.id,
+    clientId: content.clientId,
+    title: content.title,
+    body: content.body,
+    createdAt: content.createdAt,
+    updatedAt: content.updatedAt,
+    state: closed
+      ? 'closed'
+      : confirmed
+        ? 'confirmed'
+        : readyForReview
+          ? 'ready_for_review'
+          : 'draft_in_progress',
+    canRequestChanges: readyForReview,
+    canConfirmContent: content.status === 'UNDER_CLIENT_REVIEW',
+  };
+}
+
 /**
  * Response allowlists for Content Operations V1 reads.
  *
@@ -40,16 +93,31 @@ export const CLIENT_CONTENT_SELECT = {
   clientId: true,
   title: true,
   body: true,
-  status: true,
-  scenarioType: true,
-  finalConfirmedAt: true,
-  finalConfirmedByUserId: true,
-  finalConfirmedRevisionId: true,
-  archivedAt: true,
-  createdByUserId: true,
-  updatedByUserId: true,
   createdAt: true,
   updatedAt: true,
+} as const;
+
+/** Internal fields used to derive the status-free client action projection. */
+export const CLIENT_CONTENT_WORKFLOW_SELECT = {
+  ...CLIENT_CONTENT_SELECT,
+  status: true,
+  finalConfirmedAt: true,
+  finalConfirmedRevisionId: true,
+} as const;
+
+/** Client request projection. Workflow state is mapped to client actions before returning. */
+export const CLIENT_CONTENT_REQUEST_SELECT = {
+  id: true,
+  mimeType: true,
+  originalFileName: true,
+  extractedText: true,
+  metadata: true,
+  byteSize: true,
+  capturedAt: true,
+  createdAt: true,
+  requestedContent: {
+    select: CLIENT_CONTENT_WORKFLOW_SELECT,
+  },
 } as const;
 
 export const CONTENT_REVISION_SELECT = {

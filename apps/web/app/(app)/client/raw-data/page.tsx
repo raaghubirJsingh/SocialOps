@@ -22,11 +22,11 @@ import { loadBoundClientId } from '@/lib/client-session';
 import type { CreateRawDataRequest } from '@/types/content';
 
 /**
- * Client self-service: my raw intake records (INSERT-ONLY, paste-only).
+ * Client self-service: my Content Requests (INSERT-ONLY, paste-only).
  *
  * `clientId` is a lookup hint from the query string; the backend re-verifies
- * the ownership binding on every request. There is no file upload and no edit
- * or delete affordance, matching the backend's insert-only contract.
+ * the ownership binding on every request. There is no edit or delete
+ * affordance, matching the backend's insert-only contract.
  */
 export default function ClientRawDataPage() {
   const searchParams = useSearchParams();
@@ -72,7 +72,7 @@ export default function ClientRawDataPage() {
       setShowForm(false);
     } catch (error) {
       setServerError(
-        describeApiError(error, 'Unable to record the intake. Please try again.'),
+        describeApiError(error, 'Unable to submit your content request. Please try again.'),
       );
     }
   };
@@ -82,16 +82,16 @@ export default function ClientRawDataPage() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
           <h2 className="text-2xl font-semibold tracking-tight text-slate-100">
-            Raw data
+            Content Requests
           </h2>
           <p className="text-sm text-slate-400">
-            Source material you provide. Records are immutable: they can never be
+            Send requests to your agency. Once sent, requests can&apos;t be
             edited or deleted.
           </p>
         </div>
         {!showForm && (
           <Button type="button" onClick={() => setShowForm(true)}>
-            Record intake
+            Submit Content Request
           </Button>
         )}
       </header>
@@ -99,10 +99,10 @@ export default function ClientRawDataPage() {
       {showForm && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Record intake</CardTitle>
+            <CardTitle className="text-base">Submit Content Request</CardTitle>
             <CardDescription>
-              Paste text and/or provide metadata. The integrity hash is computed
-              server-side.
+              Tell your agency what you need. Your request is saved exactly as
+              sent and can&apos;t be edited later.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -118,6 +118,8 @@ export default function ClientRawDataPage() {
               }}
               isSubmitting={createMutation.isPending}
               error={serverError}
+              submitLabel="Submit Content Request"
+              submittingLabel="Submitting…"
             />
           </CardContent>
         </Card>
@@ -128,19 +130,20 @@ export default function ClientRawDataPage() {
           role="alert"
           className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300"
         >
-          {describeApiError(rawDataQuery.error, 'Unable to load your intake records.')}
+          {describeApiError(rawDataQuery.error, 'Unable to load your requests.')}
         </div>
       ) : rawDataQuery.isPending ? (
         <Card>
           <CardContent className="pt-6">
-            <p className="text-sm text-slate-400">Loading intake records…</p>
+            <p className="text-sm text-slate-400">Loading your requests…</p>
           </CardContent>
         </Card>
       ) : (
         <RawDataList
           records={rawDataQuery.data}
-          title="My raw data"
-          description="Immutable intake records (text and metadata only). No file storage exists in this phase."
+          variant="client"
+          title="My Requests"
+          description="Your submitted requests. Your agency reviews each one and prepares drafts."
         />
       )}
     </div>
