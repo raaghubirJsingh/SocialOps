@@ -80,13 +80,14 @@ export default function DashboardPage() {
   // This drives UI-level dashboard isolation; the backend
   // EmployeeContextGuard remains authoritative for the API call.
   const isEmployee = session?.user?.isEmployee === true;
+  const isSuperAdmin = session?.user?.isSocialOpsAdmin === true;
 
   // Client persona (CLIENT - "Business / Personal Account"): the
   // self-registered client account. `accountType` is product metadata,
   // NOT authorization state (§7); the backend enforces the real
   // boundary on every /client/me/* call.
   const isClientAccount =
-    !isEmployee && session?.user?.accountType === 'CLIENT';
+    !isEmployee && !isSuperAdmin && session?.user?.accountType === 'CLIENT';
 
   // Defense-in-depth page guard. The (app) layout AuthGuard already
   // redirects unauthenticated visitors to the public home page "/"
@@ -95,8 +96,16 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!sessionLoading && !isAuthenticated) {
       router.replace('/');
+      return;
     }
-  }, [isAuthenticated, sessionLoading, router]);
+
+    // SuperAdmin redirect: users with global platform authority
+    // belong in the Super Admin Console, not the foundation
+    // dashboard.
+    if (isSuperAdmin) {
+      router.replace('/super-admin');
+    }
+  }, [isAuthenticated, sessionLoading, isSuperAdmin, router]);
 
   // Activation flipped the server state: drop every cached query and let
   // the router re-render — the unlocked services appear immediately and

@@ -2,12 +2,8 @@ import type { Metadata } from 'next';
 
 import { LandingNavbar } from '@/components/landing/navbar';
 import { Hero } from '@/components/landing/hero';
-import { FeaturesSection } from '@/components/landing/features';
 import { AboutSection } from '@/components/landing/about';
-import { PlatformsSection } from '@/components/landing/platforms';
-import { WorkflowSection } from '@/components/landing/workflow';
 import { AudienceSection } from '@/components/landing/audience';
-import { StandardsSection } from '@/components/landing/standards';
 import { FaqSection } from '@/components/landing/faq';
 import { ContactSection } from '@/components/landing/contact';
 import { FinalCta } from '@/components/landing/final-cta';
@@ -36,12 +32,8 @@ export default function HomePage() {
     <main className="relative isolate flex min-h-screen flex-col bg-slate-950 text-slate-100">
       <LandingNavbar />
       <Hero />
-      <FeaturesSection />
       <AboutSection />
-      <PlatformsSection />
-      <WorkflowSection />
       <AudienceSection />
-      <StandardsSection />
       <FaqSection />
       <ContactSection />
       <FinalCta />
