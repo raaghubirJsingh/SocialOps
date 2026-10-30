@@ -7,8 +7,9 @@ module.exports = {
   testMatch: ['**/*.e2e-spec.ts'],
   testPathIgnorePatterns: ['/node_modules/', '/dist/'],
   moduleFileExtensions: ['ts', 'js', 'json'],
+  // ESM extension mapping: strip .js extension for .ts file resolution
   moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1',
+    '^(\.{1,2}/.*)\\.js$': '$1',
   },
   extensionsToTreatAsEsm: ['.ts'],
   transform: {

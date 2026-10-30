@@ -19,5 +19,8 @@
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0"
+  },
+  "devDependencies": {
+    "unrs-resolver": "^1.12.2"
   }
 }

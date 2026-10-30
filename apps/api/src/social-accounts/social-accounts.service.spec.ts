@@ -475,7 +475,6 @@ describe('SocialAccountsService - platform-vs-host validation', () => {
     expect(serialised).not.toContain(ACCOUNT_ID);
     expect(serialised).not.toMatch(/clientId|organizationId|orgId|tenant/i);
   });
-});
 
   it('create(): a null or omitted URL is NOT validated (a URL is optional)', async () => {
     const prisma = makePrismaMock();
@@ -526,11 +525,14 @@ describe('SocialAccountsService - URL uniqueness via create()', () => {
       profileUrl: 'https://instagram.com/taken',
     } as CreateSocialAccountDto;
 
-    const thrown = await expect(
-      service.create(CLIENT_ID, ACTOR_ID, dto),
-    ).rejects.toBeInstanceOf(ConflictException);
-    const body = thrown.getResponse();
-    expect(body).toEqual(expect.objectContaining(URL_CONFLICT));
+    try {
+      await service.create(CLIENT_ID, ACTOR_ID, dto);
+      fail('Expected ConflictException to be thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConflictException);
+      const body = (error as ConflictException).getResponse();
+      expect(body).toEqual(expect.objectContaining(URL_CONFLICT));
+    }
   });
 
   it('create() conflict response reveals no tenant data', async () => {
@@ -542,14 +544,17 @@ describe('SocialAccountsService - URL uniqueness via create()', () => {
       profileUrl: 'https://instagram.com/taken',
     } as CreateSocialAccountDto;
 
-    const thrown = await expect(
-      service.create(CLIENT_ID, ACTOR_ID, dto),
-    ).rejects.toBeInstanceOf(ConflictException);
-    const serialised = JSON.stringify(thrown.getResponse());
-    expect(serialised).not.toContain(CLIENT_ID);
-    expect(serialised).not.toContain(OTHER_CLIENT_ID);
-    expect(serialised).not.toContain(ACCOUNT_ID);
-    expect(serialised).not.toMatch(/clientId|organizationId|orgId|tenant/i);
+    try {
+      await service.create(CLIENT_ID, ACTOR_ID, dto);
+      fail('Expected ConflictException to be thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConflictException);
+      const serialised = JSON.stringify((error as ConflictException).getResponse());
+      expect(serialised).not.toContain(CLIENT_ID);
+      expect(serialised).not.toContain(OTHER_CLIENT_ID);
+      expect(serialised).not.toContain(ACCOUNT_ID);
+      expect(serialised).not.toMatch(/clientId|organizationId|orgId|tenant/i);
+    }
   });
 
   it('create() proceeds when no clash exists (availability precheck is free)', async () => {
@@ -645,11 +650,14 @@ describe('SocialAccountsService - URL uniqueness via update()', () => {
       profileUrl: 'https://facebook.com/taken',
     } as UpdateSocialAccountDto;
 
-    const thrown = await expect(
-      service.update(CLIENT_ID, ACCOUNT_ID, dto),
-    ).rejects.toBeInstanceOf(ConflictException);
-    const body = thrown.getResponse();
-    expect(body).toEqual(expect.objectContaining(URL_CONFLICT));
+    try {
+      await service.update(CLIENT_ID, ACCOUNT_ID, dto);
+      fail('Expected ConflictException to be thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConflictException);
+      const body = (error as ConflictException).getResponse();
+      expect(body).toEqual(expect.objectContaining(URL_CONFLICT));
+    }
   });
 
   it('update() conflict response reveals no tenant data', async () => {
@@ -662,14 +670,17 @@ describe('SocialAccountsService - URL uniqueness via update()', () => {
       profileUrl: 'https://facebook.com/taken',
     } as UpdateSocialAccountDto;
 
-    const thrown = await expect(
-      service.update(CLIENT_ID, ACCOUNT_ID, dto),
-    ).rejects.toBeInstanceOf(ConflictException);
-    const serialised = JSON.stringify(thrown.getResponse());
-    expect(serialised).not.toContain(CLIENT_ID);
-    expect(serialised).not.toContain(OTHER_CLIENT_ID);
-    expect(serialised).not.toContain(ACCOUNT_ID);
-    expect(serialised).not.toMatch(/clientId|organizationId|orgId|tenant/i);
+    try {
+      await service.update(CLIENT_ID, ACCOUNT_ID, dto);
+      fail('Expected ConflictException to be thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConflictException);
+      const serialised = JSON.stringify((error as ConflictException).getResponse());
+      expect(serialised).not.toContain(CLIENT_ID);
+      expect(serialised).not.toContain(OTHER_CLIENT_ID);
+      expect(serialised).not.toContain(ACCOUNT_ID);
+      expect(serialised).not.toMatch(/clientId|organizationId|orgId|tenant/i);
+    }
   });
 });
 
