@@ -175,7 +175,7 @@ export function SuperAdminStepUpChallenge() {
             type="text"
             inputMode="numeric"
             autoComplete="one-time-code"
-            maxLength={6}
+            maxLength={8}
             placeholder="123456"
             aria-invalid={errors.otp ? 'true' : undefined}
             aria-describedby={errors.otp ? 'otp-error' : undefined}

@@ -53,7 +53,7 @@ export function OtpInput({
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      let newValue = e.target.value.replace(/\D/g, '').slice(0, 6);
+      let newValue = e.target.value.replace(/\D/g, '').slice(0, 8);
       setDisplayValue(newValue);
       onChange(newValue);
     },
@@ -79,7 +79,7 @@ export function OtpInput({
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLInputElement>) => {
       e.preventDefault();
-      const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+      const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 8);
       setDisplayValue(pasted);
       onChange(pasted);
     },
@@ -96,7 +96,7 @@ export function OtpInput({
         inputMode="numeric"
         pattern="[0-9]*"
         autoComplete="one-time-code"
-        maxLength={6}
+        maxLength={8}
         value={displayValue}
         onChange={handleChange}
         onKeyDown={handleKeyDown}

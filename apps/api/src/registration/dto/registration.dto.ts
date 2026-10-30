@@ -69,7 +69,7 @@ export const otpVerifySchema = z.object({
   // String (never number) so a leading zero is preserved exactly (L4).
   otp: z
     .string()
-    .regex(/^\d{6}$/, 'OTP must be a 6-digit numeric code'),
+    .regex(/^\d{6}$|^\d{8}$/, 'OTP must be a 6 or 8 digit numeric code'),
 });
 
 export type OtpVerifyDto = z.infer<typeof otpVerifySchema>;

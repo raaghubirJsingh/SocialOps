@@ -1,3 +1,7 @@
+﻿import { isTestingOtpEnabled, getTestingEmailOtp, getTestingMobileOtp } from '../common/testing-otp.js';
+import type { VerificationChannel } from './providers/verification-provider.port.js';
+
+
 import {
   ForbiddenException,
   Inject,
@@ -90,10 +94,14 @@ export class OtpService {
     private readonly whatsappProvider: VerificationProvider,
   ) {}
 
-  /** 6-digit numeric code; leading zeros preserved by padding. */
-  generateOtp(): string {
-    return randomInt(0, 1_000_000).toString().padStart(6, '0');
+
+/** 6-digit numeric code; leading zeros preserved by padding. */
+generateOtp(channel?: VerificationChannel): string {
+  if (isTestingOtpEnabled()) {
+    return channel === 'EMAIL' ? getTestingEmailOtp() : getTestingMobileOtp();
   }
+  return randomInt(0, 1_000_000).toString().padStart(6, '0');
+}
 
   providerFor(channel: VerificationChannel): VerificationProvider {
     return channel === 'EMAIL' ? this.emailProvider : this.whatsappProvider;
@@ -164,7 +172,7 @@ export class OtpService {
     channel: VerificationChannel,
     opts: { resetAttempts: boolean; countResend: boolean },
   ): Promise<OtpIssueResult> {
-    const otp = this.generateOtp();
+    const otp = this.generateOtp(channel);
     const codeHash = await this.hashOtp(otp);
     const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
 
@@ -303,7 +311,7 @@ export class OtpService {
       }
     }
 
-    const otp = this.generateOtp();
+    const otp = this.generateOtp(channel);
     const codeHash = await this.hashOtp(otp);
     const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
 
@@ -500,3 +508,4 @@ export class OtpService {
     return { outcome: 'invalid' };
   }
 }
+

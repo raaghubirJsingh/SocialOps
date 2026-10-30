@@ -22,6 +22,7 @@
     "@supabase/supabase-js": "^2.118.0"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.4.3",
     "unrs-resolver": "^1.12.2"
   }
 }

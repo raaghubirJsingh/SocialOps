@@ -875,7 +875,7 @@ export function RegistrationFlow({ initialSession }: RegistrationFlowProps) {
                     aria-label={`${row.label} OTP`}
                     value={otpInputs[row.id]}
                     inputMode="numeric"
-                    maxLength={6}
+                    maxLength={8}
                     placeholder="6-digit OTP"
                     onChange={(e) =>
                       setOtpInputs((prev) => ({

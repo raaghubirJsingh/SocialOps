@@ -1,4 +1,4 @@
-import { z } from 'zod';
+﻿import { z } from 'zod';
 
 /**
  * Zod schema for login OTP verification payload.
@@ -13,7 +13,7 @@ export const verifyLoginOtpSchema = z.object({
   email: z.string().email('Invalid email format'),
   otp: z
     .string()
-    .regex(/^\d{6}$/, 'OTP must be exactly 6 digits')
+    .regex(/^\d{6}$|^\d{8}$/, 'OTP must be 6 or 8 digits')
     .min(1, 'OTP is required'),
 });
 

@@ -1,3 +1,6 @@
+import { isTestingOtpEnabled, getTestingEmailOtp } from '../common/testing-otp.js';
+
+
 import {
   BadRequestException,
   ForbiddenException,
@@ -50,6 +53,9 @@ export class LoginOtpService {
 
   /** 6-digit numeric code; leading zeros preserved by padding. */
   generateOtp(): string {
+    if (isTestingOtpEnabled()) {
+      return getTestingEmailOtp();
+    }
     return randomInt(0, 1_000_000).toString().padStart(6, '0');
   }
 

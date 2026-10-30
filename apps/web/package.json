@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "analyze": "ANALYZE=true next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -28,8 +29,10 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.4.3",
     "@playwright/test": "^1.55.0",
     "@tailwindcss/postcss": "^4",
+    "@tanstack/react-virtual": "^3.14.24",
     "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/react": "^19",

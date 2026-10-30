@@ -13,6 +13,14 @@ import { AppModule } from './app.module.js';
 if (existsSync('.env')) {
   process.loadEnvFile();
 }
+// Fail-safe: fixed testing OTPs are never allowed in production.
+if (
+  process.env.TESTING_OTP_ENABLED === 'true' &&
+  process.env.NODE_ENV === 'production'
+) {
+  throw new Error('TESTING_OTP_ENABLED cannot be enabled in production');
+}
+
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

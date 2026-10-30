@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -39,7 +39,7 @@ export function useSocialAccounts(scope: SocialAccountScope, clientId: string) {
     (scope === 'agency' ? Boolean(activeOrganizationId) : true);
 
   return useQuery<SocialAccountDto[]>({
-    queryKey: queryKeys.socialAccounts(scope, activeOrganizationId, clientId),
+    queryKey: queryKeys.socialAccounts.list(scope, activeOrganizationId, clientId),
     queryFn: () =>
       scope === 'agency'
         ? socialAccountApi.listForClient(clientId)
@@ -67,7 +67,7 @@ export function useCreateSocialAccount(
         : socialAccountApi.createMine(clientId, body),
     onSettled: () =>
       queryClient.invalidateQueries({
-        queryKey: queryKeys.socialAccounts(scope, activeOrganizationId, clientId),
+        queryKey: queryKeys.socialAccounts.list(scope, activeOrganizationId, clientId),
       }),
   });
 }
@@ -90,7 +90,7 @@ export function useUpdateSocialAccount(
         : socialAccountApi.updateMine(clientId, socialAccountId, body),
     onSettled: () =>
       queryClient.invalidateQueries({
-        queryKey: queryKeys.socialAccounts(scope, activeOrganizationId, clientId),
+        queryKey: queryKeys.socialAccounts.list(scope, activeOrganizationId, clientId),
       }),
   });
 }
@@ -171,7 +171,7 @@ export function useDisconnectSocialAccount(
     retry: 0,
     onSettled: () =>
       queryClient.invalidateQueries({
-        queryKey: queryKeys.socialAccounts(scope, activeOrganizationId, clientId),
+        queryKey: queryKeys.socialAccounts.list(scope, activeOrganizationId, clientId),
       }),
   });
 }

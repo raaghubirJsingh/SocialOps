@@ -46,6 +46,7 @@ enum OrganizationRole {
 enum AccountType {
   SERVICE_PROVIDER
   CLIENT
+  FREELANCER
 }
 
 /// Client Module V1 (Phase 2, human-approved under AGENTS.md §13).
@@ -159,6 +160,13 @@ model User {
   // one profile per user (UNIQUE userId on EmployeeProfile).
   employeeProfile EmployeeProfile?
 
+  // Phase 1A: 1:1 Freelancer profile extension.
+  freelancerProfile FreelancerProfile?
+
+  // Organizations verified by this user (SOCIALOPS_ADMIN).
+  verifiedOrganizations Organization[] @relation("OrganizationVerifiedBy")
+
+
   // Client Module V1: direct User -> Client ownership (binding). Set only
   // through the controlled onboarding/acceptance flow - never at Agency
   // creation and never via normal Client profile APIs.
@@ -222,7 +230,19 @@ model User {
 enum OrganizationKind {
   SOCIALOPS
   AGENCY
+  NEWS_ORGANIZATION
 }
+
+/// Organization manual-verification status (Phase 1A).
+/// PENDING: not yet verified (default fail-safe).
+/// VERIFIED: approved for dashboard access.
+/// REJECTED: verification denied.
+enum OrganizationVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
 
 model Organization {
   id        String   @id @default(uuid()) @db.Uuid
@@ -236,6 +256,14 @@ model Organization {
   /// partial unique index that limits SOCIALOPS to one row - it lives in
   /// migration 20260919000000_add_organization_kind.
   kind      OrganizationKind @default(AGENCY)
+  /// Manual verification status for Organization tenants (e.g. News
+  /// Organization). Defaults to PENDING as a fail-safe; Agency provisioning
+  /// explicitly sets VERIFIED.
+  verificationStatus OrganizationVerificationStatus @default(PENDING)
+  verifiedAt        DateTime?
+  verifiedByUserId  String? @db.Uuid
+  verifiedBy        User?   @relation("OrganizationVerifiedBy", fields: [verifiedByUserId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1074,6 +1102,38 @@ model RawData {
 // ---------------------------------------------------------------------------
 
 /// A 1:1 extension of the User record for employee accounts.
+model FreelancerProfile {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @db.Uuid
+
+  // Backend-controlled completion flags.
+  basicInfoCompleted  Boolean @default(false)
+  introCompleted      Boolean @default(false)
+  skillsCompleted     Boolean @default(false)
+  experienceCompleted Boolean @default(false)
+  educationCompleted  Boolean @default(false)
+  reviewConfirmed     Boolean @default(false)
+  profileCompletedAt  DateTime?
+
+  // Section data. JSON keeps variable shapes flexible and minimizes
+  // migration churn; User identity fields are reused and not duplicated.
+  basicInfo          Json?
+  professionalIntro  String? @db.Text
+  skills             Json?
+  workExperience     Json?
+  education          Json?
+  noWorkExperience   Boolean @default(false)
+  noFormalEducation  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([profileCompletedAt])
+}
+
+
 model EmployeeProfile {
   id        String   @id @default(uuid()) @db.Uuid
   // 1:1 with User: UNIQUE guarantees at most one profile per user.

@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { clientApi } from '@/lib/client-api';
 import { useSession } from './use-session';
+import { queryKeys } from '@/lib/query-keys';
 import type { ClientDto } from '@/types/client';
 
 /**
@@ -13,7 +14,7 @@ export function useClient(clientId: string | null) {
   const { isAuthenticated } = useSession();
 
   return useQuery<ClientDto>({
-    queryKey: ['client', clientId],
+    queryKey: queryKeys.client(clientId),
     queryFn: () => clientApi.getMyClient(clientId!),
     enabled: isAuthenticated && !!clientId,
     retry: 0,
