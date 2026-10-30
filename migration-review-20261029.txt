@@ -1,0 +1,1500 @@
+﻿SOCIALOPS MIGRATION REVIEW
+Generated: 2026-10-29 22:10:35
+Migration folders: 25
+
+================================================================================
+MIGRATION: 20260829081234_init
+================================================================================
+-- CreateEnum
+CREATE TYPE "OrganizationRole" AS ENUM ('OWNER', 'ADMIN', 'MEMBER', 'VIEWER');
+
+-- CreateTable
+CREATE TABLE "User" (
+    "id" UUID NOT NULL,
+    "email" TEXT NOT NULL,
+    "passwordHash" TEXT,
+    "displayName" TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Organization" (
+    "id" UUID NOT NULL,
+    "name" TEXT NOT NULL,
+    "slug" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Organization_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Workspace" (
+    "id" UUID NOT NULL,
+    "organizationId" UUID NOT NULL,
+    "name" TEXT NOT NULL,
+    "slug" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Workspace_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "OrganizationMembership" (
+    "id" UUID NOT NULL,
+    "userId" UUID NOT NULL,
+    "organizationId" UUID NOT NULL,
+    "role" "OrganizationRole" NOT NULL DEFAULT 'VIEWER',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "OrganizationMembership_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "RefreshToken" (
+    "id" UUID NOT NULL,
+    "userId" UUID NOT NULL,
+    "tokenHash" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "revokedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "RefreshToken_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Organization_slug_key" ON "Organization"("slug");
+
+-- CreateIndex
+CREATE INDEX "Workspace_organizationId_idx" ON "Workspace"("organizationId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Workspace_organizationId_slug_key" ON "Workspace"("organizationId", "slug");
+
+-- CreateIndex
+CREATE INDEX "OrganizationMembership_organizationId_idx" ON "OrganizationMembership"("organizationId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "OrganizationMembership_userId_organizationId_key" ON "OrganizationMembership"("userId", "organizationId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "RefreshToken_tokenHash_key" ON "RefreshToken"("tokenHash");
+
+-- CreateIndex
+CREATE INDEX "RefreshToken_userId_idx" ON "RefreshToken"("userId");
+
+-- AddForeignKey
+ALTER TABLE "Workspace" ADD CONSTRAINT "Workspace_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "OrganizationMembership" ADD CONSTRAINT "OrganizationMembership_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "OrganizationMembership" ADD CONSTRAINT "OrganizationMembership_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RefreshToken" ADD CONSTRAINT "RefreshToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+================================================================================
+MIGRATION: 20260903100207_add_email_verification
+================================================================================
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "emailVerifiedAt" TIMESTAMP(3);
+
+-- CreateTable
+CREATE TABLE "EmailVerificationToken" (
+    "id" UUID NOT NULL,
+    "userId" UUID NOT NULL,
+    "tokenHash" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "usedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "EmailVerificationToken_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "EmailVerificationToken_tokenHash_key" ON "EmailVerificationToken"("tokenHash");
+
+-- CreateIndex
+CREATE INDEX "EmailVerificationToken_userId_idx" ON "EmailVerificationToken"("userId");
+
+-- AddForeignKey
+ALTER TABLE "EmailVerificationToken" ADD CONSTRAINT "EmailVerificationToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+================================================================================
+MIGRATION: 20260903220000_add_user_registration_fields
+================================================================================
+-- Stage B7+ Registration Page Redesign: add the public account-type
+-- selection, full name, and optional phone to the User record.
+--
+-- This migration is purely additive. It does NOT touch the Client
+-- Foundation (Client, ClientEmployee, ClientType, ClientStatus), the
+-- Organization / Workspace / OrganizationMembership model, the
+-- RefreshToken table, the EmailVerificationToken table, or any
+-- existing rows. New users created from this point on get
+-- `isActive = false` by default; existing rows keep their current
+-- `isActive` value (the @default change in schema.prisma only applies
+-- to future inserts, not to a backfill of existing rows).
+--
+-- See AGENTS.md Â§17 for the Product Entity Hierarchy and the
+-- registration data model contract.
+
+-- CreateEnum
+CREATE TYPE "AccountType" AS ENUM (
+    'SERVICE_PROVIDER',
+    'INDIVIDUAL_BUSINESS'
+);
+
+-- AlterTable: add nullable fields for fullName, phone, accountType.
+-- All three are NULLABLE so that any pre-existing User rows remain
+-- valid without a backfill.
+ALTER TABLE "User"
+    ADD COLUMN "fullName" TEXT,
+    ADD COLUMN "phone" TEXT,
+    ADD COLUMN "accountType" "AccountType";
+
+-- NOTE: The Prisma schema's `isActive @default(false)` change applies
+-- only to future INSERTs. We deliberately do NOT issue an UPDATE
+-- against existing rows. Their current isActive value is preserved.
+
+================================================================================
+MIGRATION: 20260910052335_client_module_v1
+================================================================================
+-- CreateEnum
+CREATE TYPE "ClientType" AS ENUM ('INDIVIDUAL', 'BUSINESS');
+
+-- CreateEnum
+CREATE TYPE "ClientStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED');
+
+-- CreateEnum
+CREATE TYPE "ClientOnboardingStatus" AS ENUM ('PENDING', 'ACTIVE');
+
+-- CreateEnum
+CREATE TYPE "AgencyRelationshipStatus" AS ENUM ('PENDING_REQUEST', 'PENDING_INVITATION', 'ACTIVE', 'TERMINATED');
+
+-- CreateEnum
+CREATE TYPE "FieldChangeRequestStatus" AS ENUM ('PENDING_VERIFICATION', 'APPROVED', 'REJECTED', 'EXPIRED');
+
+-- CreateEnum
+CREATE TYPE "ClientField" AS ENUM ('NAME', 'DIRECT_EMAIL', 'DIRECT_MOBILE', 'PRIMARY_CONTACT_NAME', 'PRIMARY_CONTACT_MOBILE', 'WEBSITE', 'ADDRESS', 'DESCRIPTION', 'INDUSTRY', 'CLIENT_TYPE', 'LOGO_AVATAR', 'NOTES');
+
+-- CreateEnum
+CREATE TYPE "ClientAgencyFlow" AS ENUM ('CLIENT', 'AGENCY');
+
+-- AlterTable
+ALTER TABLE "Organization" ADD COLUMN     "discoveryApprovedAt" TIMESTAMP(3),
+ADD COLUMN     "discoveryApprovedByUserId" UUID,
+ADD COLUMN     "discoveryOptIn" BOOLEAN NOT NULL DEFAULT false;
+
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "isSocialOpsAdmin" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "socialOpsAdminGrantedAt" TIMESTAMP(3),
+ADD COLUMN     "socialOpsAdminGrantedById" UUID,
+ADD COLUMN     "socialOpsAdminRevokedAt" TIMESTAMP(3),
+ALTER COLUMN "isActive" SET DEFAULT false;
+
+-- CreateTable
+CREATE TABLE "Client" (
+    "id" UUID NOT NULL,
+    "ownerUserId" UUID,
+    "type" "ClientType" NOT NULL,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "logoUrl" TEXT,
+    "directEmail" TEXT NOT NULL,
+    "directPhone" TEXT NOT NULL,
+    "primaryContactName" TEXT,
+    "primaryContactPhone" TEXT,
+    "website" TEXT,
+    "addressLine1" TEXT,
+    "addressLine2" TEXT,
+    "city" TEXT,
+    "state" TEXT,
+    "country" TEXT,
+    "postalCode" TEXT,
+    "industry" TEXT,
+    "status" "ClientStatus" NOT NULL DEFAULT 'ACTIVE',
+    "statusReason" TEXT,
+    "statusChangedAt" TIMESTAMP(3),
+    "onboardingStatus" "ClientOnboardingStatus" NOT NULL DEFAULT 'PENDING',
+    "onboardingCompletedAt" TIMESTAMP(3),
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Client_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ClientAgencyRelationship" (
+    "id" UUID NOT NULL,
+    "clientId" UUID NOT NULL,
+    "organizationId" UUID NOT NULL,
+    "status" "AgencyRelationshipStatus" NOT NULL,
+    "initiatedBy" "ClientAgencyFlow" NOT NULL,
+    "startedAt" TIMESTAMP(3),
+    "terminatedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ClientAgencyRelationship_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ClientInvitation" (
+    "id" UUID NOT NULL,
+    "clientId" UUID NOT NULL,
+    "email" TEXT NOT NULL,
+    "tokenHash" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "usedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ClientInvitation_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ClientFieldChange" (
+    "id" UUID NOT NULL,
+    "clientId" UUID NOT NULL,
+    "field" "ClientField" NOT NULL,
+    "newValue" TEXT,
+    "status" "FieldChangeRequestStatus" NOT NULL DEFAULT 'PENDING_VERIFICATION',
+    "requestedByUserId" UUID,
+    "requestedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "approvedAt" TIMESTAMP(3),
+    "appliedAt" TIMESTAMP(3),
+    "rejectedReason" TEXT,
+
+    CONSTRAINT "ClientFieldChange_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ClientEvent" (
+    "id" UUID NOT NULL,
+    "clientId" UUID NOT NULL,
+    "actorUserId" UUID,
+    "action" TEXT NOT NULL,
+    "details" JSONB,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ClientEvent_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "Client_ownerUserId_idx" ON "Client"("ownerUserId");
+
+-- CreateIndex
+CREATE INDEX "Client_status_idx" ON "Client"("status");
+
+-- CreateIndex
+CREATE INDEX "Client_onboardingStatus_idx" ON "Client"("onboardingStatus");
+
+-- CreateIndex
+CREATE INDEX "ClientAgencyRelationship_clientId_status_idx" ON "ClientAgencyRelationship"("clientId", "status");
+
+-- CreateIndex
+CREATE INDEX "ClientAgencyRelationship_organizationId_status_idx" ON "ClientAgencyRelationship"("organizationId", "status");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ClientInvitation_tokenHash_key" ON "ClientInvitation"("tokenHash");
+
+-- CreateIndex
+CREATE INDEX "ClientInvitation_clientId_idx" ON "ClientInvitation"("clientId");
+
+-- CreateIndex
+CREATE INDEX "ClientInvitation_email_idx" ON "ClientInvitation"("email");
+
+-- CreateIndex
+CREATE INDEX "ClientFieldChange_clientId_field_idx" ON "ClientFieldChange"("clientId", "field");
+
+-- CreateIndex
+CREATE INDEX "ClientFieldChange_clientId_status_idx" ON "ClientFieldChange"("clientId", "status");
+
+-- CreateIndex
+CREATE INDEX "ClientEvent_clientId_createdAt_idx" ON "ClientEvent"("clientId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "Organization_discoveryOptIn_idx" ON "Organization"("discoveryOptIn");
+
+-- AddForeignKey
+ALTER TABLE "Client" ADD CONSTRAINT "Client_ownerUserId_fkey" FOREIGN KEY ("ownerUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ClientAgencyRelationship" ADD CONSTRAINT "ClientAgencyRelationship_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ClientAgencyRelationship" ADD CONSTRAINT "ClientAgencyRelationship_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ClientInvitation" ADD CONSTRAINT "ClientInvitation_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ClientFieldChange" ADD CONSTRAINT "ClientFieldChange_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ClientEvent" ADD CONSTRAINT "ClientEvent_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+================================================================================
+MIGRATION: 20260910084510_mobile_verification_token
+================================================================================
+-- CreateTable
+CREATE TABLE "MobileVerificationToken" (
+    "id" UUID NOT NULL,
+    "clientId" UUID NOT NULL,
+    "requestedByUserId" UUID,
+    "tokenHash" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "usedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "MobileVerificationToken_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "MobileVerificationToken_tokenHash_key" ON "MobileVerificationToken"("tokenHash");
+
+-- CreateIndex
+CREATE INDEX "MobileVerificationToken_clientId_idx" ON "MobileVerificationToken"("clientId");
+
+-- AddForeignKey
+ALTER TABLE "MobileVerificationToken" ADD CONSTRAINT "MobileVerificationToken_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "MobileVerificationToken" ADD CONSTRAINT "MobileVerificationToken_requestedByUserId_fkey" FOREIGN KEY ("requestedByUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+================================================================================
+MIGRATION: 20260910150734_client_field_change_verification
+================================================================================
+-- AlterTable
+ALTER TABLE "ClientFieldChange" ADD COLUMN     "verificationExpiresAt" TIMESTAMP(3),
+ADD COLUMN     "verificationTokenHash" TEXT,
+ADD COLUMN     "verifiedAt" TIMESTAMP(3);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ClientFieldChange_verificationTokenHash_key" ON "ClientFieldChange"("verificationTokenHash");
+
+================================================================================
+MIGRATION: 20260915115926_add_employee_profile_v1
+================================================================================
+-- CreateTable
+CREATE TABLE "EmployeeProfile" (
+    "id" UUID NOT NULL,
+    "userId" UUID NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "EmployeeProfile_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "EmployeeProfile_userId_key" ON "EmployeeProfile"("userId");
+
+-- AddForeignKey
+ALTER TABLE "EmployeeProfile" ADD CONSTRAINT "EmployeeProfile_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+================================================================================
+MIGRATION: 20260916000000_enforce_one_active_agency
+================================================================================
+-- Enforce ONE ACTIVE Agency invariant at the database level.
+-- A partial unique index ensures a clientId can have at most one
+-- ACTIVE ClientAgencyRelationship, preventing silent replacement.
+CREATE UNIQUE INDEX "ClientAgencyRelationship_one_active_per_client"
+ON "ClientAgencyRelationship"("clientId")
+WHERE "status" = 'ACTIVE';
+
+================================================================================
+MIGRATION: 20260916041416_client_operations_v1_metadata
+================================================================================
+-- CreateEnum
+CREATE TYPE "SocialPlatform" AS ENUM ('INSTAGRAM', 'FACEBOOK', 'YOUTUBE');
+
+-- CreateEnum
+CREATE TYPE "ContentStatus" AS ENUM ('DRAFT', 'IN_REVIEW', 'CHANGES_REQUESTED', 'APPROVED', 'ARCHIVED');
+
+-- CreateEnum
+CREATE TYPE "RawDataSource" AS ENUM ('CLIENT_UPLOAD', 'CLIENT_FORM', 'AGENCY_UPLOAD', 'EXTERNAL_IMPORT');
+
+-- CreateTable
+CREATE TABLE "SocialAccount" (
+    "id" UUID NOT NULL,
+    "clientId" UUID NOT NULL,
+    "platform" "SocialPlatform" NOT NULL,
+    "platformAccountId" TEXT,
+    "handle" TEXT,
+    "displayName" TEXT,
+    "profileUrl" TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdByUserId" UUID,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "SocialAccount_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Content" (
+    "id" UUID NOT NULL,
+    "clientId" UUID NOT NULL,
+    "title" TEXT NOT NULL,
+    "body" TEXT NOT NULL,
+    "status" "ContentStatus" NOT NULL DEFAULT 'DRAFT',
+    "finalConfirmedAt" TIMESTAMP(3),
+    "finalConfirmedByUserId" UUID,
+    "finalConfirmedRevisionId" UUID,
+    "archivedAt" TIMESTAMP(3),
+    "createdByUserId" UUID,
+    "updatedByUserId" UUID,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Content_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ContentRevision" (
+    "id" UUID NOT NULL,
+    "contentId" UUID NOT NULL,
+    "clientId" UUID NOT NULL,
+    "revision" INTEGER NOT NULL,
+    "title" TEXT NOT NULL,
+    "body" TEXT NOT NULL,
+    "contentHash" TEXT NOT NULL,
+    "createdByUserId" UUID,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ContentRevision_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ContentStatusEvent" (
+    "id" UUID NOT NULL,
+    "contentId" UUID NOT NULL,
+    "clientId" UUID NOT NULL,
+    "fromStatus" "ContentStatus",
+    "toStatus" "ContentStatus" NOT NULL,
+    "actorUserId" UUID,
+    "actorRole" TEXT,
+    "note" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ContentStatusEvent_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "RawData" (
+    "id" UUID NOT NULL,
+    "clientId" UUID NOT NULL,
+    "source" "RawDataSource" NOT NULL,
+    "contentId" UUID,
+    "mimeType" TEXT,
+    "originalFileName" TEXT,
+    "extractedText" TEXT,
+    "metadata" JSONB,
+    "contentHash" TEXT NOT NULL,
+    "byteSize" INTEGER,
+    "storageRef" TEXT,
+    "capturedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "capturedByUserId" UUID,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "RawData_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "SocialAccount_clientId_platform_idx" ON "SocialAccount"("clientId", "platform");
+
+-- CreateIndex
+CREATE INDEX "SocialAccount_clientId_isActive_idx" ON "SocialAccount"("clientId", "isActive");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "SocialAccount_clientId_platform_platformAccountId_key" ON "SocialAccount"("clientId", "platform", "platformAccountId");
+
+-- CreateIndex
+CREATE INDEX "Content_clientId_status_idx" ON "Content"("clientId", "status");
+
+-- CreateIndex
+CREATE INDEX "Content_clientId_createdAt_idx" ON "Content"("clientId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "Content_finalConfirmedByUserId_idx" ON "Content"("finalConfirmedByUserId");
+
+-- CreateIndex
+CREATE INDEX "ContentRevision_clientId_contentId_idx" ON "ContentRevision"("clientId", "contentId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ContentRevision_contentId_revision_key" ON "ContentRevision"("contentId", "revision");
+
+-- CreateIndex
+CREATE INDEX "ContentStatusEvent_clientId_createdAt_idx" ON "ContentStatusEvent"("clientId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "ContentStatusEvent_contentId_createdAt_idx" ON "ContentStatusEvent"("contentId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "RawData_clientId_capturedAt_idx" ON "RawData"("clientId", "capturedAt");
+
+-- CreateIndex
+CREATE INDEX "RawData_clientId_source_idx" ON "RawData"("clientId", "source");
+
+-- CreateIndex
+CREATE INDEX "RawData_contentId_idx" ON "RawData"("contentId");
+
+-- AddForeignKey
+ALTER TABLE "SocialAccount" ADD CONSTRAINT "SocialAccount_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SocialAccount" ADD CONSTRAINT "SocialAccount_createdByUserId_fkey" FOREIGN KEY ("createdByUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Content" ADD CONSTRAINT "Content_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Content" ADD CONSTRAINT "Content_createdByUserId_fkey" FOREIGN KEY ("createdByUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Content" ADD CONSTRAINT "Content_updatedByUserId_fkey" FOREIGN KEY ("updatedByUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Content" ADD CONSTRAINT "Content_finalConfirmedByUserId_fkey" FOREIGN KEY ("finalConfirmedByUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ContentRevision" ADD CONSTRAINT "ContentRevision_contentId_fkey" FOREIGN KEY ("contentId") REFERENCES "Content"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ContentRevision" ADD CONSTRAINT "ContentRevision_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ContentRevision" ADD CONSTRAINT "ContentRevision_createdByUserId_fkey" FOREIGN KEY ("createdByUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ContentStatusEvent" ADD CONSTRAINT "ContentStatusEvent_contentId_fkey" FOREIGN KEY ("contentId") REFERENCES "Content"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ContentStatusEvent" ADD CONSTRAINT "ContentStatusEvent_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ContentStatusEvent" ADD CONSTRAINT "ContentStatusEvent_actorUserId_fkey" FOREIGN KEY ("actorUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RawData" ADD CONSTRAINT "RawData_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RawData" ADD CONSTRAINT "RawData_contentId_fkey" FOREIGN KEY ("contentId") REFERENCES "Content"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RawData" ADD CONSTRAINT "RawData_capturedByUserId_fkey" FOREIGN KEY ("capturedByUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- ---------------------------------------------------------------------------
+-- Hand-written constraint (not representable in the Prisma schema).
+--
+-- Final Confirmation gate (Client Operations V1): an APPROVED Content row MUST
+-- carry the complete Final Confirmation triple. This is the database-level
+-- half of the rule approved in docs/APPROVED_DECISIONS.md Decision 008: no
+-- future code path, migration, or manual statement can create an approved item
+-- without a recorded confirmation, so publishing can never follow an approval
+-- that did not actually happen.
+--
+-- Precedent for hand-written SQL in a Prisma migration:
+-- 20260916000000_enforce_one_active_agency.
+-- ---------------------------------------------------------------------------
+ALTER TABLE "Content"
+  ADD CONSTRAINT "Content_approved_requires_final_confirmation"
+  CHECK (
+    "status" <> 'APPROVED'
+    OR (
+      "finalConfirmedAt" IS NOT NULL
+      AND "finalConfirmedByUserId" IS NOT NULL
+      AND "finalConfirmedRevisionId" IS NOT NULL
+    )
+  );
+
+
+================================================================================
+MIGRATION: 20260917063349_phase1_ai_content_foundation
+================================================================================
+-- CreateEnum
+CREATE TYPE "ScenarioType" AS ENUM ('SCENARIO_1', 'SCENARIO_2', 'SCENARIO_3');
+
+-- AlterEnum
+-- This migration adds more than one value to an enum.
+-- With PostgreSQL versions 11 and earlier, this is not possible
+-- in a single migration. This can be worked around by creating
+-- multiple migrations, each migration adding only one value to
+-- the enum.
+
+
+ALTER TYPE "ContentStatus" ADD VALUE 'AWAITING_MANAGER_APPROVAL';
+ALTER TYPE "ContentStatus" ADD VALUE 'UNDER_CLIENT_REVIEW';
+ALTER TYPE "ContentStatus" ADD VALUE 'FINAL_CONFIRMED';
+
+-- AlterTable
+ALTER TABLE "Content" ADD COLUMN     "agencyId" UUID,
+ADD COLUMN     "scenarioType" "ScenarioType";
+
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "isBot" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "skillSpecialization" TEXT;
+
+-- CreateTable
+CREATE TABLE "InternalNote" (
+    "id" UUID NOT NULL,
+    "contentId" UUID NOT NULL,
+    "agencyId" UUID NOT NULL,
+    "authorId" UUID NOT NULL,
+    "body" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "InternalNote_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ChangeRequest" (
+    "id" UUID NOT NULL,
+    "contentId" UUID NOT NULL,
+    "requestedById" UUID NOT NULL,
+    "requestDetails" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ChangeRequest_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "InternalNote_contentId_idx" ON "InternalNote"("contentId");
+
+-- CreateIndex
+CREATE INDEX "InternalNote_agencyId_contentId_idx" ON "InternalNote"("agencyId", "contentId");
+
+-- CreateIndex
+CREATE INDEX "InternalNote_authorId_idx" ON "InternalNote"("authorId");
+
+-- CreateIndex
+CREATE INDEX "ChangeRequest_contentId_idx" ON "ChangeRequest"("contentId");
+
+-- CreateIndex
+CREATE INDEX "ChangeRequest_requestedById_contentId_idx" ON "ChangeRequest"("requestedById", "contentId");
+
+-- CreateIndex
+CREATE INDEX "Content_agencyId_idx" ON "Content"("agencyId");
+
+-- AddForeignKey
+ALTER TABLE "Content" ADD CONSTRAINT "Content_agencyId_fkey" FOREIGN KEY ("agencyId") REFERENCES "Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "InternalNote" ADD CONSTRAINT "InternalNote_contentId_fkey" FOREIGN KEY ("contentId") REFERENCES "Content"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "InternalNote" ADD CONSTRAINT "InternalNote_agencyId_fkey" FOREIGN KEY ("agencyId") REFERENCES "Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "InternalNote" ADD CONSTRAINT "InternalNote_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ChangeRequest" ADD CONSTRAINT "ChangeRequest_contentId_fkey" FOREIGN KEY ("contentId") REFERENCES "Content"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ChangeRequest" ADD CONSTRAINT "ChangeRequest_requestedById_fkey" FOREIGN KEY ("requestedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+================================================================================
+MIGRATION: 20260919000000_add_organization_kind
+================================================================================
+-- Organization classification (Decision 012) - additive only.
+-- AGENCY is the default: every pre-existing and self-registered provider
+-- tenant is an external Agency. No data rows are created or modified by
+-- this migration; the platform-owned SOCIALOPS Organization is provisioned
+-- separately (approved data operation, NOT part of this migration).
+
+-- CreateEnum
+CREATE TYPE "OrganizationKind" AS ENUM ('SOCIALOPS', 'AGENCY');
+
+-- AlterTable
+ALTER TABLE "Organization" ADD COLUMN     "kind" "OrganizationKind" NOT NULL DEFAULT 'AGENCY';
+
+-- Enforce AT MOST ONE platform-owned (SOCIALOPS) Organization (Decision 012).
+-- Prisma cannot express partial indexes; raw SQL per repository convention
+-- (mirrors the one-ACTIVE-Agency enforcement in
+-- 20260916000000_enforce_one_active_agency).
+CREATE UNIQUE INDEX "Organization_one_socialops_idx"
+ON "Organization" ("kind")
+WHERE "kind" = 'SOCIALOPS';
+
+================================================================================
+MIGRATION: 20260920110046_add_oauth_token_storage
+================================================================================
+-- CreateTable
+CREATE TABLE "SocialAccountCredential" (
+    "id" UUID NOT NULL,
+    "socialAccountId" UUID NOT NULL,
+    "tokenKeyVersion" INTEGER NOT NULL,
+    "accessTokenCiphertext" TEXT NOT NULL,
+    "refreshTokenCiphertext" TEXT,
+    "scopes" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "SocialAccountCredential_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "SocialAccountCredential_socialAccountId_key" ON "SocialAccountCredential"("socialAccountId");
+
+-- CreateIndex
+CREATE INDEX "SocialAccountCredential_tokenKeyVersion_idx" ON "SocialAccountCredential"("tokenKeyVersion");
+
+-- CreateIndex
+CREATE INDEX "SocialAccountCredential_expiresAt_idx" ON "SocialAccountCredential"("expiresAt");
+
+-- AddForeignKey
+ALTER TABLE "SocialAccountCredential" ADD CONSTRAINT "SocialAccountCredential_socialAccountId_fkey" FOREIGN KEY ("socialAccountId") REFERENCES "SocialAccount"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+================================================================================
+MIGRATION: 20260924163000_registration_phase_v1
+================================================================================
+-- Registration Phase v1.0 (human-approved; GATE A / Decision 014).
+--
+-- 1. AccountType value rename INDIVIDUAL_BUSINESS -> CLIENT: DATA-PRESERVING
+--    rename in place. Every existing row keeps its meaning (same persona,
+--    same provisioning no-op). Individual vs Business remains a ClientType,
+--    never an AccountType.
+-- 2. User.phoneVerifiedAt (L9): permanent phone-verification evidence set at
+--    registration completion; NULL for all pre-existing rows (never verified).
+-- 3. PendingRegistration: dedicated pre-User registration lifecycle. No User
+--    row exists until completion. Lifetime exactly 72h; createdAt/expiresAt
+--    never reset (L6/OPEN-7); single resumeTokenHash credential only (D1-A -
+--    rotated in place at reminder events; no second credential exists).
+-- 4. RegistrationOtp + RegistrationOtpChannel: hashed 6-digit OTP challenges
+--    (Argon2id hash only; 5-minute expiry; attempt/resend accounting).
+-- Both new tables start empty; no backfill is required or performed.
+
+-- AlterEnum (data-preserving in-place value rename)
+ALTER TYPE "AccountType" RENAME VALUE 'INDIVIDUAL_BUSINESS' TO 'CLIENT';
+
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "phoneVerifiedAt" TIMESTAMP(3);
+
+-- CreateEnum
+CREATE TYPE "RegistrationOtpChannel" AS ENUM ('EMAIL', 'WHATSAPP');
+
+-- CreateTable
+CREATE TABLE "PendingRegistration" (
+    "id" UUID NOT NULL,
+    "email" TEXT NOT NULL,
+    "fullName" TEXT NOT NULL,
+    "phone" TEXT NOT NULL,
+    "accountType" "AccountType",
+    "discoveryAnswers" JSONB,
+    "emailVerifiedAt" TIMESTAMP(3),
+    "whatsappVerifiedAt" TIMESTAMP(3),
+    "lockedUntil" TIMESTAMP(3),
+    "resumeTokenHash" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "reminderState" JSONB,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "PendingRegistration_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "RegistrationOtp" (
+    "id" UUID NOT NULL,
+    "pendingRegistrationId" UUID NOT NULL,
+    "channel" "RegistrationOtpChannel" NOT NULL,
+    "codeHash" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "attempts" INTEGER NOT NULL DEFAULT 0,
+    "resendCount" INTEGER NOT NULL DEFAULT 0,
+    "usedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "RegistrationOtp_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "PendingRegistration_email_key" ON "PendingRegistration"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "PendingRegistration_resumeTokenHash_key" ON "PendingRegistration"("resumeTokenHash");
+
+-- CreateIndex
+CREATE INDEX "PendingRegistration_expiresAt_idx" ON "PendingRegistration"("expiresAt");
+
+-- CreateIndex
+CREATE INDEX "RegistrationOtp_pendingRegistrationId_channel_idx" ON "RegistrationOtp"("pendingRegistrationId", "channel");
+
+-- AddForeignKey
+ALTER TABLE "RegistrationOtp" ADD CONSTRAINT "RegistrationOtp_pendingRegistrationId_fkey" FOREIGN KEY ("pendingRegistrationId") REFERENCES "PendingRegistration"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+================================================================================
+MIGRATION: 20260925000000_enforce_otp_concurrency
+================================================================================
+-- OTP concurrency remediation: enforce exactly one active challenge row per
+-- (pendingRegistrationId, channel) at the DATABASE level so concurrent
+-- challenge generation deterministically upserts the same row.
+--
+-- Safe data handling: if concurrent duplicates were created before this guard,
+-- keep exactly one row per group (most recently updated; highest id breaks ties)
+-- and delete the rest BEFORE creating the unique index. On a clean table this
+-- DELETE matches zero rows. The single resumeToken architecture (D1-A) is
+-- untouched: no column is added to PendingRegistration.
+DELETE FROM "RegistrationOtp" a
+USING "RegistrationOtp" b
+WHERE a."pendingRegistrationId" = b."pendingRegistrationId"
+  AND a."channel" = b."channel"
+  AND (a."updatedAt" < b."updatedAt"
+    OR (a."updatedAt" = b."updatedAt" AND a."id" < b."id"));
+
+-- Replace the non-unique lookup index with the composite unique guard.
+DROP INDEX IF EXISTS "RegistrationOtp_pendingRegistrationId_channel_idx";
+CREATE UNIQUE INDEX "RegistrationOtp_pendingRegistrationId_channel_key" ON "RegistrationOtp"("pendingRegistrationId", "channel");
+
+================================================================================
+MIGRATION: 20260928090000_add_user_client_type
+================================================================================
+-- Client 1-Click Activation: User.clientType + PendingRegistration.clientType
+-- (human-approved; supports the 1-Click activation refactor).
+--
+-- Why: the self-registered Client activation used to re-ask the persona
+-- (Individual vs Business) and re-collect the name/phone on the frontend,
+-- duplicating data already verified at Registration Phase v1.0 completion.
+-- AGENTS.md Â§17.1 is explicit that "Individual vs Business is a ClientType,
+-- never an AccountType", so User.accountType (SERVICE_PROVIDER | CLIENT)
+-- canNOT be reused for this. The persona is therefore captured ONCE, at
+-- registration, and read by the activation flow.
+--
+-- Safety: BOTH columns are NULLABLE and additive, so every pre-existing row
+-- stays valid with no backfill and no data loss. A NULL clientType simply
+-- means the persona was never collected; those users keep the existing
+-- (mobile-OTP) activation path, so this migration changes no behavior on its
+-- own. The "ClientType" enum already exists (20260910052335_client_module_v1).
+
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN "clientType" "ClientType";
+
+-- AlterTable
+ALTER TABLE "PendingRegistration" ADD COLUMN "clientType" "ClientType";
+
+================================================================================
+MIGRATION: 20260930090000_add_platform_client_agency_flow
+================================================================================
+-- ClientAgencyFlow: add PLATFORM (Decision 012 - platform-owned Service
+-- Provider). A first-time self-registered Client is attached to the single
+-- SOCIALOPS Service-Provider Organization during activation, so
+-- `initiatedBy` needs a truthful value: neither CLIENT (the user did not ask)
+-- nor AGENCY (SocialOps is explicitly NOT an external Agency tenant).
+--
+-- Additive only: no rows are created or modified. Existing CLIENT/AGENCY rows
+-- keep their meaning. PostgreSQL 12+ permits ADD VALUE in a transaction, and
+-- the new value is not used by this migration.
+ALTER TYPE "ClientAgencyFlow" ADD VALUE IF NOT EXISTS 'PLATFORM';
+
+================================================================================
+MIGRATION: 20260930100000_phase2_content_lifecycle
+================================================================================
+-- Phase 2 content lifecycle: FINAL_CONFIRMED becomes the active terminal
+-- confirmation state and the V1 APPROVED status retires.
+--
+-- Scope: DATA + CONSTRAINTS only. No column is added, removed, or retyped, and
+-- no enum value is created or removed - the Prisma data model is unchanged by
+-- this migration (only enum documentation comments were updated in schema.prisma).
+--
+-- Approved lifecycle decisions implemented here:
+--   1. APPROVED is RETAINED as a legacy ContentStatus enum value and its
+--      existing CHECK constraint is deliberately PRESERVED. APPROVED is removed
+--      from the ACTIVE PHASE 2 status sets, which is a code change and not a
+--      schema change.
+--      SCOPE BOUNDARY: the pre-existing V1 endpoint
+--      POST /api/client/me/content/:contentId/final-confirmation and
+--      ContentStatusService.confirmFinal() are PRESERVED UNCHANGED and can
+--      still produce an APPROVED row. Retiring that V1 door is a separate,
+--      breaking change that is NOT authorized by Decision 017; a row created
+--      that way satisfies both CHECK constraints and is unaffected by the
+--      permanent FINAL_CONFIRMED lock below, which governs the Phase 2
+--      pipeline.
+--   2. Client final confirmation PERMANENTLY LOCKS the item. Once a row reaches
+--      FINAL_CONFIRMED there is NO edit path out of it: the status machine
+--      offers only ARCHIVED, and the confirmation triple is never cleared for
+--      such a row. The lock applies to EVERY actor:
+--        - Human Managers -> content edits are refused (409 CONTENT_LOCKED)
+--        - AI Employees   -> "revision" output is refused (409 CONTENT_LOCKED).
+--                            An "internal-note" output stays allowed: a note is
+--                            insert-only agency commentary that cannot alter
+--                            the confirmed artifact.
+--        - Clients        -> new Change Requests are refused
+--                            (400 CONTENT_IMMUTABLE)
+--      These actor-level restrictions are enforced in APPLICATION CODE, not
+--      here: the database cannot distinguish a human author from an AI author,
+--      because both write through the same columns.
+--   3. FINAL_CONFIRMED requires the complete confirmation triple
+--      (at / by / revision). That requirement IS enforced here, below, by the
+--      new CHECK constraint - it is the one part of the lock the database can
+--      prove on its own.
+--
+-- Ordering is load-bearing: the data UPDATE below must run BEFORE the new
+-- CHECK is added, because it produces the very rows the CHECK then guards.
+-- ---------------------------------------------------------------------------
+
+-- 1. Retire legacy V1 approvals.
+--
+-- SAFETY: every row at APPROVED provably carries all three confirmation fields,
+-- because "Content_approved_requires_final_confirmation" has been enforced
+-- since 20260916041416_client_operations_v1_metadata and no migration has
+-- dropped or weakened it. FINAL_CONFIRMED requires exactly the same triple, so
+-- this conversion cannot produce an invalid row.
+--
+-- The three confirmation fields are DELIBERATELY NOT TOUCHED: the original
+-- confirmation timestamp and the revision the client actually approved remain
+-- truthful and keep pointing at the snapshot that was confirmed.
+--
+-- "ContentStatusEvent" rows with toStatus = 'APPROVED' are NOT rewritten. They
+-- are append-only audit history (AGENTS.md section 11) and the historical fact
+-- remains true; the read layer supplies a legacy label instead.
+--
+-- "archivedAt" is NOT touched: a converted row is not archived, so the
+-- FINAL_CONFIRMED -> ARCHIVED transition remains available to both actors.
+--
+-- Idempotent: on a re-run, or on a database that never held APPROVED rows, this
+-- statement matches zero rows and is a no-op.
+UPDATE "Content"
+   SET "status" = 'FINAL_CONFIRMED'
+ WHERE "status" = 'APPROVED';
+
+-- 2. Add the database-level integrity guard for the new active terminal state.
+--
+-- This closes a real gap: FINAL_CONFIRMED has existed since
+-- 20260917063349_phase1_ai_content_foundation with NO constraint, so any future
+-- code path, migration, or manual statement could create a "confirmed" item with
+-- no actual confirmation recorded. With this in place the Phase 2 terminal state
+-- has parity with the V1 state it replaces.
+--
+-- Named distinctly from the V1 constraint, which is intentionally kept.
+ALTER TABLE "Content"
+  ADD CONSTRAINT "Content_final_confirmed_requires_final_confirmation"
+  CHECK (
+    "status" <> 'FINAL_CONFIRMED'
+    OR (
+      "finalConfirmedAt" IS NOT NULL
+      AND "finalConfirmedByUserId" IS NOT NULL
+      AND "finalConfirmedRevisionId" IS NOT NULL
+    )
+  );
+
+-- ---------------------------------------------------------------------------
+-- Explicitly NOT done, and why:
+--
+--   * DROP CONSTRAINT "Content_approved_requires_final_confirmation"
+--     Retained by approved decision 1. It is now inert for application writes
+--     but still guards any stray legacy APPROVED row.
+--
+--   * ALTER TYPE "ContentStatus" DROP VALUE 'APPROVED'
+--     PostgreSQL cannot drop an enum value. Retained by approved decision 1.
+--
+--   * Any UPDATE against "ContentStatusEvent"
+--     Append-only audit history (AGENTS.md section 11) is never rewritten.
+-- ---------------------------------------------------------------------------
+
+================================================================================
+MIGRATION: 20261004211630_social_account_global_url_uniqueness
+================================================================================
+-- Global uniqueness of SocialAccount.profileUrl (approved decision).
+--
+-- One canonical URL key per Social Account, across ALL Clients and ALL
+-- Service Providers/Organizations. The key is stored in the new internal
+-- column "normalizedUrl" and carries a GLOBAL unique index; "profileUrl"
+-- itself keeps the human-entered value and is never rewritten here.
+--
+-- The backfill below mirrors src/social-accounts/lib/profile-url-normalization.ts
+-- (normalizeProfileUrl) RULE BY RULE, and the parity integration test
+-- (test/social-account-url-normalization-parity.integration.spec.ts) runs this
+-- exact expression against a shared fixture list so a divergence between
+-- TypeScript and PostgreSQL is a test failure rather than a silent duplicate.
+--
+-- Rules mirrored (in order):
+--   1. trim with an EXPLICIT whitespace set (never bare btrim());
+--   2. drop the scheme            ^https?://
+--   3. drop ONE leading host      ^(www\.|m\.|mobile\.)   <- dots are LITERAL
+--   4. drop the fragment          #[\s\S]*$
+--   5. drop the query string, EXCEPT for profile.php where ONLY the first
+--      non-empty `id` parameter is kept and re-emitted as `?id=<value>`;
+--      no usable id => bare `/profile.php` path
+--   6. strip trailing slashes     /+$
+--   7. lower() the whole key
+--   8. NULLIF(..., '')            empty is never ''
+--
+-- Every regexp_replace carries the 'i' flag to match the JavaScript /i flag.
+--
+-- Every pattern that means "anything up to the end" is spelled [\s\S]* rather
+-- than the terser .*, so the intent is EXPLICIT and identical to the
+-- TypeScript [\s\S]*. PostgreSQL's ARE default mode happens to be newline-
+-- sensitive (so .* already spans a newline), but that is a mode, not a
+-- guarantee: adding the 'n' flag would silently change .* behaviour, while
+-- [\s\S]* matches a newline in BOTH modes.
+--
+-- ORDERING IS LOAD-BEARING: the column must exist before it is backfilled, and
+-- the guard must run after the backfill but BEFORE the index, so it can inspect
+-- the real canonical keys.
+-- ---------------------------------------------------------------------------
+
+-- 1. Add the column.
+--
+-- Nullable and unindexed at this point: no existing row is constrained until
+-- the guard at step 3 has proved there are no duplicates. NULL is the correct
+-- value for a URL-less row, and PostgreSQL treats NULLs as distinct, so those
+-- rows never collide with each other or with any real URL.
+ALTER TABLE "SocialAccount" ADD COLUMN "normalizedUrl" TEXT;
+
+-- 2. Backfill the canonical key.
+--
+-- The pipeline is a SELECT subquery built from chained CROSS JOIN LATERAL steps,
+-- one per rule above, and is applied with UPDATE ... FROM. The UPDATE TARGET is
+-- referenced ONLY in the outer UPDATE ... WHERE clause - never inside a LATERAL -
+-- so each step reads a single, stable "value in flight" column rather than
+-- re-reading the table.
+UPDATE "SocialAccount" AS sa
+   SET "normalizedUrl" = k.key
+  FROM (
+        SELECT base."id", fin.key
+          FROM (
+                -- The row set to canonicalise. Rows with no profileUrl are
+                -- excluded: they have no URL, so their key stays NULL.
+                SELECT sa2."id", sa2."profileUrl"
+                  FROM "SocialAccount" AS sa2
+                 WHERE sa2."profileUrl" IS NOT NULL
+               ) AS base
+          -- 1. trim with an EXPLICIT whitespace set. NULLIF(...,'') makes a
+          --    whitespace-only value NULL ("no URL"), never an empty key.
+          CROSS JOIN LATERAL (
+                SELECT NULLIF(btrim(base."profileUrl", E' \t\r\n\f\v'), '') AS v
+               ) AS s1
+          -- 2. drop the scheme.
+          CROSS JOIN LATERAL (
+                SELECT regexp_replace(s1.v, '^https?://', '', 'i') AS v
+               ) AS s2
+          -- 3. drop ONE leading host prefix. The dots are escaped on purpose:
+          --    an unescaped `.` would also eat medium.com / meta.com.
+          CROSS JOIN LATERAL (
+                SELECT regexp_replace(s2.v, '^(www\.|m\.|mobile\.)', '', 'i') AS v
+               ) AS s3
+          -- 4. drop the fragment.
+          CROSS JOIN LATERAL (
+                SELECT regexp_replace(s3.v, '#[\s\S]*$', '', 'i') AS v
+               ) AS s4
+          -- 5. query handling. On profile.php the path is PRESERVED and only a
+          --    non-empty `id` parameter survives; everywhere else everything
+          --    from the first '?' is dropped.
+          --
+          --    The PREFIX is obtained by deleting the matched tail outright
+          --    (regexp_replace with '' ), which keeps the host and needs no
+          --    positional arithmetic. The QUERY is obtained by deleting
+          --    everything UP TO AND INCLUDING the path
+          --    (regexp_replace(s4.v, '^[\s\S]*/profile\.php', '', 'i')), which - unlike
+          --    substring(x FROM ...), which is always case-SENSITIVE - honours
+          --    the 'i' flag and so also matches `FACEBOOK.COM/Profile.php?ID=1`.
+          --    substr(q, 2) strips the leading '?' to give the raw query, split
+          --    on '&' exactly like the TypeScript helper. substr(pair,
+          --    strpos(pair,'=') + 1) takes everything after the FIRST '=' so
+          --    `id=1=2` behaves like the JavaScript slice(eq + 1) rather than
+          --    split_part's second field.
+          --
+          --    The test uses `~*` (case-INsensitive); a plain `~` would miss
+          --    `FACEBOOK.COM/Profile.php?ID=1` and silently drop its id.
+          CROSS JOIN LATERAL (
+                SELECT CASE
+                         WHEN s4.v ~* '/profile\.php(\?[\s\S]*)?$' THEN
+                              regexp_replace(s4.v, '/profile\.php(\?[\s\S]*)?$', '', 'i')
+                              || '/profile.php'
+                              || COALESCE((
+                                   SELECT '?id=' || btrim(
+                                              substr(t.pair, strpos(t.pair, '=') + 1),
+                                              E' \t\r\n\f\v')
+                                     FROM unnest(string_to_array(
+                                              substr(regexp_replace(s4.v, '^[\s\S]*/profile\.php', '', 'i'), 2),
+                                              '&')) WITH ORDINALITY AS t(pair, ord)
+                                    WHERE strpos(t.pair, '=') > 0
+                                      AND lower(btrim(substr(t.pair, 1, strpos(t.pair, '=') - 1),
+                                                      E' \t\r\n\f\v')) = 'id'
+                                      AND btrim(substr(t.pair, strpos(t.pair, '=') + 1),
+                                                E' \t\r\n\f\v') <> ''
+                                    ORDER BY t.ord
+                                    LIMIT 1
+                                 ), '')
+                         ELSE regexp_replace(s4.v, '\?[\s\S]*$', '', 'i')
+                       END AS v
+               ) AS s5
+          -- 6. strip trailing slashes.
+          CROSS JOIN LATERAL (
+                SELECT regexp_replace(s5.v, '/+$', '') AS v
+               ) AS s6
+          -- 7. lowercase the whole key.
+          CROSS JOIN LATERAL (
+                SELECT lower(s6.v) AS v
+               ) AS s7
+          -- 8. empty is never a key.
+          CROSS JOIN LATERAL (
+                SELECT NULLIF(s7.v, '') AS key
+               ) AS fin
+       ) AS k
+ WHERE sa."id" = k."id";
+
+-- 3. Duplicate guard.
+--
+-- Runs AFTER the backfill so it inspects the REAL canonical keys, and BEFORE
+-- the index so a duplicate produces this readable, actionable error instead of
+-- an opaque "duplicate key value violates unique constraint".
+--
+-- The aggregation is a SUBQUERY (group + HAVING) with a SINGLE outer aggregate,
+-- so there are no nested aggregates. Without this guard the CREATE UNIQUE INDEX
+-- below would fail on a raw catalog error naming an internal constraint only.
+DO $$
+DECLARE
+    dup_keys TEXT;
+BEGIN
+    SELECT string_agg(d."normalizedUrl", E'\n    ' ORDER BY d."normalizedUrl")
+      INTO dup_keys
+      FROM (
+            SELECT "normalizedUrl"
+              FROM "SocialAccount"
+             WHERE "normalizedUrl" IS NOT NULL
+             GROUP BY "normalizedUrl"
+            HAVING COUNT(*) > 1
+           ) AS d;
+
+    IF dup_keys IS NOT NULL THEN
+        RAISE EXCEPTION USING
+            MESSAGE = 'Cannot create "SocialAccount_normalizedUrl_key": duplicate normalizedUrl values exist.',
+            DETAIL  = 'The following canonical URL key(s) are held by more than one SocialAccount row:'
+                      || E'\n    ' || dup_keys,
+            HINT    = 'Inspect "SocialAccount"."profileUrl" for these keys, keep one row per profile, '
+                      'then re-run this migration.';
+    END IF;
+END $$;
+
+-- 4. Create the global unique index.
+--
+-- Only now, after the guard has proved the data is clean. NULLs are distinct in
+-- PostgreSQL, so every URL-less row is exempt by construction.
+CREATE UNIQUE INDEX "SocialAccount_normalizedUrl_key" ON "SocialAccount"("normalizedUrl");
+
+-- ---------------------------------------------------------------------------
+-- Explicitly NOT done, and why:
+--
+--   * Any UPDATE of "profileUrl"
+--     The stored column keeps the human-entered value; only the derived key is
+--     rewritten here.
+--
+--   * Any DELETE of a duplicate row
+--     This migration NEVER removes data. It refuses to proceed when duplicates
+--     exist and leaves the choice of which row to keep to a human.
+--
+--   * A UNIQUE constraint instead of a UNIQUE INDEX
+--     `@unique` on a nullable column is implemented by PostgreSQL as exactly
+--     this unique index; the name matches Prisma's convention.
+-- ---------------------------------------------------------------------------
+
+
+================================================================================
+MIGRATION: 20261004230000_client_content_source_request
+================================================================================
+-- Create a server-authoritative link from a Content Request to its draft.
+ALTER TABLE "Content" ADD COLUMN "sourceRequestId" UUID;
+
+CREATE UNIQUE INDEX "Content_sourceRequestId_key"
+    ON "Content"("sourceRequestId");
+
+ALTER TABLE "Content"
+    ADD CONSTRAINT "Content_sourceRequestId_fkey"
+    FOREIGN KEY ("sourceRequestId") REFERENCES "RawData"("id")
+    ON DELETE SET NULL ON UPDATE CASCADE;
+
+================================================================================
+MIGRATION: 20261019000000_add_platform_admin_infra
+================================================================================
+-- Add platform administrator infrastructure:
+--   - PlatformPermission enum type
+--   - User.platformPermissions array column
+--   - AdminAuditEvent audit table
+--
+-- Idempotency: CREATE TYPE IF NOT EXISTS / CREATE TABLE IF NOT EXISTS so the
+-- migration can be safely applied on a cluster that already has the objects.
+
+-- ---------------------------------------------------------------------------
+-- PlatformPermission enum
+-- ---------------------------------------------------------------------------
+CREATE TYPE "PlatformPermission" AS ENUM (
+  'CLIENT_STATUS_MANAGEMENT',
+  'AGENCY_DISCOVERY_APPROVAL',
+  'GLOBAL_ORG_READ',
+  'GLOBAL_USER_READ',
+  'GLOBAL_CLIENT_READ',
+  'GLOBAL_CONTENT_READ',
+  'PLATFORM_ROLE_GRANT',
+  'PLATFORM_ROLE_REVOKE',
+  'PLATFORM_AUDIT_READ'
+);
+
+-- ---------------------------------------------------------------------------
+-- User.platformPermissions array column
+-- ---------------------------------------------------------------------------
+ALTER TABLE "User" ADD COLUMN "platformPermissions" "PlatformPermission"[] DEFAULT '{}';
+
+-- ---------------------------------------------------------------------------
+-- AdminAuditEvent table (insert-only, cross-tenant audit trail)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS "AdminAuditEvent" (
+  "id"           UUID      NOT NULL DEFAULT gen_random_uuid(),
+  "actorUserId"  UUID      NOT NULL,
+  "action"       TEXT      NOT NULL,
+  "targetType"   TEXT      NOT NULL,
+  "targetId"     UUID,
+  "details"      JSONB,
+  "createdAt"    TIMESTAMP(3) NOT NULL DEFAULT now(),
+  CONSTRAINT "AdminAuditEvent_pkey" PRIMARY KEY ("id")
+);
+
+CREATE INDEX IF NOT EXISTS "AdminAuditEvent_actorUserId_createdAt_idx"
+  ON "AdminAuditEvent"("actorUserId", "createdAt");
+CREATE INDEX IF NOT EXISTS "AdminAuditEvent_targetType_targetId_idx"
+  ON "AdminAuditEvent"("targetType", "targetId");
+CREATE INDEX IF NOT EXISTS "AdminAuditEvent_action_createdAt_idx"
+  ON "AdminAuditEvent"("action", "createdAt");
+
+-- FK constraint: PostgreSQL does not support IF NOT EXISTS on ALTER TABLE ADD
+-- CONSTRAINT, so guard with a DO block that checks pg_constraint.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'AdminAuditEvent_actorUserId_fkey'
+  ) THEN
+    ALTER TABLE "AdminAuditEvent"
+      ADD CONSTRAINT "AdminAuditEvent_actorUserId_fkey"
+      FOREIGN KEY ("actorUserId") REFERENCES "User"("id")
+      ON DELETE RESTRICT ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+================================================================================
+MIGRATION: 20261021000000_add_admin_stepup
+================================================================================
+-- Add SuperAdmin step-up OTP challenge and session infrastructure:
+--   - AdminStepUpChallenge: one active challenge per user (Argon2id hash)
+--   - AdminStepUpSession: short-lived session token granting SUPERADMIN routes
+--
+-- Idempotency: CREATE TABLE IF NOT EXISTS so the migration can be safely
+-- applied on a cluster that already has the objects.
+
+-- ---------------------------------------------------------------------------
+-- AdminStepUpChallenge
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS "AdminStepUpChallenge" (
+  "id"             UUID      NOT NULL DEFAULT gen_random_uuid(),
+  "userId"         UUID      NOT NULL,
+  "channel"        TEXT      NOT NULL,
+  "codeHash"       TEXT      NOT NULL,
+  "expiresAt"      TIMESTAMP(3) NOT NULL,
+  "usedAt"         TIMESTAMP(3),
+  "attempts"       INTEGER   NOT NULL DEFAULT 0,
+  "resendCount"    INTEGER   NOT NULL DEFAULT 0,
+  "lockedUntil"    TIMESTAMP(3),
+  "createdAt"      TIMESTAMP(3) NOT NULL DEFAULT now(),
+  CONSTRAINT "AdminStepUpChallenge_pkey" PRIMARY KEY ("id")
+);
+
+-- One active challenge per user: a new challenge replaces the previous one
+-- (upsert semantics in AdminStepUpService). Enforces single-row-per-user
+-- without a separate find-then-create race.
+CREATE UNIQUE INDEX IF NOT EXISTS "AdminStepUpChallenge_userId_key"
+  ON "AdminStepUpChallenge"("userId");
+
+CREATE INDEX IF NOT EXISTS "AdminStepUpChallenge_expiresAt_idx"
+  ON "AdminStepUpChallenge"("expiresAt");
+
+-- ---------------------------------------------------------------------------
+-- AdminStepUpSession
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS "AdminStepUpSession" (
+  "id"              UUID      NOT NULL DEFAULT gen_random_uuid(),
+  "userId"          UUID      NOT NULL,
+  "sessionTokenHash" TEXT     NOT NULL,
+  "expiresAt"       TIMESTAMP(3) NOT NULL,
+  "revokedAt"       TIMESTAMP(3),
+  "createdAt"       TIMESTAMP(3) NOT NULL DEFAULT now(),
+  CONSTRAINT "AdminStepUpSession_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "AdminStepUpSession_sessionTokenHash_key"
+  ON "AdminStepUpSession"("sessionTokenHash");
+
+CREATE INDEX IF NOT EXISTS "AdminStepUpSession_userId_idx"
+  ON "AdminStepUpSession"("userId");
+
+CREATE INDEX IF NOT EXISTS "AdminStepUpSession_expiresAt_idx"
+  ON "AdminStepUpSession"("expiresAt");
+
+-- FK constraints (PostgreSQL does not support IF NOT EXISTS on ALTER TABLE
+-- ADD CONSTRAINT, so guard with a DO block that checks pg_constraint).
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'AdminStepUpChallenge_userId_fkey'
+  ) THEN
+    ALTER TABLE "AdminStepUpChallenge"
+      ADD CONSTRAINT "AdminStepUpChallenge_userId_fkey"
+      FOREIGN KEY ("userId") REFERENCES "User"("id")
+      ON DELETE RESTRICT ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'AdminStepUpSession_userId_fkey'
+  ) THEN
+    ALTER TABLE "AdminStepUpSession"
+      ADD CONSTRAINT "AdminStepUpSession_userId_fkey"
+      FOREIGN KEY ("userId") REFERENCES "User"("id")
+      ON DELETE RESTRICT ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+================================================================================
+MIGRATION: 20261026120000_add_global_employee_read_permission
+================================================================================
+-- Add GLOBAL_EMPLOYEE_READ platform permission enum value.
+--
+-- This adds the GLOBAL_EMPLOYEE_READ value to the PlatformPermission enum so
+-- that the GET /admin/employees global-read endpoint can be protected with
+-- @RequirePlatformPermission('GLOBAL_EMPLOYEE_READ').
+--
+-- Additive change: only appends a new enum value, no existing values are
+-- modified or removed. Safe to apply on top of the current database state.
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_enum e
+    JOIN pg_type t ON t.oid = e.enumtypid
+    WHERE t.typname = 'PlatformPermission'
+      AND e.enumlabel = 'GLOBAL_EMPLOYEE_READ'
+  ) THEN
+    ALTER TYPE "PlatformPermission" ADD VALUE 'GLOBAL_EMPLOYEE_READ';
+  END IF;
+END $$;
+
+================================================================================
+MIGRATION: 20261028080000_add_global_settings
+================================================================================
+-- Add GlobalSetting table for system-wide configuration
+-- Decision 022: SuperAdmin-managed global settings (LLM provider, etc.)
+
+CREATE TABLE "GlobalSetting" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "key" TEXT NOT NULL,
+    "value" TEXT NOT NULL,
+    "description" TEXT,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedByUserId" UUID,
+
+    CONSTRAINT "GlobalSetting_pkey" PRIMARY KEY ("id")
+);
+
+-- Unique index on key for fast lookups
+CREATE UNIQUE INDEX "GlobalSetting_key_key" ON "GlobalSetting"("key");
+
+-- Comment for documentation
+COMMENT ON TABLE "GlobalSetting" IS 'System-wide configuration managed by SuperAdmin. Overrides env vars.';
+COMMENT ON COLUMN "GlobalSetting"."key" IS 'Setting key (e.g., LLM_PROVIDER, LLM_MODEL).';
+COMMENT ON COLUMN "GlobalSetting"."value" IS 'Setting value.';
+COMMENT ON COLUMN "GlobalSetting"."description" IS 'Human-readable description for UI.';
+
+================================================================================
+MIGRATION: 20261028080001_add_platform_settings_manage
+================================================================================
+-- Add PLATFORM_SETTINGS_MANAGE permission (Decision 022).
+-- PostgreSQL cannot drop enum values, so this is an additive append.
+
+ALTER TYPE "PlatformPermission" ADD VALUE IF NOT EXISTS 'PLATFORM_SETTINGS_MANAGE';
+
+================================================================================
+MIGRATION: 20261028090000_add_login_otp
+================================================================================
+-- Add mandatory login OTP challenge infrastructure:
+--   - LoginOtpChannel: EMAIL only for V1
+--   - LoginOtpChallenge: one active challenge per user (Argon2id hash)
+--
+-- Every sign-in path (SERVICE_PROVIDER, CLIENT, and Employee) now requires
+-- a valid email OTP in addition to the password. The challenge model mirrors
+-- AdminStepUpChallenge: one active challenge per user at a time, 5-minute
+-- expiry, single use, 3 wrong attempts -> 1-hour lock, resend quota of 3.
+-- The 60-second resend cooldown is enforced server-side via lastSentAt.
+--
+-- Idempotency: CREATE TABLE IF NOT EXISTS so the migration can be safely
+-- applied on a cluster that already has the objects.
+
+-- ---------------------------------------------------------------------------
+-- LoginOtpChannel enum
+-- ---------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_type WHERE typname = 'LoginOtpChannel'
+  ) THEN
+    CREATE TYPE "LoginOtpChannel" AS ENUM ('EMAIL');
+  END IF;
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- LoginOtpChallenge
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS "LoginOtpChallenge" (
+  "id"            UUID      NOT NULL DEFAULT gen_random_uuid(),
+  "userId"        UUID      NOT NULL,
+  "channel"       "LoginOtpChannel" NOT NULL,
+  "codeHash"      TEXT      NOT NULL,
+  "expiresAt"     TIMESTAMP(3) NOT NULL,
+  "usedAt"        TIMESTAMP(3),
+  "attempts"      INTEGER   NOT NULL DEFAULT 0,
+  "resendCount"   INTEGER   NOT NULL DEFAULT 0,
+  "lockedUntil"   TIMESTAMP(3),
+  "lastSentAt"    TIMESTAMP(3),
+  "createdAt"     TIMESTAMP(3) NOT NULL DEFAULT now(),
+  CONSTRAINT "LoginOtpChallenge_pkey" PRIMARY KEY ("id")
+);
+
+-- One active challenge per user: a new challenge replaces the previous one
+-- (upsert semantics in LoginOtpService). Enforces single-row-per-user
+-- without a separate find-then-create race.
+CREATE UNIQUE INDEX IF NOT EXISTS "LoginOtpChallenge_userId_key"
+  ON "LoginOtpChallenge"("userId");
+
+CREATE INDEX IF NOT EXISTS "LoginOtpChallenge_expiresAt_idx"
+  ON "LoginOtpChallenge"("expiresAt");
+
+-- FK constraint (PostgreSQL does not support IF NOT EXISTS on ALTER TABLE
+-- ADD CONSTRAINT, so guard with a DO block that checks pg_constraint).
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'LoginOtpChallenge_userId_fkey'
+  ) THEN
+    ALTER TABLE "LoginOtpChallenge"
+      ADD CONSTRAINT "LoginOtpChallenge_userId_fkey"
+      FOREIGN KEY ("userId") REFERENCES "User"("id")
+      ON DELETE RESTRICT ON UPDATE CASCADE;
+  END IF;
+END $$;
+

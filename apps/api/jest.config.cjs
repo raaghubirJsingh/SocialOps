@@ -1,6 +1,7 @@
 /** @type {import('jest').Config} */
+const tsTransform = require.resolve('ts-jest').replace(/\\/g, '/');
+
 module.exports = {
-  preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
   rootDir: '.',
   roots: ['<rootDir>/src'],
@@ -12,7 +13,7 @@ module.exports = {
   },
   extensionsToTreatAsEsm: ['.ts'],
   transform: {
-    '^.+\\.[tj]sx?$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json', useESM: true }],
+    '^.+\\.[tj]sx?$': [tsTransform, { tsconfig: '<rootDir>/tsconfig.spec.json', useESM: true }],
   },
   transformIgnorePatterns: [
     'node_modules/(?!(@nestjs|@prisma|@jest|ioredis|argon2)/)',

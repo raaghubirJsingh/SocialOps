@@ -13,6 +13,7 @@ import { ContentController } from './content.controller.js';
 import { ContentService } from './content.service.js';
 import { InternalNoteService } from './internal-note.service.js';
 import { LlmService } from './ai/llm.service.js';
+import { GlobalSettingsModule } from './ai/global-settings.module.js';
 import { RawDataMeController } from './raw-data-me.controller.js';
 import { RawDataController } from './raw-data.controller.js';
 import { RawDataService } from './raw-data.service.js';
@@ -50,7 +51,7 @@ import { RawDataService } from './raw-data.service.js';
  * exported by ClientsModule. No global guards are registered here.
  */
 @Module({
-  imports: [PrismaModule, ClientsModule, S3Module],
+  imports: [PrismaModule, ClientsModule, S3Module, GlobalSettingsModule],
   controllers: [
     ContentController,
     ContentMeController,

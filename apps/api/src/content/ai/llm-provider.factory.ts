@@ -6,15 +6,18 @@ import type { LlmProvider } from './llm.types.js';
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 /**
- * Resolve the configured provider from process.env (AGENTS.md §8:
+ * Resolve the configured provider from an env-like object (AGENTS.md §8:
  * environment-based configuration, never hard-coded secrets).
  *
  * Falls back to the deterministic mock when no provider is selected, or when
  * the selected provider's API key is missing, so local dev and CI keep working
  * without credentials.
+ *
+ * The input is a plain object so callers can merge DB-backed settings on top
+ * of process.env (Decision 022: SuperAdmin-managed global settings).
  */
 export function resolveLlmProvider(
-  env: NodeJS.ProcessEnv = process.env,
+  env: Record<string, string | undefined> = process.env,
 ): LlmProvider {
   const name = (env.LLM_PROVIDER ?? '').trim().toLowerCase();
   const timeoutMs = positiveInt(env.LLM_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);

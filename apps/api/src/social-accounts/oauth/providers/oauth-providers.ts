@@ -10,11 +10,11 @@ import { YouTubeOAuthProvider } from './youtube.oauth.js';
  * Providers are stateless, so fresh instances per call are safe.
  */
 function makeProviders(): Map<SocialPlatformValue, OAuthProvider> {
-  return new Map([
-    ['FACEBOOK', new FacebookOAuthProvider()],
-    ['INSTAGRAM', new InstagramOAuthProvider()],
-    ['YOUTUBE', new YouTubeOAuthProvider()],
-  ]);
+  const providers = new Map<SocialPlatformValue, OAuthProvider>();
+  providers.set('FACEBOOK', new FacebookOAuthProvider());
+  providers.set('INSTAGRAM', new InstagramOAuthProvider());
+  providers.set('YOUTUBE', new YouTubeOAuthProvider());
+  return providers;
 }
 
 /** Resolve the adapter for a platform; unconfigured platforms fail closed. */

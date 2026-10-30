@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 
 import { LlmError } from './llm.errors.js';
+import { GlobalSettingsService } from './global-settings.service.js';
 import { resolveLlmProvider } from './llm-provider.factory.js';
 import type { LlmGenerateParams, LlmProvider, LlmResult } from './llm.types.js';
 
@@ -14,16 +15,18 @@ import type { LlmGenerateParams, LlmProvider, LlmResult } from './llm.types.js';
  *
  * AIAgentService depends on this concrete class (not the provider interface)
  * so Nest DI and the unit spec can construct it directly. It resolves the
- * concrete provider once at construction from process.env, and owns the
- * mapping of provider failures to 502/503 so the raw providers never import
- * Nest internals.
+ * concrete provider once at construction, merging DB-backed global settings
+ * (Decision 022) on top of process.env, and owns the mapping of provider
+ * failures to 502/503 so the raw providers never import Nest internals.
  */
 @Injectable()
 export class LlmService {
   private readonly provider: LlmProvider;
 
-  constructor() {
-    this.provider = resolveLlmProvider(process.env);
+  constructor(
+    private readonly globalSettings: GlobalSettingsService,
+  ) {
+    this.provider = resolveLlmProvider(this.buildEnv());
   }
 
   get providerName(): string {
@@ -41,6 +44,24 @@ export class LlmService {
       // so it is visible in logs rather than being silently masked as 502.
       throw error;
     }
+  }
+
+  /**
+   * Build the effective env object used to resolve the provider.
+   *
+   * DB-backed global settings (Decision 022) take precedence over
+   * process.env for the LLM keys, so a SuperAdmin can switch the provider
+   * without redeploying. Missing keys fall through to process.env.
+   */
+  private buildEnv(): Record<string, string | undefined> {
+    const env: Record<string, string | undefined> = { ...process.env };
+    const db = this.globalSettings.getAllSync?.();
+    if (db) {
+      for (const [key, value] of Object.entries(db)) {
+        env[key] = value;
+      }
+    }
+    return env;
   }
 }
 

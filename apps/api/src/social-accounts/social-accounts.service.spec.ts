@@ -13,6 +13,7 @@ import type { UpdateSocialAccountDto } from './dto/update-social-account.dto.js'
 import {
   SOCIAL_ACCOUNT_LIST_SELECT,
   SOCIAL_ACCOUNT_SELECT,
+  SOCIAL_ACCOUNT_URL_UNAVAILABLE,
   SocialAccountsService,
 } from './social-accounts.service.js';
 
@@ -494,5 +495,231 @@ describe('SocialAccountsService - platform-vs-host validation', () => {
 
     expect(asMock(prisma.socialAccount.create)).toHaveBeenCalled();
   });
+});
+
+describe('SocialAccountsService - URL uniqueness via create()', () => {
+  const URL_CONFLICT = SOCIAL_ACCOUNT_URL_UNAVAILABLE;
+
+  it('create() throws 409 SOCIAL_ACCOUNT_URL_UNAVAILABLE when a clash row exists', async () => {
+    const prisma = makePrismaMock();
+    asMock(prisma.socialAccount.findFirst).mockResolvedValue({ id: 'clash-row-id' });
+    const service = new SocialAccountsService(prisma as unknown as PrismaService);
+    const dto = {
+      platform: 'INSTAGRAM',
+      profileUrl: 'https://instagram.com/taken',
+    } as CreateSocialAccountDto;
+
+    await expect(
+      service.create(CLIENT_ID, ACTOR_ID, dto),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(asMock(prisma.socialAccount.findFirst)).toHaveBeenCalledTimes(1);
+    expect(asMock(prisma.socialAccount.create)).not.toHaveBeenCalled();
+  });
+
+  it('create() conflict body carries SOCIAL_ACCOUNT_URL_UNAVAILABLE', async () => {
+    const prisma = makePrismaMock();
+    asMock(prisma.socialAccount.findFirst).mockResolvedValue({ id: 'clash-row-id' });
+    const service = new SocialAccountsService(prisma as unknown as PrismaService);
+    const dto = {
+      platform: 'INSTAGRAM',
+      profileUrl: 'https://instagram.com/taken',
+    } as CreateSocialAccountDto;
+
+    const thrown = await expect(
+      service.create(CLIENT_ID, ACTOR_ID, dto),
+    ).rejects.toBeInstanceOf(ConflictException);
+    const body = thrown.getResponse();
+    expect(body).toEqual(expect.objectContaining(URL_CONFLICT));
+  });
+
+  it('create() conflict response reveals no tenant data', async () => {
+    const prisma = makePrismaMock();
+    asMock(prisma.socialAccount.findFirst).mockResolvedValue({ id: 'clash-row-id' });
+    const service = new SocialAccountsService(prisma as unknown as PrismaService);
+    const dto = {
+      platform: 'INSTAGRAM',
+      profileUrl: 'https://instagram.com/taken',
+    } as CreateSocialAccountDto;
+
+    const thrown = await expect(
+      service.create(CLIENT_ID, ACTOR_ID, dto),
+    ).rejects.toBeInstanceOf(ConflictException);
+    const serialised = JSON.stringify(thrown.getResponse());
+    expect(serialised).not.toContain(CLIENT_ID);
+    expect(serialised).not.toContain(OTHER_CLIENT_ID);
+    expect(serialised).not.toContain(ACCOUNT_ID);
+    expect(serialised).not.toMatch(/clientId|organizationId|orgId|tenant/i);
+  });
+
+  it('create() proceeds when no clash exists (availability precheck is free)', async () => {
+    const prisma = makePrismaMock();
+    asMock(prisma.socialAccount.findFirst).mockResolvedValue(null);
+    asMock(prisma.socialAccount.create).mockResolvedValue({
+      id: ACCOUNT_ID,
+      platform: 'INSTAGRAM',
+      profileUrl: 'https://instagram.com/free',
+      credential: null,
+    });
+    const service = new SocialAccountsService(prisma as unknown as PrismaService);
+    const dto = {
+      platform: 'INSTAGRAM',
+      profileUrl: 'https://instagram.com/free',
+    } as CreateSocialAccountDto;
+
+    const row = await service.create(CLIENT_ID, ACTOR_ID, dto);
+    expect(row.profileUrl).toBe('https://instagram.com/free');
+    expect(asMock(prisma.socialAccount.create)).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SocialAccountsService - URL uniqueness via update()', () => {
+  const URL_CONFLICT = SOCIAL_ACCOUNT_URL_UNAVAILABLE;
+
+  it('update() throws 409 SOCIAL_ACCOUNT_URL_UNAVAILABLE when a different row clashes', async () => {
+    const prisma = makePrismaMock();
+    asMock(prisma.socialAccount.findFirst)
+      .mockResolvedValueOnce({ id: ACCOUNT_ID, platform: 'FACEBOOK' })
+      .mockResolvedValueOnce({ id: 'clash-row-id' });
+    const service = new SocialAccountsService(prisma as unknown as PrismaService);
+    const dto = {
+      profileUrl: 'https://facebook.com/taken-by-other',
+    } as UpdateSocialAccountDto;
+
+    await expect(
+      service.update(CLIENT_ID, ACCOUNT_ID, dto),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(asMock(prisma.socialAccount.update)).not.toHaveBeenCalled();
+  });
+
+  it('update() succeeds when only the row itself matches (self-exemption via excludeId)', async () => {
+    const prisma = makePrismaMock();
+    asMock(prisma.socialAccount.findFirst)
+      .mockResolvedValueOnce({ id: ACCOUNT_ID, platform: 'FACEBOOK' })
+      .mockResolvedValueOnce(null);
+    asMock(prisma.socialAccount.update).mockResolvedValue({
+      id: ACCOUNT_ID,
+      platform: 'FACEBOOK',
+      profileUrl: 'https://facebook.com/same',
+      credential: null,
+    });
+    const service = new SocialAccountsService(prisma as unknown as PrismaService);
+    const dto = {
+      profileUrl: 'https://facebook.com/same',
+    } as UpdateSocialAccountDto;
+
+    const row = await service.update(CLIENT_ID, ACCOUNT_ID, dto);
+    expect(row.profileUrl).toBe('https://facebook.com/same');
+    expect(asMock(prisma.socialAccount.update)).toHaveBeenCalledTimes(1);
+  });
+
+  it('update() proceeds when no clash exists', async () => {
+    const prisma = makePrismaMock();
+    asMock(prisma.socialAccount.findFirst)
+      .mockResolvedValueOnce({ id: ACCOUNT_ID, platform: 'FACEBOOK' })
+      .mockResolvedValueOnce(null);
+    asMock(prisma.socialAccount.update).mockResolvedValue({
+      id: ACCOUNT_ID,
+      platform: 'FACEBOOK',
+      profileUrl: 'https://facebook.com/new',
+      credential: null,
+    });
+    const service = new SocialAccountsService(prisma as unknown as PrismaService);
+    const dto = {
+      profileUrl: 'https://facebook.com/new',
+    } as UpdateSocialAccountDto;
+
+    const row = await service.update(CLIENT_ID, ACCOUNT_ID, dto);
+    expect(row.profileUrl).toBe('https://facebook.com/new');
+    expect(asMock(prisma.socialAccount.update)).toHaveBeenCalledTimes(1);
+  });
+
+  it('update() conflict body carries SOCIAL_ACCOUNT_URL_UNAVAILABLE', async () => {
+    const prisma = makePrismaMock();
+    asMock(prisma.socialAccount.findFirst)
+      .mockResolvedValueOnce({ id: ACCOUNT_ID, platform: 'FACEBOOK' })
+      .mockResolvedValueOnce({ id: 'clash-row-id' });
+    const service = new SocialAccountsService(prisma as unknown as PrismaService);
+    const dto = {
+      profileUrl: 'https://facebook.com/taken',
+    } as UpdateSocialAccountDto;
+
+    const thrown = await expect(
+      service.update(CLIENT_ID, ACCOUNT_ID, dto),
+    ).rejects.toBeInstanceOf(ConflictException);
+    const body = thrown.getResponse();
+    expect(body).toEqual(expect.objectContaining(URL_CONFLICT));
+  });
+
+  it('update() conflict response reveals no tenant data', async () => {
+    const prisma = makePrismaMock();
+    asMock(prisma.socialAccount.findFirst)
+      .mockResolvedValueOnce({ id: ACCOUNT_ID, platform: 'FACEBOOK' })
+      .mockResolvedValueOnce({ id: 'clash-row-id' });
+    const service = new SocialAccountsService(prisma as unknown as PrismaService);
+    const dto = {
+      profileUrl: 'https://facebook.com/taken',
+    } as UpdateSocialAccountDto;
+
+    const thrown = await expect(
+      service.update(CLIENT_ID, ACCOUNT_ID, dto),
+    ).rejects.toBeInstanceOf(ConflictException);
+    const serialised = JSON.stringify(thrown.getResponse());
+    expect(serialised).not.toContain(CLIENT_ID);
+    expect(serialised).not.toContain(OTHER_CLIENT_ID);
+    expect(serialised).not.toContain(ACCOUNT_ID);
+    expect(serialised).not.toMatch(/clientId|organizationId|orgId|tenant/i);
+  });
+});
+
+describe('SocialAccountsService - assertProfileUrlAvailable directly', () => {
+  it('throws ConflictException when a clash row exists (no excludeId)', async () => {
+    const prisma = makePrismaMock();
+    asMock(prisma.socialAccount.findFirst).mockResolvedValue({ id: 'clash-row-id' });
+    const service = new SocialAccountsService(prisma as unknown as PrismaService);
+
+    await expect(
+      (service as any).assertProfileUrlAvailable('instagram.com/taken'),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('throws ConflictException when a different row clashes (with excludeId)', async () => {
+    const prisma = makePrismaMock();
+    asMock(prisma.socialAccount.findFirst).mockResolvedValue({ id: 'clash-row-id' });
+    const service = new SocialAccountsService(prisma as unknown as PrismaService);
+
+    await expect(
+      (service as any).assertProfileUrlAvailable(
+        'instagram.com/taken',
+        ACCOUNT_ID,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('does not throw when no row has the normalized URL', async () => {
+    const prisma = makePrismaMock();
+    asMock(prisma.socialAccount.findFirst).mockResolvedValue(null);
+    const service = new SocialAccountsService(prisma as unknown as PrismaService);
+
+    await expect(
+      (service as any).assertProfileUrlAvailable('instagram.com/free'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('does not throw when only the excluded row matches (self-exemption)', async () => {
+    const prisma = makePrismaMock();
+    // excludeId is ACCOUNT_ID; findFirst returns null meaning no OTHER row has the URL.
+    asMock(prisma.socialAccount.findFirst).mockResolvedValue(null);
+    const service = new SocialAccountsService(prisma as unknown as PrismaService);
+
+    await expect(
+      (service as any).assertProfileUrlAvailable(
+        'instagram.com/same',
+        ACCOUNT_ID,
+      ),
+    ).resolves.toBeUndefined();
+  });
+});
 
 
