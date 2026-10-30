@@ -36,3 +36,4 @@ export function oauthRedirectUri(platform: SocialPlatformValue): string {
     `http://localhost:${process.env.PORT ?? 4000}`;
   return `${base.replace(/\/$/, '')}/api/social-accounts/callback/${platform}`;
 }
+// force update for vercel deploy
