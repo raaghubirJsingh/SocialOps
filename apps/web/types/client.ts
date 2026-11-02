@@ -243,6 +243,39 @@ export interface ManagementRequestDto {
   organization: OrganizationSummary;
 }
 
+export type AgencyRelationshipStatus =
+  | 'PENDING_REQUEST'
+  | 'PENDING_INVITATION'
+  | 'ACTIVE'
+  | 'TERMINATED';
+
+export type AgencyRelationshipInitiator = 'CLIENT' | 'AGENCY';
+
+/** Relationship history row returned by GET /api/client/me/agency-relationships. */
+export interface AgencyRelationshipDto {
+  id: string;
+  clientId: string;
+  organizationId: string;
+  status: AgencyRelationshipStatus;
+  initiatedBy: AgencyRelationshipInitiator;
+  startedAt: string | null;
+  terminatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  organization: OrganizationSummary;
+}
+
+/** Discoverable Agency returned by GET /api/client/agencies/discover. */
+export interface DiscoverableAgencyDto extends OrganizationSummary {
+  discoveryApprovedAt: string;
+}
+
+/** Relationship row returned by Client relationship mutation endpoints. */
+export type AgencyRelationshipMutationResponse = Omit<
+  AgencyRelationshipDto,
+  'organization'
+>;
+
 export interface AcceptManagementRequestResponse {
   id: string;
   clientId: string;

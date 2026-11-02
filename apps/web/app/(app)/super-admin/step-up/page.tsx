@@ -23,6 +23,13 @@ export default function SuperAdminStepUpPage() {
   const router = useRouter();
   const [checking, setChecking] = useState(true);
 
+  // Mount guard. Runs client-side after hydration by design: the server cannot
+  // read the stored step-up session, and this value decides whether the
+  // OTP-issuing challenge component is allowed to mount at all. Deriving it
+  // during render (or via a lazy initializer) would mount the challenge during
+  // hydration and fire a needless OTP request. React Compiler is not enabled
+  // for this app, so this advisory rule gates nothing here.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (hasValidSuperAdminSession()) {
       router.replace('/super-admin');
@@ -30,6 +37,7 @@ export default function SuperAdminStepUpPage() {
       setChecking(false);
     }
   }, [router]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (checking) {
     return null;

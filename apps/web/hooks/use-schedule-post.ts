@@ -2,7 +2,6 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { useActiveOrganization } from '@/hooks/use-active-organization';
 import { contentApi } from '@/lib/content-api';
 import { queryKeys } from '@/lib/query-keys';
 import type { ClientContentViewDto, ContentDto, CreateContentRequest } from '@/types/content';
@@ -16,7 +15,6 @@ interface SchedulePostContext {
 
 export function useSchedulePost(scope: SchedulePostScope, clientId: string) {
   const queryClient = useQueryClient();
-  const { activeOrganizationId } = useActiveOrganization();
 
   return useMutation<ContentDto | ClientContentViewDto, Error, CreateContentRequest, SchedulePostContext>({
     mutationFn: (body) =>

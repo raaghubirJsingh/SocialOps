@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useForm, type Resolver } from 'react-hook-form';
 import { z } from 'zod';
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -91,9 +91,7 @@ export function LoginForm() {
     register,
     handleSubmit,
     formState: { errors },
-    reset,
     watch,
-    setValue,
   } = useForm<LoginFormValues>({
     resolver: loginResolver,
     mode: 'onBlur',
@@ -102,7 +100,6 @@ export function LoginForm() {
 
   // OTP form (step 2)
   const {
-    register: registerOtp,
     handleSubmit: handleSubmitOtp,
     formState: { errors: otpErrors },
     reset: resetOtp,
@@ -120,15 +117,21 @@ export function LoginForm() {
   // Watch OTP field for the OTP input
   const otpValue = watchOtp('otp');
 
-  // Countdown timer for resend cooldown
-  useState(() => {
-    if (resendCooldown > 0) {
-      const interval = setInterval(() => {
-        setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  });
+  // Countdown timer for resend cooldown.
+  //
+  // NOTE: this was previously written as `useState(() => { ...setInterval... })`,
+  // which ran the initializer on every render, created an interval per render
+  // that was never cleared (the returned cleanup was stored as state instead of
+  // being called), decremented the cooldown faster than once per second, and
+  // kept calling setState after unmount. A single effect, re-armed per tick,
+  // clears on both tick and unmount.
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const interval = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendCooldown]);
 
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null);

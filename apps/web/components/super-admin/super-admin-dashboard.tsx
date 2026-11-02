@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   Building2,
   Users,
@@ -13,12 +13,10 @@ import {
   Share2,
   Calendar,
   CheckCircle2,
-  AlertCircle,
   ArrowUpRight,
   TrendingUp,
   Activity,
   Layers,
-  Settings,
   ChevronDown,
 } from 'lucide-react';
 
@@ -99,13 +97,19 @@ function fetchWithSessionToken<T>(url: string): Promise<T> {
 
 export function SuperAdminDashboard() {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const { session, logout } = useSession();
 
   const [sessionValid, setSessionValid] = useState(true);
   const [checkingSession, setCheckingSession] = useState(true);
 
-  // Validate step-up session on mount
+  // Validate step-up session on mount.
+  //
+  // Deliberate mount-time read of an external store (localStorage) whose result
+  // gates every dashboard query. It cannot be derived during render: the server
+  // has no localStorage, so computing it in render would break SSR/hydration for
+  // every visitor. React Compiler is not enabled for this app, so this advisory
+  // rule gates nothing here.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const sessionData = loadSuperAdminSession();
     if (!sessionData?.sessionToken || sessionData.expiresAt < Date.now()) {
@@ -117,19 +121,23 @@ export function SuperAdminDashboard() {
     }
     setCheckingSession(false);
   }, [router]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Handle 403 from expired/revoked step-up sessions by redirecting
   // to the step-up page. The apiFetch layer already throws ApiError
   // with status 403 — we catch it here to trigger re-authentication.
   // TanStack Query v5 has no `onError`/`onSettled` option on useQuery;
   // we destructure `error` from each result and react in a useEffect.
-  const handleSuperAdminError = (error: unknown) => {
-    if (error instanceof ApiError && error.status === 403) {
-      clearSuperAdminSession();
-      setSessionValid(false);
-      router.push('/super-admin/step-up');
-    }
-  };
+  const handleSuperAdminError = useCallback(
+    (error: unknown) => {
+      if (error instanceof ApiError && error.status === 403) {
+        clearSuperAdminSession();
+        setSessionValid(false);
+        router.push('/super-admin/step-up');
+      }
+    },
+    [router],
+  );
 
   // Fetch real platform metrics
   const { data: orgsData, isLoading: orgsLoading, refetch: refetchOrgs, error: orgsError } = useQuery({
@@ -155,11 +163,17 @@ export function SuperAdminDashboard() {
 
   // React to 403 errors from any super-admin query — step-up session
   // expired, revoked, or consumed. Redirect to the step-up login page.
+  //
+  // TanStack Query v5 removed the per-query `onError` callback, so an effect is
+  // the supported place to react to a query error. Redirecting is an external
+  // sync, not derivable state. React Compiler is not enabled for this app.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (orgsError || usersError || clientsError) {
       handleSuperAdminError(orgsError ?? usersError ?? clientsError);
     }
-  }, [orgsError, usersError, clientsError]);
+  }, [orgsError, usersError, clientsError, handleSuperAdminError]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const { data: healthData, isLoading: healthLoading, refetch: refetchHealth } = useQuery({
     queryKey: ['superadmin', 'health'],
@@ -229,7 +243,7 @@ export function SuperAdminDashboard() {
             Overview
           </h1>
           <p className="mt-1 text-sm text-slate-400">
-            Monitor the platform's operational health, account activity, and client distribution.
+            Monitor the platform&apos;s operational health, account activity, and client distribution.
           </p>
         </div>
 

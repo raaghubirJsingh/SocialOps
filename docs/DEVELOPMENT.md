@@ -41,7 +41,25 @@ milestone, the local workflow runs natively without Docker:
 - **Connection strings** are documented in `.env.example` and provided
   in `apps/api/.env` (gitignored) for local runs.
 - **Prisma migrations** run against `localhost:5432` via
-  `npx prisma migrate deploy --schema apps/api/prisma/schema.prisma`.
+  `npx prisma migrate deploy --schema apps/api/prisma/schema.prisma`,
+  or from the repo root via `npm run db:migrate`. Use
+  `npm run db:status` to see which migrations are applied and which
+  are still pending.
+- **Pulling a schema change does not update your database.** `prisma
+  generate` (run by the `apps/api` `postinstall`) refreshes the
+  Prisma Client, so the client knows the new columns while the
+  database still lacks them. The first query that touches a new
+  column then fails at runtime with Prisma `P2022` ("The column ...
+  does not exist in the current database"). This is an environment
+  problem, not a code defect: run `npm run db:migrate` after pulling,
+  and restart the API.
+- If `npm run db:migrate` reports drift or `P3005` ("database schema
+  is not empty"), the database was created with `prisma db push` and
+  has no migration history. Either baseline each already-present
+  migration with `npx prisma migrate resolve --applied <migration>`
+  and re-run `npm run db:migrate`, or — for a disposable local
+  database only — `npx prisma migrate reset`, which **destroys all
+  local data** before re-applying migrations and the seed.
 - **The NestJS API** starts with `npm run start:dev --workspace=apps/api`.
 - **The Next.js web app** starts with `npm run dev --workspace=apps/web`
   on port 3000.

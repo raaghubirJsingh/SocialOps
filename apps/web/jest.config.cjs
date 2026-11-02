@@ -9,8 +9,20 @@ module.exports = {
   roots: ['<rootDir>/__tests__'],
   testMatch: ['**/*.test.ts?(x)'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
+  // Jest 30 no longer appends `moduleFileExtensions` to a `moduleNameMapper`
+  // target, so a bare `<rootDir>/$1` cannot resolve an extensionless `@/...`
+  // specifier (findNodeModule returns null for an absolute path with no
+  // extension). Enumerate the candidates instead; the first hit wins.
   moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/$1',
+    '^@/(.*)$': [
+      '<rootDir>/$1.ts',
+      '<rootDir>/$1.tsx',
+      '<rootDir>/$1.js',
+      '<rootDir>/$1.jsx',
+      '<rootDir>/$1/index.ts',
+      '<rootDir>/$1/index.tsx',
+      '<rootDir>/$1',
+    ],
   },
   transform: {
     '^.+\\.[tj]sx?$': [
@@ -34,5 +46,9 @@ module.exports = {
       },
     ],
   },
+  // `next/navigation` re-exports `@swc/helpers` ESM, which CommonJS Jest cannot
+  // require; let that one node_modules package through the transform so the
+  // page-contract specs can import real Next.js pages.
+  transformIgnorePatterns: ['/node_modules/(?!@swc/helpers)'],
   testPathIgnorePatterns: ['/node_modules/', '/.next/'],
 };
