@@ -1,6 +1,4 @@
-﻿import { isTestingOtpEnabled, getTestingEmailOtp, getTestingMobileOtp } from '../common/testing-otp.js';
-import type { VerificationChannel } from './providers/verification-provider.port.js';
-
+import { isTestingOtpEnabled, getTestingEmailOtp, getTestingMobileOtp } from '../common/testing-otp.js';
 
 import {
   ForbiddenException,
@@ -508,4 +506,3 @@ generateOtp(channel?: VerificationChannel): string {
     return { outcome: 'invalid' };
   }
 }
-

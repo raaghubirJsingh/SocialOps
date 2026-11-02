@@ -1,0 +1,4 @@
+-- No-op migration: AccountType already includes FREELANCER from Phase 1A
+-- This migration exists to keep migration history consistent after the
+-- retroactive Decision 024 approval.
+-- No schema changes required.

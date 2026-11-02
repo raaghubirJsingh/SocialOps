@@ -380,6 +380,42 @@ describe('ClientOnboardingService.startSelfRegistration - One-Click', () => {
       expect(harness.mobileVerification.issueVerificationToken).not.toHaveBeenCalled();
     },
   );
+
+  /**
+   * Persona question answered on this request. The account was created
+   * before Registration Phase v1.0 captured the persona, so the User row has
+   * clientType = NULL and the caller supplies it here. The server persists
+   * the choice and must then re-derive the profile from the persisted value
+   * rather than from the stale pre-write snapshot - otherwise the 1-Click
+   * path falls through to ONBOARDING_INTAKE_REQUIRED (400).
+   */
+  it('persists a supplied persona and completes 1-Click activation', async () => {
+    const personaUser = {
+      ...VERIFIED_USER,
+      clientType: null,
+    };
+    const harness = makeHarness({ dbUser: personaUser });
+    asMock(harness.prisma.user.update).mockResolvedValue({});
+
+    const result = await harness.service.startSelfRegistration(USER, {
+      type: 'BUSINESS',
+    });
+
+    expect(harness.prisma.user.update).toHaveBeenCalledWith({
+      where: { id: USER_ID },
+      data: { clientType: 'BUSINESS' },
+    });
+    expect(result.client).toEqual(harness.createdClient);
+    expect(result.mobileVerificationRequired).toBe(false);
+    expect(harness.transaction.client.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        ownerUserId: USER_ID,
+        onboardingStatus: 'ACTIVE',
+        type: 'BUSINESS',
+      }),
+    });
+    expect(harness.mobileVerification.issueVerificationToken).not.toHaveBeenCalled();
+  });
 });
 
 describe('ClientOnboardingService.startSelfRegistration - legacy intake', () => {

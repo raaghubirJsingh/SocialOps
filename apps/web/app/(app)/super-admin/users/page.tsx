@@ -16,12 +16,13 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { apiFetch } from '@/lib/api';
 import { loadSuperAdminSession } from '@/lib/super-admin-session';
+import type { AccountType } from '@/types/auth';
 
 interface User {
   id: string;
   email: string;
   fullName: string | null;
-  accountType: 'SERVICE_PROVIDER' | 'CLIENT' | null;
+  accountType: AccountType | null;
   isActive: boolean;
   isSocialOpsAdmin: boolean;
   createdAt: string;

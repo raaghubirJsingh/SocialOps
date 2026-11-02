@@ -120,9 +120,10 @@ describe('registration conversation state machine (Registration Phase v1.0)', ()
       expect(s.fullName).toBe('टेस्ट यूज़र');
       expect(botMessageFor(s)).toBe(PHONE_QUESTION);
 
-      s = submitIdentityField(s, '9876543210');
+      s = submitIdentityField(s, '9876543210', 'IN');
       expect(s.stage).toBe('identity-email');
       expect(s.phone).toBe('9876543210');
+      expect(s.phoneCountry).toBe('IN');
       expect(botMessageFor(s)).toBe(EMAIL_QUESTION);
 
       s = submitIdentityField(s, 'user@example.com');
@@ -149,7 +150,8 @@ describe('registration conversation state machine (Registration Phase v1.0)', ()
     it('never re-asks a field and never regresses to an earlier step', () => {
       let s = atWizard();
       s = submitIdentityField(s, 'टेस्ट यूज़र');
-      s = submitIdentityField(s, '9876543210');
+      expect(submitIdentityField(s, '9876543210').stage).toBe('identity-phone');
+      s = submitIdentityField(s, '9876543210', 'IN');
       s = submitIdentityField(s, 'user@example.com');
       expect(s.stage).toBe('identity');
 
@@ -181,7 +183,7 @@ describe('registration conversation state machine (Registration Phase v1.0)', ()
       expect(optionsFor(s)).toEqual([]);
       s = submitIdentityField(s, 'नाम');
       expect(optionsFor(s)).toEqual([]);
-      s = submitIdentityField(s, '9876543210');
+      s = submitIdentityField(s, '9876543210', 'IN');
       expect(optionsFor(s)).toEqual([]);
       s = submitIdentityField(s, 'user@example.com');
       expect(optionsFor(s)).toEqual([]);
@@ -190,7 +192,7 @@ describe('registration conversation state machine (Registration Phase v1.0)', ()
     it('keeps identity fields OUT of the discoveryAnswers snapshot (L8)', () => {
       let s = atWizard();
       s = submitIdentityField(s, 'टेस्ट यूज़र');
-      s = submitIdentityField(s, '9876543210');
+      s = submitIdentityField(s, '9876543210', 'IN');
       s = submitIdentityField(s, 'user@example.com');
 
       const snapshot = discoveryAnswersSnapshot(s);

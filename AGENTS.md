@@ -1,8 +1,9 @@
 # AGENTS.md — SocialOps AI Agent Constitution
 
 Status: APPROVED — FINAL
-Version: 0.1.2 (Bootstrap + Client Module V1 + Employee Module V1 -
-approved amendment; see docs/APPROVED_DECISIONS.md Decision 007)
+Version: 0.1.3 (Bootstrap + Client Module V1 + Employee Module V1 +
+Freelancer Module V1 approved amendments; see docs/APPROVED_DECISIONS.md
+Decisions 007 and 024)
 Applies to: All current and future Cline / AI agent sessions on this repository
 
 This document is the binding governance contract for any AI agent (Cline or
@@ -564,6 +565,14 @@ NOT authorize Client<->Employee assignment, employee management or
 administration, employee roles/permissions, or Task, Content, Publishing,
 Distribution, Analytics, or any other module still listed as deferred above.
 
+Note on Freelancer Module V1: Decision 024 approves the Freelancer account
+identity, registration, server-verified self-profile completion, and
+Freelancer dashboard routing described in Section 17.6. This is separate
+from Employee Module V1. It does NOT authorize Freelancer roles,
+Organization/Workspace membership, Client assignment, employee management,
+or Task, Content, Publishing, Distribution, Analytics, or other deferred
+modules.
+
 These belong to later, explicitly approved development phases. Only after
 the bootstrap milestone is verified (Section 11) should Client/Task modules
 begin.
@@ -627,13 +636,15 @@ even if not explicitly reiterated at that moment in a session:
 
 ---
 
-## 17. Employee Module V1 (Approved)
+## 17. Employee and Freelancer Identity Modules (Approved)
 
 Status: APPROVED (docs/APPROVED_DECISIONS.md, Decision 007).
 
-Employee Module V1 is an approved, implemented module that defines how
-employee accounts exist in SocialOps. It is additive: it changes no existing
-authentication, RBAC, tenant-isolation, or Client Module V1 behavior.
+This section contains two separately approved identity modules.
+Employee Module V1 is additive and changes no existing authentication,
+RBAC, tenant-isolation, or Client Module V1 behavior. Freelancer Module V1
+adds its own AccountType and profile workflow without changing the Employee
+identity or authorization model.
 
 Numbering note: this section is numbered 17 because the implementation cites
 "AGENTS.md §17.1", "§17.2", and "§17.3" in code comments. Section 16 remains
@@ -642,11 +653,10 @@ without explicit human approval.
 
 ### 17.1 Employee Identity
 
-- An employee is NOT an AccountType. The AccountType enum remains exactly
-  SERVICE_PROVIDER | CLIENT (amended by Registration Phase v1.0,
-  Decision 014; Individual vs Business is a ClientType, never an
-  AccountType). There is no EMPLOYEE value, and
-  none may be added, without explicit human approval.
+- An employee is NOT an AccountType. The AccountType enum contains
+  SERVICE_PROVIDER | CLIENT | FREELANCER (Decisions 014 and 024; Individual
+  vs Business is a ClientType, never an AccountType). There is no EMPLOYEE
+  value. Employee identity remains represented by EmployeeProfile.
 - Employee identity is carried by an EmployeeProfile row: a 1:1 extension of
   User whose `userId` is UNIQUE, so a user has at most one employee profile.
 - EmployeeProfile carries no role, no status, and no Organization or
@@ -668,7 +678,9 @@ without explicit human approval.
   (`POST /api/auth/register-employee`) that is separate from the standard
   `POST /api/auth/register`.
 - Request contract: `fullName` (required), `email` (required), `phone`
-  (optional), `password` (required, minimum 8 characters). It accepts NO
+  (required, supplied with an explicit country and local number, validated
+  as MOBILE, and normalized to E.164), `password` (required, minimum 8
+  characters). It accepts NO
   `accountType` and no backend-controlled field (isActive, emailVerifiedAt,
   role, organizationId, employeeProfile, or any equivalent).
 - Employee registration NEVER issues a JWT, access token, refresh token, or
@@ -688,6 +700,23 @@ without explicit human approval.
 - Organization/tenant provisioning is not performed for employee accounts.
   Provisioning is scoped to SERVICE_PROVIDER users and is a no-op for every
   other account type.
+
+### User Phone Policy
+
+- `User.phone` is required for every new User registration in the approved
+  registration workflows and in every existing User profile form that permits
+  phone updates (currently the Freelancer profile editor).
+- Phone entry uses an explicit country selector and local-number input. No
+  country may be inferred. The API validates the selected country and accepts
+  only numbers classified strictly as `MOBILE`; fixed-line and ambiguous
+  `FIXED_LINE_OR_MOBILE` classifications are rejected. Valid values are
+  normalized to canonical E.164 before persistence.
+- The existing one-click Client onboarding mapping from `User.phone` to
+  `Client.directPhone` remains unchanged. International E.164 values may
+  consequently be copied to `Client.directPhone`; this does not extend the
+  phone policy to `Client.directPhone` or `Client.primaryContactPhone`.
+- A populated phone value is not proof of phone verification. Do not add
+  phone verification, SMS OTP, or account restrictions under this policy.
 
 ### 17.3 Employee Authorization (Server-Side, Deny by Default)
 
@@ -756,6 +785,37 @@ NOT authorized by this section (still deferred, Section 13):
 
 Do not expand Employee Module V1 beyond the authorized list without explicit
 human approval.
+
+### 17.6 Freelancer Module V1
+
+Status: APPROVED (docs/APPROVED_DECISIONS.md, Decision 024).
+
+- `FREELANCER` is an AccountType distinct from SERVICE_PROVIDER and CLIENT.
+  Employee accounts continue to use `accountType = NULL` and
+  EmployeeProfile remains their sole discriminator.
+- Freelancer registration is separate from the other registration paths.
+  It creates a User with `accountType = FREELANCER` and its one-to-one
+  FreelancerProfile atomically. It uses Argon2id and the existing email
+  verification / development auto-verification lifecycle; it issues no
+  session or tokens and performs no Service Provider tenant provisioning.
+- Login exposes `accountType` as UI identity metadata only. It is not
+  authorization state and must never be trusted from a client-supplied value.
+- Freelancer profile endpoints must require the normal authenticated access
+  token and verify both `User.accountType = FREELANCER` and the caller's own
+  FreelancerProfile against PostgreSQL. Identity is derived only from the
+  authenticated JWT subject; no client-supplied user, profile, or
+  organization id is an authorization input.
+- The approved frontend scope is Freelancer profile completion and dashboard
+  routing: users with an incomplete profile are directed to
+  `/freelancer/profile`; completed users receive the Freelancer dashboard
+  branch. Frontend routing and visibility are UX only, never authorization.
+- This approval does NOT create Freelancer Organization/Workspace membership,
+  roles or permissions, Client<->Freelancer assignment, listing or
+  administration, or Task, Content, Publishing, Distribution, Analytics,
+  or any other deferred module.
+
+Do not expand Freelancer Module V1 beyond this list without explicit human
+approval.
 
 ---
 

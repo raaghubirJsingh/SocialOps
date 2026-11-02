@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Activity, Users } from 'lucide-react';
 
 import { ApiStatusCard } from '@/components/dashboard/api-status-card';
@@ -21,16 +21,18 @@ import {
 } from '@/components/ui/card';
 import { useSession } from '@/hooks/use-session';
 import { loadBoundClientId } from '@/lib/client-session';
+import { getFreelancerProfile } from '@/lib/freelancer-api';
+import type { FreelancerProfileResponse } from '@/lib/freelancer-api';
 import type { AccountType } from '@/types/auth';
 
 /**
  * Maps the account-type enum to the user-facing label shown in the
  * dashboard and (in the future) the user menu.
  *
- * AGENTS.md §17.1 (as amended by Decision 014): the two public
- * account-type values are
+ * Decisions 014 and 024 define the account-type values:
  *   - SERVICE_PROVIDER
  *   - CLIENT
+ *   - FREELANCER
  * The CLIENT label is the user-facing wording "Business / Personal
  * Account" (OPEN-11) - the technical enum name is never the primary
  * user-facing label. The label is presentational; the underlying value
@@ -39,6 +41,7 @@ import type { AccountType } from '@/types/auth';
 function labelForAccountType(t: AccountType | null | undefined): string {
   if (t === 'SERVICE_PROVIDER') return 'Service Provider';
   if (t === 'CLIENT') return 'Business / Personal Account';
+  if (t === 'FREELANCER') return 'Freelancer';
   return '';
 }
 
@@ -88,6 +91,20 @@ export default function DashboardPage() {
   // boundary on every /client/me/* call.
   const isClientAccount =
     !isEmployee && !isSuperAdmin && session?.user?.accountType === 'CLIENT';
+  const isFreelancerAccount =
+    !isEmployee &&
+    !isSuperAdmin &&
+    session?.user?.accountType === 'FREELANCER';
+  const {
+    data: freelancerProfile,
+    isPending: freelancerProfilePending,
+    isError: freelancerProfileError,
+  } = useQuery<FreelancerProfileResponse>({
+    queryKey: ['freelancer-profile'],
+    queryFn: getFreelancerProfile,
+    enabled: isAuthenticated && isFreelancerAccount,
+    retry: 0,
+  });
 
   // Defense-in-depth page guard. The (app) layout AuthGuard already
   // redirects unauthenticated visitors to the public home page "/"
@@ -104,8 +121,24 @@ export default function DashboardPage() {
     // dashboard.
     if (isSuperAdmin) {
       router.replace('/super-admin');
+      return;
     }
-  }, [isAuthenticated, sessionLoading, isSuperAdmin, router]);
+
+    if (
+      isFreelancerAccount &&
+      freelancerProfile &&
+      freelancerProfile.profileCompletedAt === null
+    ) {
+      router.replace('/freelancer/profile');
+    }
+  }, [
+    isAuthenticated,
+    sessionLoading,
+    isSuperAdmin,
+    isFreelancerAccount,
+    freelancerProfile,
+    router,
+  ]);
 
   // Activation flipped the server state: drop every cached query and let
   // the router re-render — the unlocked services appear immediately and
@@ -152,6 +185,55 @@ export default function DashboardPage() {
          * Organization panels from the Service Provider dashboard
          * are not applicable to employees (AGENTS.md §13).
          */}
+      </div>
+    );
+  }
+
+  if (isFreelancerAccount) {
+    if (freelancerProfilePending) {
+      return <p className="p-6 text-sm text-slate-400">Loading Freelancer profile...</p>;
+    }
+
+    if (freelancerProfileError || !freelancerProfile) {
+      return (
+        <p role="alert" className="p-6 text-sm text-red-400">
+          Unable to load your Freelancer profile. Refresh the page to try again.
+        </p>
+      );
+    }
+
+    if (freelancerProfile.profileCompletedAt === null) {
+      return null;
+    }
+
+    return (
+      <div className="mx-auto flex max-w-5xl flex-col gap-6">
+        <header className="space-y-1">
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-100">
+            Welcome, {session?.user.fullName ?? 'there'}
+          </h2>
+          <p className="text-sm text-slate-400">
+            Signed in as a Freelancer
+            {session?.user.email ? <> · {session.user.email}</> : null}
+          </p>
+        </header>
+        <ApiStatusCard />
+        <Card>
+          <CardHeader>
+            <CardTitle>Freelancer profile</CardTitle>
+            <CardDescription>
+              Your profile is complete and ready for future approved Freelancer features.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link
+              href="/freelancer/profile"
+              className="text-sm text-blue-400 hover:underline"
+            >
+              View your profile
+            </Link>
+          </CardContent>
+        </Card>
       </div>
     );
   }

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { UserPhoneInput } from '@/components/shared/user-phone-input';
 import { ApiError } from '@/lib/api';
 import {
   resendRegistrationOtp,
@@ -23,6 +24,7 @@ import {
   createRegistrationSessionFromStart,
   isOtpVerifyResponse,
 } from '@/lib/registration-verification';
+import { normalizeSelectedUserPhone } from '@/lib/user-phone';
 import {
   FORCED_OPTIONS,
   FORCED_QUESTION,
@@ -218,6 +220,7 @@ export function RegistrationFlow({ initialSession }: RegistrationFlowProps) {
   // Identity wizard (Rule 7) is owned by the pure state machine; this
   // component only renders the single field for the current sub-step.
   const [identityError, setIdentityError] = useState<string | null>(null);
+  const [identityCountry, setIdentityCountry] = useState('');
   /**
    * Set when the identity submission failed, so the "Start again" affordance
    * is rendered even if no input is currently on screen. Without it the chat
@@ -370,9 +373,22 @@ export function RegistrationFlow({ initialSession }: RegistrationFlowProps) {
       setIdentityError('सही email address डालें। (Enter a valid email address.)');
       return;
     }
+    if (
+      field === 'phone' &&
+      !normalizeSelectedUserPhone(identityCountry, value)
+    ) {
+      setIdentityError(
+        'Select a country and enter a valid mobile number for it.',
+      );
+      return;
+    }
 
     // Blank values are rejected above, so this always advances.
-    const next = submitIdentityField(conversation, value);
+    const next = submitIdentityField(
+      conversation,
+      value,
+      field === 'phone' ? identityCountry : undefined,
+    );
     if (next.stage === conversation.stage) return;
 
     push({ role: 'user', text: value.trim() });
@@ -414,8 +430,8 @@ export function RegistrationFlow({ initialSession }: RegistrationFlowProps) {
 
   /** All three identity fields are in: classify-check, then POST /start once. */
   async function completeRegistration(state: ConversationState): Promise<void> {
-    const { fullName, phone, email } = state;
-    if (!fullName || !phone || !email) return; // defensive; wizard guarantees these
+    const { fullName, phone, phoneCountry, email } = state;
+    if (!fullName || !phone || !phoneCountry || !email) return;
     if (!state.classification) {
       // Defensive: discovery always resolves classification before the
       // identity step; if it somehow does not, force the explicit choice.
@@ -429,7 +445,7 @@ export function RegistrationFlow({ initialSession }: RegistrationFlowProps) {
       const result = await startRegistration({
         fullName: fullName.trim(),
         email: email.trim(),
-        phone: phone.trim(),
+        phone: { country: phoneCountry, number: phone.trim() },
         accountType: state.classification,
         discoveryAnswers: discoveryAnswersSnapshot(state),
       });
@@ -784,25 +800,19 @@ export function RegistrationFlow({ initialSession }: RegistrationFlowProps) {
 
           {identitySubStep === 'phone' && (
             <div className="space-y-1.5">
-              <Label
-                htmlFor="reg-phone"
-                className="text-sm font-medium text-slate-200"
-              >
-                WhatsApp mobile
-              </Label>
-              <Input
-                id="reg-phone"
-                className="h-12 text-base"
-                value={identityDraft}
-                onChange={(e) => setIdentityDraft(e.target.value)}
-                placeholder="9876543210 / +919876543210"
-                inputMode="tel"
-                autoComplete="tel"
-                autoFocus
+              <UserPhoneInput
+                idPrefix="reg-phone"
+                country={identityCountry}
+                number={identityDraft}
+                onCountryChange={setIdentityCountry}
+                onNumberChange={setIdentityDraft}
+                disabled={busy}
+                error={identityError ?? undefined}
               />
               <p className="text-xs leading-relaxed text-slate-400">
-                यह WhatsApp से जुड़ा नंबर होना चाहिए। (Must be a WhatsApp-connected
-                number.)
+                Select the country and enter a mobile number connected to
+                WhatsApp. It will be used only for the existing verification
+                flow.
               </p>
             </div>
           )}

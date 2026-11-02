@@ -14,11 +14,12 @@ import { OrganizationProvisioningService } from '../memberships/organization-pro
 import type { JwtAccessPayload, JwtRefreshPayload } from './types/jwt-payload.type.js';
 import type { LoginDto } from './dto/login.dto.js';
 import type { RegisterEmployeeDto } from './dto/register-employee.dto.js';
+import type { RegisterFreelancerDto } from './dto/register-freelancer.dto.js';
 
 import type { RegisterResult } from './dto/register-response.dto.js';
 import type { LoginResult } from './dto/login-response.dto.js';
 import { isAuthDevAutoVerifyRegister } from './dev-auto-verify.js';
-import { maybeLogVerificationUrl } from './email-audit.js';
+import { maybeLogVerificationUrl, maybeLogPasswordResetUrl } from './email-audit.js';
 import { LoginOtpService } from './login-otp.service.js';
 import type { LoginOtpChannel } from '@prisma/client';
 import {
@@ -144,7 +145,7 @@ export class AuthService {
             // displayName back-compat for the employee registration path.
             displayName: dto.fullName,
             fullName: dto.fullName,
-            phone: dto.phone ?? null,
+            phone: dto.phone,
             // Employee accounts carry NO AccountType (AGENTS.md §17.1):
             // the EmployeeProfile row is the discriminator.
             accountType: null,
@@ -154,6 +155,56 @@ export class AuthService {
           select: { id: true, email: true },
         });
         await tx.employeeProfile.create({
+          data: { userId: created.id },
+        });
+        return created;
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ForbiddenException('Email already in use');
+      }
+      throw error;
+    }
+
+    if (!skipVerification) {
+      await this.issueVerificationToken(user.id, user.email);
+    }
+
+    return skipVerification
+      ? { status: 'registration_complete', email: user.email }
+      : { status: 'verification_required', email: user.email };
+  }
+
+  /**
+   * Register a freelancer account with its profile in one transaction.
+   * Freelancer identity is represented by both FREELANCER accountType and
+   * the one-to-one FreelancerProfile relation.
+   */
+  async registerFreelancer(dto: RegisterFreelancerDto): Promise<RegisterResult> {
+    const passwordHash = await this.hashPassword(dto.password);
+    const skipVerification = isAuthDevAutoVerifyRegister();
+
+    let user: { id: string; email: string };
+
+    try {
+      user = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            email: dto.email,
+            passwordHash,
+            displayName: dto.fullName,
+            fullName: dto.fullName,
+            phone: dto.phone,
+            accountType: 'FREELANCER',
+            isActive: skipVerification,
+            emailVerifiedAt: skipVerification ? new Date() : null,
+          },
+          select: { id: true, email: true },
+        });
+        await tx.freelancerProfile.create({
           data: { userId: created.id },
         });
         return created;
@@ -280,6 +331,131 @@ export class AuthService {
     await this.organizationProvisioning.ensureForServiceProvider(token.userId);
 
     return { status: 'verified' };
+  }
+
+  /**
+   * Initiate a password reset.
+   *
+   * Generates a reset token, hashes it (only the hash is stored), and
+   * emails it to the user. The raw token is only logged in dev mode.
+   *
+   * Security properties:
+   *   - Generic response: always returns {"status": "queued"} regardless
+   *     of whether the email exists (prevents email enumeration).
+   *   - Invalidates any previous reset tokens for the user.
+   *   - 24-hour expiry, single-use.
+   */
+  async initiatePasswordReset(email: string): Promise<{ status: 'queued' }> {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true, email: true, isActive: true },
+    });
+
+    // Always return the same response to prevent email enumeration
+    if (!user || !user.isActive) {
+      return { status: 'queued' };
+    }
+
+    // Invalidate any previous tokens
+    await this.prisma.passwordResetToken.updateMany({
+      where: { userId: user.id, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+
+    // Generate a secure 32-byte token, base64url encoded
+    const rawToken = randomBytes(32).toString('base64url');
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    await this.prisma.passwordResetToken.create({
+      data: { userId: user.id, tokenHash, expiresAt },
+    });
+
+    // Log the reset URL in dev mode
+    maybeLogPasswordResetUrl(this.logger, email, rawToken);
+
+    return { status: 'queued' };
+  }
+
+  /**
+   * Consume a password reset token and set a new password.
+   *
+   * Validates:
+   *   1. Token exists (via hash comparison)
+   *   2. Token is not expired
+   *   3. Token has not been used
+   *   4. User account is active and verified
+   *
+   * On success: updates password, issues new tokens.
+   */
+  async resetPassword(
+    rawToken: string,
+    newPassword: string,
+  ): Promise<TokenPair & { user: { id: string; email: string; fullName: string | null; accountType: string | null } }> {
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+
+    const token = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+      select: {
+        id: true,
+        userId: true,
+        expiresAt: true,
+        usedAt: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            fullName: true,
+            accountType: true,
+            isActive: true,
+            emailVerifiedAt: true,
+            passwordHash: true,
+          },
+        },
+      },
+    });
+
+    if (!token || token.usedAt || token.expiresAt.getTime() <= Date.now()) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    if (!token.user.isActive || !token.user.emailVerifiedAt) {
+      throw new BadRequestException('Account is not active or verified');
+    }
+
+    // Use transaction to ensure atomic update
+    await this.prisma.$transaction(async (tx) => {
+      // Mark token as used
+      await tx.passwordResetToken.update({
+        where: { id: token.id },
+        data: { usedAt: new Date() },
+      });
+
+      // Update password
+      const newHash = await this.hashPassword(newPassword);
+      await tx.user.update({
+        where: { id: token.userId },
+        data: { passwordHash: newHash },
+      });
+    });
+
+    // Issue new tokens
+    const tokens = await this.persistTokensForUser(
+      token.user.id,
+      token.user.email,
+      token.user.accountType,
+    );
+
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: {
+        id: token.user.id,
+        email: token.user.email,
+        fullName: token.user.fullName,
+        accountType: token.user.accountType,
+      },
+    };
   }
 
   /**

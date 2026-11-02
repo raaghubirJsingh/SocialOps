@@ -1,0 +1,1 @@
+app/(app)/freelancer/profile/page.tsx(30,24): error TS2367: This comparison appears to be unintentional because the types 'AccountType | null | undefined' and '"FREELANCER"' have no overlap.

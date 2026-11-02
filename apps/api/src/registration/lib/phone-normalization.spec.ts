@@ -1,11 +1,10 @@
 import { normalizePhone } from './phone-normalization.js';
 
 /**
- * Phone normalization (OPEN-2, LOCKED C): ONLY the three approved input
- * shapes are accepted, and all three normalize to ONE canonical form.
- * No additional country/format rules may be invented.
+ * Legacy India-only normalizer coverage. New User.phone writes use the
+ * country-selected international normalizer in user-phone.ts.
  */
-describe('normalizePhone (approved OPEN-2 shapes)', () => {
+describe('normalizePhone (legacy India-only shapes)', () => {
   it('normalizes all three approved shapes to the same canonical form', () => {
     expect(normalizePhone('9876543210')).toBe('+919876543210');
     expect(normalizePhone('919876543210')).toBe('+919876543210');

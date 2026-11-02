@@ -63,7 +63,7 @@ let redis: Redis;
 const baseStart = (name: string, overrides: Record<string, unknown> = {}) => ({
     fullName: `Reg User ${name}`,
     email: testEmail(name),
-    phone: '9876543210',
+    phone: { country: 'IN', number: '9876543210' },
     accountType: 'CLIENT',
     // Accepted discovery snapshot (Option A): the frontend's
     // discoveryAnswersSnapshot always sets discoveryAccepted: true and a
@@ -679,10 +679,12 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
     });
   });
 
-  it('normalizes approved phone shapes and rejects everything else (OPEN-2)', async () => {
+  it('normalizes selected-country mobile numbers to E.164 and rejects non-mobile values', async () => {
     await flushRateLimits();
     const ok = await http.post('/api/auth/registration/start').send(
-      baseStart('phone-ok', { phone: '+91 98765 43210' }),
+      baseStart('phone-ok', {
+        phone: { country: 'IN', number: '+91 98765 43210' },
+      }),
     );
     expect(ok.status).toBe(201);
     const row = await prisma.pendingRegistration.findUniqueOrThrow({
@@ -690,11 +692,39 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
     });
     expect(row.phone).toBe('+919876543210');
 
-    await flushRateLimits();
-    const bad = await http
-      .post('/api/auth/registration/start')
-      .send(baseStart('phone-bad', { phone: '12345' }));
-    expect(bad.status).toBe(400);
+    for (const [name, country, number, expected] of [
+      ['phone-gb', 'GB', '7400123456', '+447400123456'],
+      ['phone-de', 'DE', '15112345678', '+4915112345678'],
+    ]) {
+      const { body } = await startPending(name, {
+        phone: { country, number },
+      });
+      expect(
+        (
+          await prisma.pendingRegistration.findUniqueOrThrow({
+            where: { email: testEmail(name) },
+          })
+        ).phone,
+      ).toBe(expected);
+      const whatsapp = readDevConsoleOutbox().find(
+        (entry) => entry.channel === 'WHATSAPP',
+      );
+      expect(whatsapp?.message.to).toBe(expected);
+      expect(body.maskedPhone).toBeDefined();
+    }
+
+    for (const [name, country, number] of [
+      ['phone-invalid', 'IN', '12345'],
+      ['phone-fixed', 'GB', '02070313000'],
+      ['phone-ambiguous', 'US', '2025550123'],
+      ['phone-country', 'ZZ', '1234567890'],
+    ]) {
+      await flushRateLimits();
+      const bad = await http
+        .post('/api/auth/registration/start')
+        .send(baseStart(name, { phone: { country, number } }));
+      expect(bad.status).toBe(400);
+    }
   });
   it('locks for 1 hour after 3 wrong attempts (registration survives) and preserves attempts across resends (L4/L5)', async () => {
     const { token } = await startPending('otp-lock');
@@ -1055,4 +1085,3 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
     expect(credentialLike).toEqual(['resumeTokenHash']);
   });
 });
-

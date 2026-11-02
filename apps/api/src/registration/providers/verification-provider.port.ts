@@ -23,7 +23,7 @@ export const WHATSAPP_VERIFICATION_PROVIDER = 'WHATSAPP_VERIFICATION_PROVIDER';
 export type VerificationChannel = 'EMAIL' | 'WHATSAPP';
 
 export interface VerificationOutboundMessage {
-  /** Canonical destination: email address or canonical '+91...' phone. */
+  /** Canonical destination: email address or canonical international E.164 phone. */
   to: string;
   /** Used by the email channel; ignored by the WhatsApp channel. */
   subject: string;

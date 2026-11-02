@@ -65,3 +65,28 @@ export function maybeLogVerificationUrl(
   );
   return true;
 }
+
+/**
+ * Log the password reset URL for local development.
+ *
+ * Same security properties as verification URL logging:
+ *   - Raw token logged ONLY when BOOT_ARTIFACTS_ALLOWED is 'true'
+ *   - Never persisted to database or returned to frontend
+ *   - Uses PUBLIC_WEB_URL with safe default
+ */
+export function maybeLogPasswordResetUrl(
+  logger: Logger,
+  email: string,
+  rawToken: string,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (!isBootArtifactsAllowed(env)) {
+    return false;
+  }
+  const webUrl = env.PUBLIC_WEB_URL ?? 'http://localhost:3000';
+  logger.log(
+    `[boot-artifact] Password reset URL for ${email}: ` +
+      `${webUrl}/reset-password?token=${rawToken}`,
+  );
+  return true;
+}

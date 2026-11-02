@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  InternalServerErrorException,
   Injectable,
   Logger,
   NotFoundException,
@@ -8,7 +9,7 @@ import {
 import * as argon2 from 'argon2';
 
 import { Prisma } from '@prisma/client';
-import type { ClientType, PendingRegistration } from '@prisma/client';
+import type { AccountType as PrismaAccountType, ClientType, PendingRegistration } from '@prisma/client';
 
 import { OrganizationProvisioningService } from '../memberships/organization-provisioning.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -177,7 +178,7 @@ export class RegistrationService {
         data: {
           email: dto.email,
           fullName: dto.fullName,
-          phone: dto.phone, // canonical form (OPEN-2, normalized by DTO)
+          phone: dto.phone, // canonical E.164 form, normalized by the DTO
           accountType: dto.accountType ?? null, // may be null (L13)
           // Persona: an explicit choice always wins; otherwise derive it from
           // the discovery answers the user just gave. Ambiguous answers leave
@@ -241,7 +242,7 @@ export class RegistrationService {
       expiresAt: pending.expiresAt.toISOString(),
       maskedEmail: maskEmail(pending.email),
       maskedPhone: maskPhone(pending.phone),
-      accountType: pending.accountType,
+      accountType: toRegistrationAccountType(pending.accountType),
       clientType: pending.clientType,
       emailVerified: Boolean(pending.emailVerifiedAt),
       whatsappVerified: Boolean(pending.whatsappVerifiedAt),
@@ -480,7 +481,7 @@ export class RegistrationService {
             passwordHash,
             displayName: pending.fullName, // back-compat (§17.2 pattern)
             fullName: pending.fullName,
-            phone: pending.phone, // canonical (OPEN-2)
+            phone: pending.phone, // canonical E.164
             accountType, // non-null (L13)
             // Persona captured once here; NULL = legacy activation path.
             clientType,
@@ -545,7 +546,7 @@ export class RegistrationService {
     return {
       stage: bothVerified ? 'password' : 'verification',
       expiresAt: pending.expiresAt.toISOString(),
-      accountType: pending.accountType,
+      accountType: toRegistrationAccountType(pending.accountType),
       clientType: pending.clientType,
       fullName: pending.fullName,
       maskedEmail: maskEmail(pending.email),
@@ -558,6 +559,17 @@ export class RegistrationService {
   }
 }
 
+function toRegistrationAccountType(
+  accountType: PrismaAccountType | null,
+): AccountType | null {
+  if (accountType === 'FREELANCER') {
+    throw new InternalServerErrorException(
+      'Freelancer accounts cannot use staged registration',
+    );
+  }
+  return accountType;
+}
+
 /** j***@example.com - never echo the full address back in snapshots. */
 export function maskEmail(email: string): string {
   const [local, domain] = email.split('@');
@@ -566,7 +578,7 @@ export function maskEmail(email: string): string {
   return `${head}***@${domain}`;
 }
 
-/** +91******4321 - last 4 digits only. */
+/** Mask the destination, retaining only its final four digits. */
 export function maskPhone(phone: string): string {
   const tail = phone.slice(-4);
   return `+*******${tail}`;
