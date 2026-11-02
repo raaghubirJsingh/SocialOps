@@ -13,7 +13,18 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { ClientsService } from './clients.service.js';
 import type { StartOnboardingDto } from './dto/create-client.dto.js';
 import { MobileVerificationService } from './mobile-verification.service.js';
-import { SocialOpsProviderService } from './social-ops-provider.service.js';
+import {
+  isProviderAttachRace,
+  isProviderProvisioningRequired,
+  SocialOpsProviderService,
+} from './social-ops-provider.service.js';
+
+/**
+ * How many times an activation unit of work may run. Two is the maximum that
+ * can ever be needed: the platform Service Provider is provisioned between the
+ * two attempts, so the second attempt always sees a committed provider row.
+ */
+const ACTIVATION_ATTEMPTS = 2;
 
 /**
  * Self-registration intake resolved from the ALREADY-VERIFIED User row.
@@ -87,6 +98,66 @@ export class ClientOnboardingService {
   /** Whether the Client has completed controlled onboarding. */
   isOnboarded(client: Pick<Client, 'onboardingStatus'>): boolean {
     return client.onboardingStatus === 'ACTIVE';
+  }
+
+  /**
+   * Serialize Client-activation writes for ONE User inside a transaction.
+   *
+   * A PostgreSQL transaction-scoped advisory lock is used because the schema
+   * has no uniqueness rule tying a Client to its owner (`Client_ownerUserId_idx`
+   * is a plain index), and adding one is a schema change that is neither
+   * approved nor safe for pre-existing data. `pg_advisory_xact_lock` needs no
+   * table, is released automatically when the transaction ends (commit OR
+   * rollback), and gives a deterministic "first writer wins" order for
+   * double-clicks and retried requests.
+   */
+  private async lockUserActivation(
+    tx: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<void> {
+    // The lock function returns PostgreSQL `void`, which Prisma cannot
+    // deserialize, so the call is wrapped in a sub-select and only a
+    // deserializable column is returned.
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext(${userId}::text), 0)) AS activation_lock`;
+  }
+
+  /**
+   * Run an activation unit of work in ONE transaction, healing the only two
+   * failures a transaction cannot heal by itself.
+   *
+   * The platform Service Provider is never CREATED inside the activation
+   * transaction: a PostgreSQL P2002 aborts that transaction, and an aborted
+   * transaction client cannot run the recovery read it would need (error
+   * 25P02). `SocialOpsProviderService` therefore only PRE-CHECKS inside the
+   * transaction and signals:
+   *
+   *   - ProviderProvisioningRequiredError: provision the provider on its own
+   *     connection (idempotent and race-safe), then retry the activation in a
+   *     BRAND-NEW transaction;
+   *   - ProviderAttachRaceError: a concurrent activation attached a provider
+   *     first, so retry in a BRAND-NEW transaction, where the pre-read adopts
+   *     the winning relationship.
+   *
+   * Either way the Client write, its relationship and its audit trail still
+   * commit atomically. Every other failure propagates untouched (and is
+   * therefore fully rolled back), and the retry is bounded by
+   * {@link ACTIVATION_ATTEMPTS}.
+   */
+  private async runActivationTransaction<T>(
+    work: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(work);
+      } catch (error) {
+        const provisioningRequired = isProviderProvisioningRequired(error);
+        if (!provisioningRequired && !isProviderAttachRace(error)) throw error;
+        if (attempt >= ACTIVATION_ATTEMPTS) throw error;
+        if (provisioningRequired) {
+          await this.socialOpsProvider.provisionProviderOrganization();
+        }
+      }
+    }
   }
 
   /**
@@ -225,7 +296,23 @@ export class ClientOnboardingService {
       // transaction: either the Client is created AND has its Service
       // Provider, or nothing is written. A failed activation therefore never
       // leaves an orphan Client that cannot connect anything.
-      const client = await this.prisma.$transaction(async (tx) => {
+      const client = await this.runActivationTransaction(async (tx) => {
+        // Serialize concurrent activations of THIS User, then re-check the
+        // ownership inside the transaction. The pre-check above is outside it
+        // and two simultaneous clicks can both pass it - there is no database
+        // constraint that makes a Client unique per owner, so without this
+        // lock a double click would create TWO Clients for one account.
+        await this.lockUserActivation(tx, user.sub);
+        const raced = await tx.client.findFirst({
+          where: { ownerUserId: user.sub },
+          select: { id: true },
+        });
+        if (raced) {
+          throw new ConflictException({
+            code: 'CLIENT_ALREADY_BOUND',
+            detail: 'This User already owns a Client',
+          });
+        }
         const created = await tx.client.create({
           data: {
             ...profile,
@@ -283,6 +370,19 @@ export class ClientOnboardingService {
     // when the caller actually supplied intake, and otherwise report
     // precisely what the account record is missing.
     const client = await this.prisma.$transaction(async (tx) => {
+      // Same double-submit guard as the 1-Click path: a second concurrent
+      // intake must not create a second PENDING draft for the same account.
+      await this.lockUserActivation(tx, user.sub);
+      const raced = await tx.client.findFirst({
+        where: { ownerUserId: user.sub },
+        select: { id: true },
+      });
+      if (raced) {
+        throw new ConflictException({
+          code: 'CLIENT_ALREADY_BOUND',
+          detail: 'This User already owns a Client',
+        });
+      }
       const created = await tx.client.create({
         data: {
           ...this.legacyIntakeOrExplain(dto, missing),
@@ -446,7 +546,7 @@ export class ClientOnboardingService {
     const didBind = client.ownerUserId === null;
     // Same single-transaction guarantee as the 1-Click path: the Client is
     // never left ACTIVE without its Service Provider relationship.
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const updated = await this.runActivationTransaction(async (tx) => {
       const row = await tx.client.update({
         where: { id: client.id },
         data: {
@@ -563,7 +663,7 @@ export class ClientOnboardingService {
     // Same single-transaction guarantee as the 1-Click and resume paths: a
     // Client is never left ACTIVE without its consumed token, relationship,
     // or audit events. Any failure rolls back the whole activation attempt.
-    const result = await this.prisma.$transaction(async (tx) => {
+    const result = await this.runActivationTransaction(async (tx) => {
       const consumed = await this.mobileVerification.resolveAndConsume(
         rawToken,
         tx,

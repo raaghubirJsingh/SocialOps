@@ -5,11 +5,15 @@ import type {
   AdminStepUpResendResponse,
   AdminStepUpVerifyRequest,
   AdminStepUpVerifyResponse,
+  ForgotPasswordRequest,
+  ForgotPasswordResponse,
   GenericStatusResponse,
   LogoutRequest,
   LoginRequest,
   LoginResponse,
   RefreshRequest,
+  ResetPasswordRequest,
+  ResetPasswordResponse,
   OtpResendRequest,
   OtpResendResponse,
   OtpVerifyRequest,
@@ -323,4 +327,46 @@ export async function adminStepUpResend(
     method: 'POST',
     body: input,
   });
+}
+
+/**
+ * Initiate a password reset.
+ *
+ * POST /api/auth/forgot-password — generates a reset token and sends it
+ * via email (or logs it in dev mode). The response is always
+ * {"status": "queued"} to prevent email enumeration.
+ */
+export async function forgotPassword(
+  input: ForgotPasswordRequest,
+): Promise<ForgotPasswordResponse> {
+  return apiFetch<ForgotPasswordResponse>('/auth/forgot-password', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+/**
+ * Complete password reset using a token.
+ *
+ * POST /api/auth/reset-password — validates the token and sets a new password.
+ * On success, returns a new session with JWT tokens for immediate login.
+ */
+export async function resetPassword(
+  input: ResetPasswordRequest,
+): Promise<Session> {
+  const response = await apiFetch<ResetPasswordResponse>('/auth/reset-password', {
+    method: 'POST',
+    body: input,
+  });
+  if ('accessToken' in response) {
+    const session: Session = {
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken,
+      user: response.user,
+      email: response.user.email,
+    };
+    saveSession(session);
+    return session;
+  }
+  throw new ApiError(400, 'Invalid or expired reset token', null);
 }

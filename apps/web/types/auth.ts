@@ -401,3 +401,42 @@ export interface AdminStepUpResendResponse {
   sendStatus: 'sent' | 'unavailable';
   resendRemaining: number;
 }
+
+/**
+ * Password reset request body for POST /api/auth/forgot-password.
+ */
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+/**
+ * Response from POST /api/auth/forgot-password.
+ * Always returns {"status": "queued"} to prevent email enumeration.
+ */
+export interface ForgotPasswordResponse {
+  status: 'queued';
+}
+
+/**
+ * Request body for POST /api/auth/reset-password.
+ */
+export interface ResetPasswordRequest {
+  token: string;
+  password: string;
+}
+
+/**
+ * Response from POST /api/auth/reset-password.
+ * Returns new JWT tokens on success for immediate login access.
+ */
+export interface ResetPasswordResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: {
+    id: string;
+    email: string;
+    fullName: string | null;
+    accountType: AccountType | null;
+    isEmployee: boolean;
+  };
+}
