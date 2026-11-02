@@ -91,9 +91,7 @@ export function LoginForm() {
     register,
     handleSubmit,
     formState: { errors },
-    reset,
     watch,
-    setValue,
   } = useForm<LoginFormValues>({
     resolver: loginResolver,
     mode: 'onBlur',
@@ -102,7 +100,6 @@ export function LoginForm() {
 
   // OTP form (step 2)
   const {
-    register: registerOtp,
     handleSubmit: handleSubmitOtp,
     formState: { errors: otpErrors },
     reset: resetOtp,
