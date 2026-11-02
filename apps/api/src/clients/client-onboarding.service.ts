@@ -180,6 +180,12 @@ export class ClientOnboardingService {
         where: { id: user.sub },
         data: { clientType },
       });
+      // Keep the in-memory snapshot in sync with the row we just wrote.
+      // `missingVerifiedField` below reads `clientType` off this snapshot, so
+      // without this the persona question would still be reported as
+      // unanswered and the 1-Click path would fall through to a 400
+      // ONBOARDING_INTAKE_REQUIRED even though the choice was persisted.
+      dbUser.clientType = clientType;
     }
 
     // Verified registration data, or null for a User that predates

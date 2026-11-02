@@ -14,6 +14,7 @@ import { OrganizationProvisioningService } from '../memberships/organization-pro
 import type { JwtAccessPayload, JwtRefreshPayload } from './types/jwt-payload.type.js';
 import type { LoginDto } from './dto/login.dto.js';
 import type { RegisterEmployeeDto } from './dto/register-employee.dto.js';
+import type { RegisterFreelancerDto } from './dto/register-freelancer.dto.js';
 
 import type { RegisterResult } from './dto/register-response.dto.js';
 import type { LoginResult } from './dto/login-response.dto.js';
@@ -144,7 +145,7 @@ export class AuthService {
             // displayName back-compat for the employee registration path.
             displayName: dto.fullName,
             fullName: dto.fullName,
-            phone: dto.phone ?? null,
+            phone: dto.phone,
             // Employee accounts carry NO AccountType (AGENTS.md §17.1):
             // the EmployeeProfile row is the discriminator.
             accountType: null,
@@ -154,6 +155,56 @@ export class AuthService {
           select: { id: true, email: true },
         });
         await tx.employeeProfile.create({
+          data: { userId: created.id },
+        });
+        return created;
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ForbiddenException('Email already in use');
+      }
+      throw error;
+    }
+
+    if (!skipVerification) {
+      await this.issueVerificationToken(user.id, user.email);
+    }
+
+    return skipVerification
+      ? { status: 'registration_complete', email: user.email }
+      : { status: 'verification_required', email: user.email };
+  }
+
+  /**
+   * Register a freelancer account with its profile in one transaction.
+   * Freelancer identity is represented by both FREELANCER accountType and
+   * the one-to-one FreelancerProfile relation.
+   */
+  async registerFreelancer(dto: RegisterFreelancerDto): Promise<RegisterResult> {
+    const passwordHash = await this.hashPassword(dto.password);
+    const skipVerification = isAuthDevAutoVerifyRegister();
+
+    let user: { id: string; email: string };
+
+    try {
+      user = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            email: dto.email,
+            passwordHash,
+            displayName: dto.fullName,
+            fullName: dto.fullName,
+            phone: dto.phone,
+            accountType: 'FREELANCER',
+            isActive: skipVerification,
+            emailVerifiedAt: skipVerification ? new Date() : null,
+          },
+          select: { id: true, email: true },
+        });
+        await tx.freelancerProfile.create({
           data: { userId: created.id },
         });
         return created;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -35,6 +35,7 @@ import { useSession } from '@/hooks/use-session';
 import { apiFetch, ApiError } from '@/lib/api';
 import { loadSuperAdminSession, clearSuperAdminSession } from '@/lib/super-admin-session';
 import { adminStepUpLogout } from '@/lib/auth-client';
+import type { AccountType } from '@/types/auth';
 
 // Data types matching the backend contracts
 interface Organization {
@@ -52,7 +53,7 @@ interface User {
   id: string;
   email: string;
   fullName: string | null;
-  accountType: 'SERVICE_PROVIDER' | 'CLIENT' | null;
+  accountType: AccountType | null;
   isActive: boolean;
   isSocialOpsAdmin: boolean;
   createdAt: string;
@@ -97,59 +98,70 @@ function fetchWithSessionToken<T>(url: string): Promise<T> {
   });
 }
 
+const subscribeToSuperAdminSession = (callback: () => void) => {
+  const handleStorage = () => callback();
+  window.addEventListener('storage', handleStorage);
+  return () => window.removeEventListener('storage', handleStorage);
+};
+
+function getSuperAdminSessionValidity(): boolean {
+  const sessionData = loadSuperAdminSession();
+  return sessionData !== null &&
+    Boolean(sessionData.sessionToken) &&
+    sessionData.expiresAt >= Date.now();
+}
+
 export function SuperAdminDashboard() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { session, logout } = useSession();
 
-  const [sessionValid, setSessionValid] = useState(true);
-  const [checkingSession, setCheckingSession] = useState(true);
+  const sessionValid = useSyncExternalStore(
+    subscribeToSuperAdminSession,
+    getSuperAdminSessionValidity,
+    () => null,
+  );
+  const checkingSession = sessionValid === null;
 
   // Validate step-up session on mount
   useEffect(() => {
-    const sessionData = loadSuperAdminSession();
-    if (!sessionData?.sessionToken || sessionData.expiresAt < Date.now()) {
+    if (sessionValid === false) {
       clearSuperAdminSession();
-      setSessionValid(false);
       router.push('/super-admin/step-up');
-    } else {
-      setSessionValid(true);
     }
-    setCheckingSession(false);
-  }, [router]);
+  }, [router, sessionValid]);
 
   // Handle 403 from expired/revoked step-up sessions by redirecting
   // to the step-up page. The apiFetch layer already throws ApiError
   // with status 403 — we catch it here to trigger re-authentication.
   // TanStack Query v5 has no `onError`/`onSettled` option on useQuery;
   // we destructure `error` from each result and react in a useEffect.
-  const handleSuperAdminError = (error: unknown) => {
+  const handleSuperAdminError = useCallback((error: unknown) => {
     if (error instanceof ApiError && error.status === 403) {
       clearSuperAdminSession();
-      setSessionValid(false);
       router.push('/super-admin/step-up');
     }
-  };
+  }, [router]);
 
   // Fetch real platform metrics
   const { data: orgsData, isLoading: orgsLoading, refetch: refetchOrgs, error: orgsError } = useQuery({
     queryKey: ['superadmin', 'organizations'],
     queryFn: () => fetchWithSessionToken<PaginatedResponse<Organization>>('/admin/organizations?limit=10'),
-    enabled: sessionValid && !checkingSession,
+    enabled: sessionValid === true,
     retry: false,
   });
 
   const { data: usersData, isLoading: usersLoading, refetch: refetchUsers, error: usersError } = useQuery({
     queryKey: ['superadmin', 'users'],
     queryFn: () => fetchWithSessionToken<PaginatedResponse<User>>('/admin/users?limit=10'),
-    enabled: sessionValid && !checkingSession,
+    enabled: sessionValid === true,
     retry: false,
   });
 
   const { data: clientsData, isLoading: clientsLoading, refetch: refetchClients, error: clientsError } = useQuery({
     queryKey: ['superadmin', 'clients'],
     queryFn: () => fetchWithSessionToken<PaginatedResponse<Client>>('/admin/clients?limit=10'),
-    enabled: sessionValid && !checkingSession,
+    enabled: sessionValid === true,
     retry: false,
   });
 
@@ -159,7 +171,7 @@ export function SuperAdminDashboard() {
     if (orgsError || usersError || clientsError) {
       handleSuperAdminError(orgsError ?? usersError ?? clientsError);
     }
-  }, [orgsError, usersError, clientsError]);
+  }, [orgsError, usersError, clientsError, handleSuperAdminError]);
 
   const { data: healthData, isLoading: healthLoading, refetch: refetchHealth } = useQuery({
     queryKey: ['superadmin', 'health'],
@@ -200,7 +212,7 @@ export function SuperAdminDashboard() {
     );
   }
 
-  if (!sessionValid) {
+  if (sessionValid !== true) {
     return null;
   }
 
@@ -229,7 +241,7 @@ export function SuperAdminDashboard() {
             Overview
           </h1>
           <p className="mt-1 text-sm text-slate-400">
-            Monitor the platform's operational health, account activity, and client distribution.
+            Monitor the platform&apos;s operational health, account activity, and client distribution.
           </p>
         </div>
 

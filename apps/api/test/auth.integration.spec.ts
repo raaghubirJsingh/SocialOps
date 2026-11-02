@@ -64,6 +64,7 @@ async function registerAndCaptureToken(
     await authService.registerEmployee({
       fullName: 'Integration Test User',
       email,
+      phone: '+919876543210',
       password,
     });
     const logged = logSpy.mock.calls
@@ -161,6 +162,7 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
     const dto = {
       fullName: 'Register Test',
       email: testEmail('register'),
+      phone: '+919876543210',
       password: 'StrongPassword123!',
     };
 
@@ -206,7 +208,7 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
     expect(created!.accountType).toBeNull();
     expect(created!.fullName).toBe('Register Test');
     expect(created!.displayName).toBe('Register Test');
-    expect(created!.phone).toBeNull();
+    expect(created!.phone).toBe('+919876543210');
 
     // No side effects: no Organization, no Membership,
     // no Workspace was created by this registration.
@@ -231,7 +233,7 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
     await authService.registerEmployee({
       fullName: 'Indy Phone',
       email,
-      phone: '+1-555-0123',
+      phone: '+447400123456',
       password: 'Phone123456!',
     });
     const created = await prisma.user.findUnique({
@@ -248,7 +250,7 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
     expect(created!.accountType).toBeNull();
     expect(created!.fullName).toBe('Indy Phone');
     expect(created!.displayName).toBe('Indy Phone');
-    expect(created!.phone).toBe('+1-555-0123');
+    expect(created!.phone).toBe('+447400123456');
     expect(created!.isActive).toBe(false);
   });
 
@@ -277,6 +279,7 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
     const dto = {
       fullName: 'Duplicate Test',
       email: testEmail('dup'),
+      phone: '+919876543210',
       password: 'StrongPassword123!',
     };
     await authService.registerEmployee(dto);
@@ -377,6 +380,7 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
     await authService.registerEmployee({
       fullName: 'Hash Check',
       email,
+      phone: '+919876543210',
       password,
     });
 
@@ -487,6 +491,7 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
       const dto = {
         fullName: 'Dev Bypass IT',
         email: testEmail('dev-bypass'),
+        phone: '+919876543210',
         password: 'Bypass123!',
       };
       const result = await authService.registerEmployee(dto);
@@ -531,6 +536,7 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
       const dto = {
         fullName: 'Dev Bypass Login',
         email: testEmail('dev-bypass-login'),
+        phone: '+919876543210',
         password: 'BypassLogin123!',
       };
       const registered = await authService.registerEmployee(dto);
@@ -573,6 +579,7 @@ describe('Auth foundation (real PostgreSQL + real Argon2id + real JWT)', () => {
       const dto = {
         fullName: 'Default OFF',
         email: testEmail('bypass-off'),
+        phone: '+919876543210',
         password: 'Off123!',
       };
       const result = await authService.registerEmployee(dto);

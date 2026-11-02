@@ -710,9 +710,22 @@ still no EMPLOYEE value; employees remain `accountType = null`.
   are restricted for 15 days after Account Creation
   (PROFILE_EDIT_RESTRICTION_DAYS anchor; no profile editor built; Client
   Module field governance untouched).
-- Phone (OPEN-2): only 9876543210 / 919876543210 / +919876543210 are
-  accepted and normalize to one canonical form; no other country/format
-  rules may be invented.
+- Phone (OPEN-2, amended): every new User registration in the approved
+  workflows requires a mobile number, as does every existing User profile
+  form that permits phone updates (currently the Freelancer profile editor).
+  The user selects an explicit country and enters a local number; no country
+  is inferred. Server validation uses `libphonenumber-js`, accepts only
+  numbers classified strictly as `MOBILE`, and stores canonical E.164.
+  `FIXED_LINE`, `FIXED_LINE_OR_MOBILE`, invalid, incomplete, and unsupported
+  numbers are rejected. The prior Indian national, `91`-prefixed, and `+91`
+  forms remain compatible when India is selected. This policy applies only
+  to `User.phone`; Client contact fields and their validation are unchanged.
+  The existing one-click onboarding mapping from `User.phone` to
+  `Client.directPhone` also remains unchanged, so international E.164 values
+  may be copied into that field; this data flow does not expand the policy
+  scope to `Client.directPhone` or `Client.primaryContactPhone`. Existing
+  Registration Phase email and WhatsApp verification behavior is unchanged,
+  and no new phone verification or uniqueness requirement is introduced.
 - Rate limiting (L15/OPEN-3): Redis fixed-window budgets on the five
   registration operations ONLY - start 5, OTP verify 10, OTP resend 6,
   password 5, resume 10 (each per 15-minute window, approved key
@@ -1644,3 +1657,50 @@ Two additive server-side gates (no Prisma schema change, no migration):
 - `CLIENT_NOT_ACTIVE` (403) and `SOCIAL_ACCOUNT_REQUIRED` (409) are
   tenant-blind: they name only the caller's own prerequisite.
 - Frontend `lib/api-error-messages.ts` maps both codes to user-facing copy.
+
+## Decision 024 — Freelancer Module V1 and AccountType Amendment
+
+Status: Approved
+Approved: 2026-11-02 (explicit approval in this session)
+
+### Summary
+
+Approve the V1 Freelancer registration, self-profile completion, and
+dashboard-routing workflow. Amend `AccountType` to contain
+`SERVICE_PROVIDER`, `CLIENT`, and `FREELANCER`. This supersedes the
+two-value AccountType statements in Decisions 007 and 014 only as needed to
+add `FREELANCER`; it does not change the Employee identity model.
+
+### Identity, registration, and authorization
+
+- Freelancer registration creates a User with
+  `accountType = FREELANCER` and its one-to-one `FreelancerProfile` in the
+  same database transaction.
+- Use the existing Argon2id password hashing and email-verification /
+  development auto-verification behavior. Registration issues no
+  authenticated session or tokens and performs no Service Provider tenant
+  provisioning.
+- Login returns `accountType` as identity metadata for frontend routing only;
+  it is not an authorization claim.
+- Freelancer profile endpoints require the standard authenticated JWT and
+  verify the caller's `FREELANCER` account and own profile against the
+  database. The JWT subject is the only user identity input.
+- Employee identity is unchanged: employees remain `accountType = NULL` and
+  are identified by their one-to-one `EmployeeProfile`.
+
+### Frontend scope and exclusions
+
+Incomplete Freelancer profiles route to `/freelancer/profile`. Completed
+profiles use the Freelancer-only dashboard branch. These frontend checks are
+not authorization controls; backend profile endpoints remain authoritative.
+
+This decision does not authorize Freelancer roles, Organization or Workspace
+membership, Client assignment, listing or administration, or Task, Content,
+Publishing, Distribution, Analytics, or other deferred functionality.
+
+### Migration handling
+
+The unapplied migration that removed `FREELANCER` is corrected to retain the
+approved enum value. This decision does not authorize running migrations;
+database application requires separate verification of migration history
+and data safety.

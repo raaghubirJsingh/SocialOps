@@ -1,0 +1,9 @@
+PASS __tests__/oauth-provider-not-configured.test.ts
+PASS __tests__/oauth-connect-contract.test.ts
+PASS __tests__/registration-error.test.ts
+
+Test Suites: 3 passed, 3 total
+Tests:       53 passed, 53 total
+Snapshots:   0 total
+Time:        1.619 s
+Ran all test suites matching registration-error|oauth-connect-contract|oauth-provider-not-configured.

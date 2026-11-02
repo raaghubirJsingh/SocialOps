@@ -1,0 +1,32 @@
+(node:18548) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS src/social-accounts/oauth/social-accounts-oauth.row-scope.spec.ts
+(node:14832) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:18600) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS src/freelancers/freelancers.service.spec.ts
+PASS src/freelancers/guards/freelancer-profile-complete.guard.spec.ts
+(node:7344) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS src/auth/guards/jwt-auth.guard.spec.ts
+PASS src/freelancers/guards/freelancer-context.guard.spec.ts
+PASS src/auth/dev-auto-verify.spec.ts
+PASS src/auth/email-audit.spec.ts
+PASS src/social-accounts/oauth/providers/facebook-graph.oauth.spec.ts
+(node:17220) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS src/social-accounts/oauth/social-accounts-oauth.service.spec.ts
+(node:21960) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS src/social-accounts/oauth/oauth-callback.controller.spec.ts
+(node:4104) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS src/auth/auth.controller.spec.ts
+PASS src/auth/auth.service.spec.ts
+
+Test Suites: 12 passed, 12 total
+Tests:       139 passed, 139 total
+Snapshots:   0 total
+Time:        4.998 s
+Ran all test suites matching auth|freelancers.

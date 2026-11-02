@@ -1,0 +1,1514 @@
+(node:22016) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+FAIL test/client-socialops-provider.integration.spec.ts (106.639 s)
+  ● concurrent activation converges on a single provider › never creates two Clients or two ACTIVE relationships
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 409
+    Received: 201
+
+    [0m [90m 643 |[39m     [90m// Exactly one wins; the other is refused, never a duplicate.[39m
+     [90m 644 |[39m     expect(statuses[[35m0[39m])[33m.[39mtoBe([35m201[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 645 |[39m     expect(statuses[[35m1[39m])[33m.[39mtoBe([35m409[39m)[33m;[39m
+     [90m     |[39m                         [31m[1m^[22m[39m
+     [90m 646 |[39m
+     [90m 647 |[39m     [36mconst[39m clients [33m=[39m [36mawait[39m prisma[33m.[39mclient[33m.[39mfindMany({
+     [90m 648 |[39m       where[33m:[39m { ownerUser[33m:[39m { email[33m:[39m user[33m.[39memail } }[33m,[39m[0m
+
+      at Object.<anonymous> (test/client-socialops-provider.integration.spec.ts:645:25)
+
+[registration-diagnostic] beforeAll.compile started at=1793516716026
+[registration-diagnostic] beforeAll.compile completed duration_ms=127
+[registration-diagnostic] beforeAll.createNestApplication started at=1793516716157
+[registration-diagnostic] beforeAll.createNestApplication completed duration_ms=4
+[registration-diagnostic] beforeAll.app.init started at=1793516716162
+[registration-diagnostic] beforeAll.app.init completed duration_ms=55
+[registration-diagnostic] beforeAll.REDIS_CLIENT started at=1793516716218
+[registration-diagnostic] beforeAll.REDIS_CLIENT completed duration_ms=0
+[registration-diagnostic] beforeAll.prisma.$connect started at=1793516716219
+[registration-diagnostic] beforeAll.prisma.$connect completed duration_ms=14
+[registration-diagnostic] firstTest.startPending started at=1793516716235
+[registration-diagnostic] firstTest.startPending completed duration_ms=211
+[registration-diagnostic] firstTest.userCountBeforeCompletion started at=1793516716447
+[registration-diagnostic] firstTest.userCountBeforeCompletion completed duration_ms=5
+[registration-diagnostic] firstTest.passwordBeforeVerification started at=1793516716454
+[registration-diagnostic] firstTest.passwordBeforeVerification completed duration_ms=11
+[registration-diagnostic] firstTest.verifyEmail started at=1793516716466
+[registration-diagnostic] firstTest.verifyEmail completed duration_ms=117
+[registration-diagnostic] firstTest.passwordAfterEmailOnly started at=1793516716585
+[registration-diagnostic] firstTest.passwordAfterEmailOnly completed duration_ms=9
+[registration-diagnostic] firstTest.verifyWhatsapp started at=1793516716595
+[registration-diagnostic] firstTest.verifyWhatsapp completed duration_ms=110
+[registration-diagnostic] firstTest.completeRegistration started at=1793516716706
+[registration-diagnostic] firstTest.completeRegistration completed duration_ms=121
+[registration-diagnostic] firstTest.readCompletedUser started at=1793516716830
+[registration-diagnostic] firstTest.readCompletedUser completed duration_ms=4
+[registration-diagnostic] firstTest.pendingCountAfterCompletion started at=1793516716835
+[registration-diagnostic] firstTest.pendingCountAfterCompletion completed duration_ms=4
+[registration-diagnostic] firstTest.resumeOldToken started at=1793516716840
+[registration-diagnostic] firstTest.resumeOldToken completed duration_ms=10
+[registration-diagnostic] firstTest.login.step1 started at=1793516716850
+[registration-diagnostic] firstTest.login.step1 completed duration_ms=212
+[registration-diagnostic] firstTest.login.step2 started at=1793516717064
+[registration-diagnostic] firstTest.login.step2 completed duration_ms=120
+[registration-diagnostic] freelancer.register started at=1793516717186
+[registration-diagnostic] freelancer.register completed duration_ms=120
+[registration-diagnostic] freelancer.readCompletedUser started at=1793516717306
+[registration-diagnostic] freelancer.readCompletedUser completed duration_ms=2
+[registration-diagnostic] freelancer.readProfile started at=1793516717310
+[registration-diagnostic] freelancer.readProfile completed duration_ms=4
+[registration-diagnostic] freelancer.readMemberships started at=1793516717315
+[registration-diagnostic] freelancer.readMemberships completed duration_ms=3
+[registration-diagnostic] freelancer.readOrganizations started at=1793516717319
+[registration-diagnostic] freelancer.readOrganizations completed duration_ms=4
+PASS test/registration.integration.spec.ts (16.972 s)
+FAIL test/content-operations-v2.integration.spec.ts (15.359 s)
+  ● Content Phase 2 - 3-scenario pipeline › lets only the Agency drive the manager pipeline edges and hand off to the Client
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 296 |[39m         scenarioType[33m:[39m [32m'SCENARIO_1'[39m[33m,[39m
+     [90m 297 |[39m       })[33m;[39m
+    [31m[1m>[22m[39m[90m 298 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 299 |[39m     [36mconst[39m contentId [33m=[39m created[33m.[39mbody[33m.[39mid [36mas[39m string[33m;[39m
+     [90m 300 |[39m     expect(created[33m.[39mbody[33m.[39mstatus)[33m.[39mtoBe([32m'DRAFT'[39m)[33m;[39m
+     [90m 301 |[39m     expect(created[33m.[39mbody[33m.[39mscenarioType)[33m.[39mtoBe([32m'SCENARIO_1'[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:298:28)
+
+  ● Content Phase 2 - 3-scenario pipeline › lets the Client owner return an item to the manager and send it back
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 400
+
+    [0m [90m 385 |[39m       [33m.[39m[36mset[39m([32m'X-Client-Id'[39m[33m,[39m client[33m.[39mclientId)
+     [90m 386 |[39m       [33m.[39msend({ to[33m:[39m [32m'AWAITING_MANAGER_APPROVAL'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 387 |[39m     expect(returned[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                             [31m[1m^[22m[39m
+     [90m 388 |[39m     expect(returned[33m.[39mbody[33m.[39mstate)[33m.[39mtoBe([32m'draft_in_progress'[39m)[33m;[39m
+     [90m 389 |[39m     expect(returned[33m.[39mbody)[33m.[39mnot[33m.[39mtoHaveProperty([32m'status'[39m)[33m;[39m
+     [90m 390 |[39m[0m
+
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:387:29)
+
+  ● Content Phase 2 - FINAL_CONFIRMED lock and immutability › locks at FINAL_CONFIRMED with an atomic triple and freezes the text
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 413 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 414 |[39m       [33m.[39msend({ title[33m:[39m [32m'Lock me'[39m[33m,[39m body[33m:[39m [32m'Frozen text'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 415 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 416 |[39m     [36mconst[39m contentId [33m=[39m created[33m.[39mbody[33m.[39mid [36mas[39m string[33m;[39m
+     [90m 417 |[39m
+     [90m 418 |[39m     [36mawait[39m http[0m
+
+      at itemUnderClientReview (test/content-operations-v2.integration.spec.ts:415:28)
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:434:35)
+
+  ● Content Phase 2 - FINAL_CONFIRMED lock and immutability › refuses every edit and change request once locked, for both actors
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 413 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 414 |[39m       [33m.[39msend({ title[33m:[39m [32m'Lock me'[39m[33m,[39m body[33m:[39m [32m'Frozen text'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 415 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 416 |[39m     [36mconst[39m contentId [33m=[39m created[33m.[39mbody[33m.[39mid [36mas[39m string[33m;[39m
+     [90m 417 |[39m
+     [90m 418 |[39m     [36mawait[39m http[0m
+
+      at itemUnderClientReview (test/content-operations-v2.integration.spec.ts:415:28)
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:491:7)
+
+  ● Content Phase 2 - Change Requests › returns a requested draft to agency rework and preserves its request association
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 554 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 555 |[39m       [33m.[39msend({ title[33m:[39m [32m'First draft'[39m[33m,[39m body[33m:[39m [32m'Version one'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 556 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 557 |[39m     [36mconst[39m contentId [33m=[39m created[33m.[39mbody[33m.[39mid [36mas[39m string[33m;[39m
+     [90m 558 |[39m
+     [90m 559 |[39m     [36mawait[39m http[0m
+
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:556:28)
+
+  ● Content Phase 2 - Change Requests › creates, lists on both scopes, and enforces the SCENARIO_1 cap of 2
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 400
+
+    [0m [90m 634 |[39m       [33m.[39m[36mset[39m([32m'X-Client-Id'[39m[33m,[39m client[33m.[39mclientId)
+     [90m 635 |[39m       [33m.[39msend({ requestDetails[33m:[39m [32m'Tighten the opening'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 636 |[39m     expect(first[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 637 |[39m     expect(first[33m.[39mbody[33m.[39mrequestDetails)[33m.[39mtoBe([32m'Tighten the opening'[39m)[33m;[39m
+     [90m 638 |[39m     [90m// requestedById is the authenticated Client owner - never taken from input.[39m
+     [90m 639 |[39m     expect(first[33m.[39mbody[33m.[39mrequestedById)[33m.[39mtoBe(client[33m.[39mid)[33m;[39m[0m
+
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:636:26)
+
+  ● Content Phase 2 - Change Requests › does NOT apply the cap to SCENARIO_2 content
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 400
+
+    [0m [90m 702 |[39m         [33m.[39m[36mset[39m([32m'X-Client-Id'[39m[33m,[39m client[33m.[39mclientId)
+     [90m 703 |[39m         [33m.[39msend({ requestDetails[33m:[39m details })[33m;[39m
+    [31m[1m>[22m[39m[90m 704 |[39m       expect(attempt[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                              [31m[1m^[22m[39m
+     [90m 705 |[39m     }
+     [90m 706 |[39m     [36mconst[39m count [33m=[39m [36mawait[39m prisma[33m.[39mchangeRequest[33m.[39mcount({ where[33m:[39m { contentId } })[33m;[39m
+     [90m 707 |[39m     expect(count)[33m.[39mtoBe([35m3[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:704:30)
+
+  ● Content Phase 2 - Change Requests › refuses a change request on APPROVED content and never lets the Agency raise one
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "CONTENT_IMMUTABLE"
+    Received: undefined
+
+    [0m [90m 742 |[39m       [33m.[39msend({ requestDetails[33m:[39m [32m'after approval'[39m })[33m;[39m
+     [90m 743 |[39m     expect(afterApproval[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 744 |[39m     expect(afterApproval[33m.[39mbody[33m.[39mcode)[33m.[39mtoBe([32m'CONTENT_IMMUTABLE'[39m)[33m;[39m
+     [90m     |[39m                                     [31m[1m^[22m[39m
+     [90m 745 |[39m
+     [90m 746 |[39m     [90m// The Agency-scoped change-request route exists (Decision 009), but the[39m
+     [90m 747 |[39m     [90m// approved state machine has no APPROVED -> UNDER_CLIENT_REVIEW edge, so[39m[0m
+
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:744:37)
+
+  ● Content Phase 2 - Internal Notes and the Client data boundary › lets the Agency create and list internal notes, scoped to the authoring Agency
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 774 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 775 |[39m       [33m.[39msend({ title[33m:[39m [32m'Annotated'[39m[33m,[39m body[33m:[39m [32m'Body'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 776 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 777 |[39m     [36mreturn[39m { agency[33m,[39m client[33m,[39m base[33m,[39m contentId[33m:[39m created[33m.[39mbody[33m.[39mid [36mas[39m string }[33m;[39m
+     [90m 778 |[39m   }
+     [90m 779 |[39m[0m
+
+      at withDraft (test/content-operations-v2.integration.spec.ts:776:28)
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:781:41)
+
+  ● Content Phase 2 - Internal Notes and the Client data boundary › never exposes internal notes or agencyId to the Client over HTTP
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 774 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 775 |[39m       [33m.[39msend({ title[33m:[39m [32m'Annotated'[39m[33m,[39m body[33m:[39m [32m'Body'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 776 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 777 |[39m     [36mreturn[39m { agency[33m,[39m client[33m,[39m base[33m,[39m contentId[33m:[39m created[33m.[39mbody[33m.[39mid [36mas[39m string }[33m;[39m
+     [90m 778 |[39m   }
+     [90m 779 |[39m[0m
+
+      at withDraft (test/content-operations-v2.integration.spec.ts:776:28)
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:804:49)
+
+  ● Content Phase 2 - Internal Notes and the Client data boundary › hides one Agency notes thread from another Agency (agencyId filter)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 774 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 775 |[39m       [33m.[39msend({ title[33m:[39m [32m'Annotated'[39m[33m,[39m body[33m:[39m [32m'Body'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 776 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 777 |[39m     [36mreturn[39m { agency[33m,[39m client[33m,[39m base[33m,[39m contentId[33m:[39m created[33m.[39mbody[33m.[39mid [36mas[39m string }[33m;[39m
+     [90m 778 |[39m   }
+     [90m 779 |[39m[0m
+
+      at withDraft (test/content-operations-v2.integration.spec.ts:776:28)
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:865:33)
+
+  ● Content Phase 2 - AI task dispatch over HTTP › dispatches to a MEMBER bot, stores a revision under its own id, and refuses non-bots and non-members
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 403
+
+    [0m [90m 919 |[39m         outputType[33m:[39m [32m'revision'[39m[33m,[39m
+     [90m 920 |[39m       })[33m;[39m
+    [31m[1m>[22m[39m[90m 921 |[39m     expect(notABot[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 922 |[39m     expect(notABot[33m.[39mbody[33m.[39mcode)[33m.[39mtoBe([32m'AI_USER_REQUIRED'[39m)[33m;[39m
+     [90m 923 |[39m
+     [90m 924 |[39m     [90m// A bot that is NOT a MEMBER of this Organization is refused (403):[39m[0m
+
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:921:28)
+
+  ● Content - Client self-service reads and cross-client isolation › lists, filters and reads own content, and denies a stranger Client
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 1005 |[39m         [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 1006 |[39m         [33m.[39msend({ title[33m,[39m body[33m:[39m [32m`Body of ${title}`[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 1007 |[39m       expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m      |[39m                              [31m[1m^[22m[39m
+     [90m 1008 |[39m       ids[33m.[39mpush(created[33m.[39mbody[33m.[39mid [36mas[39m string)[33m;[39m
+     [90m 1009 |[39m     }
+     [90m 1010 |[39m     [36mawait[39m http[0m
+
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:1007:30)
+
+PASS test/client-v1-field-change.integration.spec.ts (5.717 s)
+PASS test/client-v1-selfreg.integration.spec.ts
+PASS test/client-persona-activation.integration.spec.ts
+PASS test/provisioning.integration.spec.ts
+FAIL test/rbac.integration.spec.ts (46.899 s)
+  ● RBAC foundation (real PostgreSQL + real JWT) › RoleGuard - OWNER + @RequireMinimumRole("ADMIN") => 200 (inclusive minimum)
+
+    thrown: "Exceeded timeout of 30000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      at _getError (../../node_modules/jest-circus/build/jestAdapterInit.js:1985:12)
+          at Array.map (<anonymous>)
+
+    Cause:
+        thrown: "Exceeded timeout of 30000 ms for a test.
+        Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+        [0m [90m 481 |[39m   })[33m;[39m
+         [90m 482 |[39m
+        [31m[1m>[22m[39m[90m 483 |[39m   it([32m'RoleGuard - OWNER + @RequireMinimumRole("ADMIN") => 200 (inclusive minimum)'[39m[33m,[39m [36masync[39m () [33m=>[39m {
+         [90m     |[39m   [31m[1m^[22m[39m
+         [90m 484 |[39m     [36mconst[39m owner [33m=[39m [36mawait[39m seedUser([32m'owner-200'[39m[33m,[39m [32m'OWNER'[39m)[33m;[39m
+         [90m 485 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m http
+         [90m 486 |[39m       [33m.[39m[36mget[39m([32m'/api/rbac-test/admin'[39m)[0m
+
+          at test/rbac.integration.spec.ts:483:3
+          at test/rbac.integration.spec.ts:178:1
+
+PASS test/client-v1-http-surface.integration.spec.ts (22.35 s)
+FAIL test/oauth-row-scoped-connect.integration.spec.ts (48.901 s)
+  ● Row-scoped OAuth connect - the existing row is updated, not duplicated › reports the account as Connected through the real read API
+
+    TypeError: before.body.find is not a function
+
+    [0m [90m 417 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)[33m;[39m
+     [90m 418 |[39m     expect(
+    [31m[1m>[22m[39m[90m 419 |[39m       before[33m.[39mbody[33m.[39mfind((a[33m:[39m { id[33m:[39m string }) [33m=>[39m a[33m.[39mid [33m===[39m row[33m.[39mid)[33m.[39mhasCredential[33m,[39m
+     [90m     |[39m                   [31m[1m^[22m[39m
+     [90m 420 |[39m     )[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m 421 |[39m
+     [90m 422 |[39m     [36mawait[39m runHandshake([0m
+
+      at Object.<anonymous> (test/oauth-row-scoped-connect.integration.spec.ts:419:19)
+
+FAIL test/draft-from-intake.integration.spec.ts (48.245 s)
+  ● RawData intake detail route › returns 404 for a non-existent raw-data record
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 404
+    Received: 403
+
+    [0m [90m 236 |[39m       [33m.[39m[36mset[39m([32m'Authorization'[39m[33m,[39m [32m`Bearer ${accessToken}`[39m)
+     [90m 237 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m orgId)[33m;[39m
+    [31m[1m>[22m[39m[90m 238 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m404[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 239 |[39m   })[33m;[39m
+     [90m 240 |[39m   it[33m.[39meach([[[32m'OWNER'[39m][33m,[39m [[32m'ADMIN'[39m][33m,[39m [[32m'MEMBER'[39m][33m,[39m [[32m'VIEWER'[39m]] [36mas[39m [36mconst[39m)(
+     [90m 241 |[39m     [32m'allows %s to read an in-scope intake record (200)'[39m[33m,[39m[0m
+
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:238:24)
+
+  ● RawData intake detail route › allows OWNER to read an in-scope intake record (200)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at test/draft-from-intake.integration.spec.ts:243:23
+
+  ● RawData intake detail route › allows ADMIN to read an in-scope intake record (200)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at test/draft-from-intake.integration.spec.ts:243:23
+
+  ● RawData intake detail route › allows MEMBER to read an in-scope intake record (200)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at test/draft-from-intake.integration.spec.ts:243:23
+
+  ● RawData intake detail route › allows VIEWER to read an in-scope intake record (200)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at test/draft-from-intake.integration.spec.ts:243:23
+
+  ● RawData intake detail route › returns 404 for a foreign agency (cross-tenant isolation)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:259:21)
+
+  ● RawData intake detail route › returns 404 for cross-client access within the same agency
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:268:19)
+
+  ● RawData intake detail route › rejects raw-data creation for MEMBER/VIEWER and leaves contentId null
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:303:20)
+
+  ● Draft-from-intake flow › creates a DRAFT Content with revision 1 and null scenarioType
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:309:21)
+
+  ● Draft-from-intake flow › rejects draft creation for MEMBER/VIEWER
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:351:21)
+
+  ● Draft-from-intake flow › records provenance note with correct text
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:369:21)
+
+  ● Draft-from-intake flow › links one draft to its Content Request and exposes it only to that client
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:401:21)
+
+  ● Tenant isolation for provenance note › foreign agency cannot create internal note on another tenant content (404)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:473:21)
+
+  ● Decision 022: source-type gating and uniqueness-conflict fallback › rejects a draft from every non-CLIENT_FORM raw-data source (404)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 404
+    Received: 403
+
+    [0m [90m 546 |[39m         [33m.[39msend({ title[33m:[39m [32m'Gated draft'[39m[33m,[39m body[33m:[39m [32m'Should not be created'[39m })[33m;[39m
+     [90m 547 |[39m       [90m// Decision 022 part 1: only CLIENT_FORM requests become drafts.[39m
+    [31m[1m>[22m[39m[90m 548 |[39m       expect(res[33m.[39mstatus)[33m.[39mtoBe([35m404[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 549 |[39m     }
+     [90m 550 |[39m   })[33m;[39m
+     [90m 551 |[39m[0m
+
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:548:26)
+
+  ● Decision 022: source-type gating and uniqueness-conflict fallback › returns CONTENT_REQUEST_ALREADY_DRAFTED when the draft index conflicts (P2002 fallback)
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 2
+
+      Array [
+    -   201,
+    -   409,
+    +   403,
+    +   403,
+      ]
+
+    [0m [90m 581 |[39m     [90m// deterministic (socket/transaction scheduling decides), so assert the[39m
+     [90m 582 |[39m     [90m// invariant instead of the positional order: exactly one 201 and one 409.[39m
+    [31m[1m>[22m[39m[90m 583 |[39m     expect([resolved[33m.[39mstatus[33m,[39m conflicting[33m.[39mstatus][33m.[39msort((a[33m,[39m b) [33m=>[39m a [33m-[39m b))[33m.[39mtoEqual([
+     [90m     |[39m                                                                         [31m[1m^[22m[39m
+     [90m 584 |[39m       [35m201[39m[33m,[39m [35m409[39m[33m,[39m
+     [90m 585 |[39m     ])[33m;[39m
+     [90m 586 |[39m     [36mconst[39m loser [33m=[39m resolved[33m.[39mstatus [33m===[39m [35m409[39m [33m?[39m resolved [33m:[39m conflicting[33m;[39m[0m
+
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:583:73)
+
+PASS test/client-v1-onboarding.integration.spec.ts (8.101 s)
+FAIL test/progressive-gating.integration.spec.ts (9.064 s)
+  ● Progressive gating - PENDING client › keeps reads open but rejects agency writes with CLIENT_NOT_ACTIVE
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 403
+
+    [0m [90m 138 |[39m       ([36mawait[39m auth(http[33m.[39m[36mget[39m([32m`/api/clients/${clientId}/social-accounts`[39m)))
+     [90m 139 |[39m         [33m.[39mstatus[33m,[39m
+    [31m[1m>[22m[39m[90m 140 |[39m     )[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m       [31m[1m^[22m[39m
+     [90m 141 |[39m     expect(
+     [90m 142 |[39m       ([36mawait[39m auth(http[33m.[39m[36mget[39m([32m`/api/clients/${clientId}/content`[39m)))[33m.[39mstatus[33m,[39m
+     [90m 143 |[39m     )[33m.[39mtoBe([35m200[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (test/progressive-gating.integration.spec.ts:140:7)
+
+  ● Progressive gating - ACTIVE client content dependency › rejects creation with no active account, then allows it without a credential
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 409
+    Received: 403
+
+    [0m [90m 202 |[39m       http[33m.[39mpost(base)[33m.[39msend({ title[33m:[39m [32m'No account'[39m[33m,[39m body[33m:[39m [32m'Blocked.'[39m })[33m,[39m
+     [90m 203 |[39m     )[33m;[39m
+    [31m[1m>[22m[39m[90m 204 |[39m     expect(blocked[33m.[39mstatus)[33m.[39mtoBe([35m409[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 205 |[39m     expect(blocked[33m.[39mbody[33m.[39mcode)[33m.[39mtoBe([32m'SOCIAL_ACCOUNT_REQUIRED'[39m)[33m;[39m
+     [90m 206 |[39m
+     [90m 207 |[39m     [36mconst[39m account [33m=[39m [36mawait[39m auth([0m
+
+      at Object.<anonymous> (test/progressive-gating.integration.spec.ts:204:28)
+
+  ● Progressive gating - ACTIVE client content dependency › keeps RawData independent of the social-account gate
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 266 |[39m         extractedText[33m:[39m [32m'Brief before any account.'[39m[33m,[39m
+     [90m 267 |[39m       })[33m;[39m
+    [31m[1m>[22m[39m[90m 268 |[39m     expect(raw[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 269 |[39m   }[33m,[39m [35m30000[39m)[33m;[39m
+     [90m 270 |[39m })[33m;[39m
+     [90m 271 |[39m[0m
+
+      at Object.<anonymous> (test/progressive-gating.integration.spec.ts:268:24)
+
+FAIL test/client-operations-v1.integration.spec.ts (23.589 s)
+  ● Client Operations V1 - Social Accounts › records metadata, rejects credential keys, and enforces platform immutability
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 232 |[39m         profileUrl[33m:[39m [32m'https://instagram.com/socialops'[39m[33m,[39m
+     [90m 233 |[39m       })[33m;[39m
+    [31m[1m>[22m[39m[90m 234 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 235 |[39m     expect(created[33m.[39mbody[33m.[39mplatform)[33m.[39mtoBe([32m'INSTAGRAM'[39m)[33m;[39m
+     [90m 236 |[39m     expect(created[33m.[39mbody[33m.[39mplatformAccountId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 237 |[39m     expect(created[33m.[39mbody[33m.[39misActive)[33m.[39mtoBe([36mtrue[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (test/client-operations-v1.integration.spec.ts:234:28)
+
+  ● Client Operations V1 - Social Accounts › isolates social accounts across Agencies and Clients
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 321 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agencyA[33m.[39morgId)
+     [90m 322 |[39m       [33m.[39msend({ platform[33m:[39m [32m'FACEBOOK'[39m[33m,[39m handle[33m:[39m [32m'@a'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 323 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 324 |[39m
+     [90m 325 |[39m     [90m// Agency B holds no ACTIVE relationship with client A -> uniform 404[39m
+     [90m 326 |[39m     [36mconst[39m crossAgency [33m=[39m [36mawait[39m http[0m
+
+      at Object.<anonymous> (test/client-operations-v1.integration.spec.ts:323:28)
+
+  ● Client Operations V1 - Social Accounts › requires a profileUrl to belong to the account platform
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 403
+
+    [0m [90m 368 |[39m       profileUrl[33m:[39m [32m'https://instagram.com/definitely-not-facebook'[39m[33m,[39m
+     [90m 369 |[39m     })[33m;[39m
+    [31m[1m>[22m[39m[90m 370 |[39m     expect(mismatch[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                             [31m[1m^[22m[39m
+     [90m 371 |[39m     expect(mismatch[33m.[39mbody[33m.[39mcode)[33m.[39mtoBe([32m'SOCIAL_ACCOUNT_URL_PLATFORM_MISMATCH'[39m)[33m;[39m
+     [90m 372 |[39m
+     [90m 373 |[39m     [90m// --- create: a matching URL per platform is accepted (201) ---[39m[0m
+
+      at Object.<anonymous> (test/client-operations-v1.integration.spec.ts:370:29)
+
+  ● Client Operations V1 - Content workflows › walks DRAFT -> review -> changes -> resubmit -> Final Confirmation, hashing the approved text
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 484 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 485 |[39m       [33m.[39msend({ title[33m,[39m body })[33m;[39m
+    [31m[1m>[22m[39m[90m 486 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 487 |[39m     expect(created[33m.[39mbody[33m.[39mstatus)[33m.[39mtoBe([32m'DRAFT'[39m)[33m;[39m
+     [90m 488 |[39m     expect(created[33m.[39mbody[33m.[39mfinalConfirmedAt)[33m.[39mtoBeNull()[33m;[39m
+     [90m 489 |[39m     [36mconst[39m contentId [33m=[39m created[33m.[39mbody[33m.[39mid [36mas[39m string[33m;[39m[0m
+
+      at Object.<anonymous> (test/client-operations-v1.integration.spec.ts:486:28)
+
+  ● Client Operations V1 - Content workflows › keeps APPROVED unreachable for the Agency and clears a confirmation on edit (D7)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 616 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 617 |[39m       [33m.[39msend({ title[33m:[39m [32m'Guard story'[39m[33m,[39m body[33m:[39m [32m'Body'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 618 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 619 |[39m     [36mconst[39m contentId [33m=[39m created[33m.[39mbody[33m.[39mid [36mas[39m string[33m;[39m
+     [90m 620 |[39m
+     [90m 621 |[39m     [90m// MEMBER cannot mutate (RoleGuard + @RequireMinimumRole('ADMIN'))[39m[0m
+
+      at Object.<anonymous> (test/client-operations-v1.integration.spec.ts:618:28)
+
+  ● Client Operations V1 - RawData intake (insert-only) › computed the integrity hash server-side and refuses foreign links
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 802 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 803 |[39m       [33m.[39msend({ source[33m:[39m [32m'AGENCY_UPLOAD'[39m[33m,[39m extractedText[33m:[39m [32m'agency note'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 804 |[39m     expect(agencyCreated[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                                  [31m[1m^[22m[39m
+     [90m 805 |[39m
+     [90m 806 |[39m     [90m// linking to another Client's Content is a uniform 404[39m
+     [90m 807 |[39m     [36mconst[39m otherContent [33m=[39m [36mawait[39m http[0m
+
+      at Object.<anonymous> (test/client-operations-v1.integration.spec.ts:804:34)
+
+PASS test/client-v1.integration.spec.ts (12.072 s)
+  ● Console
+
+    console.log
+      DIAG_ORG_COUNT_BEFORE_CLEANUP 8
+
+      at Object.<anonymous> (test/client-v1.integration.spec.ts:75:11)
+
+    console.log
+      DIAG_EXISTING_SLUGS []
+
+      at Object.<anonymous> (test/client-v1.integration.spec.ts:78:11)
+
+    console.log
+      DIAG_RUNTAG cv1-cd1e411b-b056-4f67-8553-defbca168f17
+
+      at Object.<anonymous> (test/client-v1.integration.spec.ts:79:11)
+
+PASS test/content-lifecycle-constraints.integration.spec.ts
+PASS test/prisma.integration.spec.ts
+PASS test/auth.integration.spec.ts (10.874 s)
+PASS test/swagger.integration.spec.ts (5.055 s)
+PASS test/oauth-callback-transport.integration.spec.ts
+PASS test/social-account-url-normalization-parity.integration.spec.ts
+PASS test/redis.integration.spec.ts
+
+Summary of all failing tests
+FAIL test/client-socialops-provider.integration.spec.ts (106.639 s)
+  ● concurrent activation converges on a single provider › never creates two Clients or two ACTIVE relationships
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 409
+    Received: 201
+
+    [0m [90m 643 |[39m     [90m// Exactly one wins; the other is refused, never a duplicate.[39m
+     [90m 644 |[39m     expect(statuses[[35m0[39m])[33m.[39mtoBe([35m201[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 645 |[39m     expect(statuses[[35m1[39m])[33m.[39mtoBe([35m409[39m)[33m;[39m
+     [90m     |[39m                         [31m[1m^[22m[39m
+     [90m 646 |[39m
+     [90m 647 |[39m     [36mconst[39m clients [33m=[39m [36mawait[39m prisma[33m.[39mclient[33m.[39mfindMany({
+     [90m 648 |[39m       where[33m:[39m { ownerUser[33m:[39m { email[33m:[39m user[33m.[39memail } }[33m,[39m[0m
+
+      at Object.<anonymous> (test/client-socialops-provider.integration.spec.ts:645:25)
+
+FAIL test/content-operations-v2.integration.spec.ts (15.359 s)
+  ● Content Phase 2 - 3-scenario pipeline › lets only the Agency drive the manager pipeline edges and hand off to the Client
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 296 |[39m         scenarioType[33m:[39m [32m'SCENARIO_1'[39m[33m,[39m
+     [90m 297 |[39m       })[33m;[39m
+    [31m[1m>[22m[39m[90m 298 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 299 |[39m     [36mconst[39m contentId [33m=[39m created[33m.[39mbody[33m.[39mid [36mas[39m string[33m;[39m
+     [90m 300 |[39m     expect(created[33m.[39mbody[33m.[39mstatus)[33m.[39mtoBe([32m'DRAFT'[39m)[33m;[39m
+     [90m 301 |[39m     expect(created[33m.[39mbody[33m.[39mscenarioType)[33m.[39mtoBe([32m'SCENARIO_1'[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:298:28)
+
+  ● Content Phase 2 - 3-scenario pipeline › lets the Client owner return an item to the manager and send it back
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 400
+
+    [0m [90m 385 |[39m       [33m.[39m[36mset[39m([32m'X-Client-Id'[39m[33m,[39m client[33m.[39mclientId)
+     [90m 386 |[39m       [33m.[39msend({ to[33m:[39m [32m'AWAITING_MANAGER_APPROVAL'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 387 |[39m     expect(returned[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                             [31m[1m^[22m[39m
+     [90m 388 |[39m     expect(returned[33m.[39mbody[33m.[39mstate)[33m.[39mtoBe([32m'draft_in_progress'[39m)[33m;[39m
+     [90m 389 |[39m     expect(returned[33m.[39mbody)[33m.[39mnot[33m.[39mtoHaveProperty([32m'status'[39m)[33m;[39m
+     [90m 390 |[39m[0m
+
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:387:29)
+
+  ● Content Phase 2 - FINAL_CONFIRMED lock and immutability › locks at FINAL_CONFIRMED with an atomic triple and freezes the text
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 413 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 414 |[39m       [33m.[39msend({ title[33m:[39m [32m'Lock me'[39m[33m,[39m body[33m:[39m [32m'Frozen text'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 415 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 416 |[39m     [36mconst[39m contentId [33m=[39m created[33m.[39mbody[33m.[39mid [36mas[39m string[33m;[39m
+     [90m 417 |[39m
+     [90m 418 |[39m     [36mawait[39m http[0m
+
+      at itemUnderClientReview (test/content-operations-v2.integration.spec.ts:415:28)
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:434:35)
+
+  ● Content Phase 2 - FINAL_CONFIRMED lock and immutability › refuses every edit and change request once locked, for both actors
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 413 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 414 |[39m       [33m.[39msend({ title[33m:[39m [32m'Lock me'[39m[33m,[39m body[33m:[39m [32m'Frozen text'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 415 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 416 |[39m     [36mconst[39m contentId [33m=[39m created[33m.[39mbody[33m.[39mid [36mas[39m string[33m;[39m
+     [90m 417 |[39m
+     [90m 418 |[39m     [36mawait[39m http[0m
+
+      at itemUnderClientReview (test/content-operations-v2.integration.spec.ts:415:28)
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:491:7)
+
+  ● Content Phase 2 - Change Requests › returns a requested draft to agency rework and preserves its request association
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 554 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 555 |[39m       [33m.[39msend({ title[33m:[39m [32m'First draft'[39m[33m,[39m body[33m:[39m [32m'Version one'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 556 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 557 |[39m     [36mconst[39m contentId [33m=[39m created[33m.[39mbody[33m.[39mid [36mas[39m string[33m;[39m
+     [90m 558 |[39m
+     [90m 559 |[39m     [36mawait[39m http[0m
+
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:556:28)
+
+  ● Content Phase 2 - Change Requests › creates, lists on both scopes, and enforces the SCENARIO_1 cap of 2
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 400
+
+    [0m [90m 634 |[39m       [33m.[39m[36mset[39m([32m'X-Client-Id'[39m[33m,[39m client[33m.[39mclientId)
+     [90m 635 |[39m       [33m.[39msend({ requestDetails[33m:[39m [32m'Tighten the opening'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 636 |[39m     expect(first[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 637 |[39m     expect(first[33m.[39mbody[33m.[39mrequestDetails)[33m.[39mtoBe([32m'Tighten the opening'[39m)[33m;[39m
+     [90m 638 |[39m     [90m// requestedById is the authenticated Client owner - never taken from input.[39m
+     [90m 639 |[39m     expect(first[33m.[39mbody[33m.[39mrequestedById)[33m.[39mtoBe(client[33m.[39mid)[33m;[39m[0m
+
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:636:26)
+
+  ● Content Phase 2 - Change Requests › does NOT apply the cap to SCENARIO_2 content
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 400
+
+    [0m [90m 702 |[39m         [33m.[39m[36mset[39m([32m'X-Client-Id'[39m[33m,[39m client[33m.[39mclientId)
+     [90m 703 |[39m         [33m.[39msend({ requestDetails[33m:[39m details })[33m;[39m
+    [31m[1m>[22m[39m[90m 704 |[39m       expect(attempt[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                              [31m[1m^[22m[39m
+     [90m 705 |[39m     }
+     [90m 706 |[39m     [36mconst[39m count [33m=[39m [36mawait[39m prisma[33m.[39mchangeRequest[33m.[39mcount({ where[33m:[39m { contentId } })[33m;[39m
+     [90m 707 |[39m     expect(count)[33m.[39mtoBe([35m3[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:704:30)
+
+  ● Content Phase 2 - Change Requests › refuses a change request on APPROVED content and never lets the Agency raise one
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "CONTENT_IMMUTABLE"
+    Received: undefined
+
+    [0m [90m 742 |[39m       [33m.[39msend({ requestDetails[33m:[39m [32m'after approval'[39m })[33m;[39m
+     [90m 743 |[39m     expect(afterApproval[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 744 |[39m     expect(afterApproval[33m.[39mbody[33m.[39mcode)[33m.[39mtoBe([32m'CONTENT_IMMUTABLE'[39m)[33m;[39m
+     [90m     |[39m                                     [31m[1m^[22m[39m
+     [90m 745 |[39m
+     [90m 746 |[39m     [90m// The Agency-scoped change-request route exists (Decision 009), but the[39m
+     [90m 747 |[39m     [90m// approved state machine has no APPROVED -> UNDER_CLIENT_REVIEW edge, so[39m[0m
+
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:744:37)
+
+  ● Content Phase 2 - Internal Notes and the Client data boundary › lets the Agency create and list internal notes, scoped to the authoring Agency
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 774 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 775 |[39m       [33m.[39msend({ title[33m:[39m [32m'Annotated'[39m[33m,[39m body[33m:[39m [32m'Body'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 776 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 777 |[39m     [36mreturn[39m { agency[33m,[39m client[33m,[39m base[33m,[39m contentId[33m:[39m created[33m.[39mbody[33m.[39mid [36mas[39m string }[33m;[39m
+     [90m 778 |[39m   }
+     [90m 779 |[39m[0m
+
+      at withDraft (test/content-operations-v2.integration.spec.ts:776:28)
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:781:41)
+
+  ● Content Phase 2 - Internal Notes and the Client data boundary › never exposes internal notes or agencyId to the Client over HTTP
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 774 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 775 |[39m       [33m.[39msend({ title[33m:[39m [32m'Annotated'[39m[33m,[39m body[33m:[39m [32m'Body'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 776 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 777 |[39m     [36mreturn[39m { agency[33m,[39m client[33m,[39m base[33m,[39m contentId[33m:[39m created[33m.[39mbody[33m.[39mid [36mas[39m string }[33m;[39m
+     [90m 778 |[39m   }
+     [90m 779 |[39m[0m
+
+      at withDraft (test/content-operations-v2.integration.spec.ts:776:28)
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:804:49)
+
+  ● Content Phase 2 - Internal Notes and the Client data boundary › hides one Agency notes thread from another Agency (agencyId filter)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 774 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 775 |[39m       [33m.[39msend({ title[33m:[39m [32m'Annotated'[39m[33m,[39m body[33m:[39m [32m'Body'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 776 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 777 |[39m     [36mreturn[39m { agency[33m,[39m client[33m,[39m base[33m,[39m contentId[33m:[39m created[33m.[39mbody[33m.[39mid [36mas[39m string }[33m;[39m
+     [90m 778 |[39m   }
+     [90m 779 |[39m[0m
+
+      at withDraft (test/content-operations-v2.integration.spec.ts:776:28)
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:865:33)
+
+  ● Content Phase 2 - AI task dispatch over HTTP › dispatches to a MEMBER bot, stores a revision under its own id, and refuses non-bots and non-members
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 403
+
+    [0m [90m 919 |[39m         outputType[33m:[39m [32m'revision'[39m[33m,[39m
+     [90m 920 |[39m       })[33m;[39m
+    [31m[1m>[22m[39m[90m 921 |[39m     expect(notABot[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 922 |[39m     expect(notABot[33m.[39mbody[33m.[39mcode)[33m.[39mtoBe([32m'AI_USER_REQUIRED'[39m)[33m;[39m
+     [90m 923 |[39m
+     [90m 924 |[39m     [90m// A bot that is NOT a MEMBER of this Organization is refused (403):[39m[0m
+
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:921:28)
+
+  ● Content - Client self-service reads and cross-client isolation › lists, filters and reads own content, and denies a stranger Client
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 1005 |[39m         [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 1006 |[39m         [33m.[39msend({ title[33m,[39m body[33m:[39m [32m`Body of ${title}`[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 1007 |[39m       expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m      |[39m                              [31m[1m^[22m[39m
+     [90m 1008 |[39m       ids[33m.[39mpush(created[33m.[39mbody[33m.[39mid [36mas[39m string)[33m;[39m
+     [90m 1009 |[39m     }
+     [90m 1010 |[39m     [36mawait[39m http[0m
+
+      at Object.<anonymous> (test/content-operations-v2.integration.spec.ts:1007:30)
+
+FAIL test/rbac.integration.spec.ts (46.899 s)
+  ● RBAC foundation (real PostgreSQL + real JWT) › RoleGuard - OWNER + @RequireMinimumRole("ADMIN") => 200 (inclusive minimum)
+
+    thrown: "Exceeded timeout of 30000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      at _getError (../../node_modules/jest-circus/build/jestAdapterInit.js:1985:12)
+          at Array.map (<anonymous>)
+
+    Cause:
+        thrown: "Exceeded timeout of 30000 ms for a test.
+        Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+        [0m [90m 481 |[39m   })[33m;[39m
+         [90m 482 |[39m
+        [31m[1m>[22m[39m[90m 483 |[39m   it([32m'RoleGuard - OWNER + @RequireMinimumRole("ADMIN") => 200 (inclusive minimum)'[39m[33m,[39m [36masync[39m () [33m=>[39m {
+         [90m     |[39m   [31m[1m^[22m[39m
+         [90m 484 |[39m     [36mconst[39m owner [33m=[39m [36mawait[39m seedUser([32m'owner-200'[39m[33m,[39m [32m'OWNER'[39m)[33m;[39m
+         [90m 485 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m http
+         [90m 486 |[39m       [33m.[39m[36mget[39m([32m'/api/rbac-test/admin'[39m)[0m
+
+          at test/rbac.integration.spec.ts:483:3
+          at test/rbac.integration.spec.ts:178:1
+
+FAIL test/oauth-row-scoped-connect.integration.spec.ts (48.901 s)
+  ● Row-scoped OAuth connect - the existing row is updated, not duplicated › reports the account as Connected through the real read API
+
+    TypeError: before.body.find is not a function
+
+    [0m [90m 417 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)[33m;[39m
+     [90m 418 |[39m     expect(
+    [31m[1m>[22m[39m[90m 419 |[39m       before[33m.[39mbody[33m.[39mfind((a[33m:[39m { id[33m:[39m string }) [33m=>[39m a[33m.[39mid [33m===[39m row[33m.[39mid)[33m.[39mhasCredential[33m,[39m
+     [90m     |[39m                   [31m[1m^[22m[39m
+     [90m 420 |[39m     )[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m 421 |[39m
+     [90m 422 |[39m     [36mawait[39m runHandshake([0m
+
+      at Object.<anonymous> (test/oauth-row-scoped-connect.integration.spec.ts:419:19)
+
+FAIL test/draft-from-intake.integration.spec.ts (48.245 s)
+  ● RawData intake detail route › returns 404 for a non-existent raw-data record
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 404
+    Received: 403
+
+    [0m [90m 236 |[39m       [33m.[39m[36mset[39m([32m'Authorization'[39m[33m,[39m [32m`Bearer ${accessToken}`[39m)
+     [90m 237 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m orgId)[33m;[39m
+    [31m[1m>[22m[39m[90m 238 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m404[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 239 |[39m   })[33m;[39m
+     [90m 240 |[39m   it[33m.[39meach([[[32m'OWNER'[39m][33m,[39m [[32m'ADMIN'[39m][33m,[39m [[32m'MEMBER'[39m][33m,[39m [[32m'VIEWER'[39m]] [36mas[39m [36mconst[39m)(
+     [90m 241 |[39m     [32m'allows %s to read an in-scope intake record (200)'[39m[33m,[39m[0m
+
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:238:24)
+
+  ● RawData intake detail route › allows OWNER to read an in-scope intake record (200)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at test/draft-from-intake.integration.spec.ts:243:23
+
+  ● RawData intake detail route › allows ADMIN to read an in-scope intake record (200)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at test/draft-from-intake.integration.spec.ts:243:23
+
+  ● RawData intake detail route › allows MEMBER to read an in-scope intake record (200)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at test/draft-from-intake.integration.spec.ts:243:23
+
+  ● RawData intake detail route › allows VIEWER to read an in-scope intake record (200)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at test/draft-from-intake.integration.spec.ts:243:23
+
+  ● RawData intake detail route › returns 404 for a foreign agency (cross-tenant isolation)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:259:21)
+
+  ● RawData intake detail route › returns 404 for cross-client access within the same agency
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:268:19)
+
+  ● RawData intake detail route › rejects raw-data creation for MEMBER/VIEWER and leaves contentId null
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:303:20)
+
+  ● Draft-from-intake flow › creates a DRAFT Content with revision 1 and null scenarioType
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:309:21)
+
+  ● Draft-from-intake flow › rejects draft creation for MEMBER/VIEWER
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:351:21)
+
+  ● Draft-from-intake flow › records provenance note with correct text
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:369:21)
+
+  ● Draft-from-intake flow › links one draft to its Content Request and exposes it only to that client
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:401:21)
+
+  ● Tenant isolation for provenance note › foreign agency cannot create internal note on another tenant content (404)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 505 |[39m     [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 506 |[39m     [33m.[39msend({ source[33m:[39m [32m'CLIENT_FORM'[39m[33m,[39m extractedText[33m:[39m intakeText })[33m;[39m
+    [31m[1m>[22m[39m[90m 507 |[39m   expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 508 |[39m   expect(created[33m.[39mbody[33m.[39mcontentId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 509 |[39m   [36mreturn[39m {
+     [90m 510 |[39m     accessToken[33m:[39m agency[33m.[39maccessToken[33m,[39m[0m
+
+      at seedIntake (test/draft-from-intake.integration.spec.ts:507:26)
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:473:21)
+
+  ● Decision 022: source-type gating and uniqueness-conflict fallback › rejects a draft from every non-CLIENT_FORM raw-data source (404)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 404
+    Received: 403
+
+    [0m [90m 546 |[39m         [33m.[39msend({ title[33m:[39m [32m'Gated draft'[39m[33m,[39m body[33m:[39m [32m'Should not be created'[39m })[33m;[39m
+     [90m 547 |[39m       [90m// Decision 022 part 1: only CLIENT_FORM requests become drafts.[39m
+    [31m[1m>[22m[39m[90m 548 |[39m       expect(res[33m.[39mstatus)[33m.[39mtoBe([35m404[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 549 |[39m     }
+     [90m 550 |[39m   })[33m;[39m
+     [90m 551 |[39m[0m
+
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:548:26)
+
+  ● Decision 022: source-type gating and uniqueness-conflict fallback › returns CONTENT_REQUEST_ALREADY_DRAFTED when the draft index conflicts (P2002 fallback)
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 2
+
+      Array [
+    -   201,
+    -   409,
+    +   403,
+    +   403,
+      ]
+
+    [0m [90m 581 |[39m     [90m// deterministic (socket/transaction scheduling decides), so assert the[39m
+     [90m 582 |[39m     [90m// invariant instead of the positional order: exactly one 201 and one 409.[39m
+    [31m[1m>[22m[39m[90m 583 |[39m     expect([resolved[33m.[39mstatus[33m,[39m conflicting[33m.[39mstatus][33m.[39msort((a[33m,[39m b) [33m=>[39m a [33m-[39m b))[33m.[39mtoEqual([
+     [90m     |[39m                                                                         [31m[1m^[22m[39m
+     [90m 584 |[39m       [35m201[39m[33m,[39m [35m409[39m[33m,[39m
+     [90m 585 |[39m     ])[33m;[39m
+     [90m 586 |[39m     [36mconst[39m loser [33m=[39m resolved[33m.[39mstatus [33m===[39m [35m409[39m [33m?[39m resolved [33m:[39m conflicting[33m;[39m[0m
+
+      at Object.<anonymous> (test/draft-from-intake.integration.spec.ts:583:73)
+
+FAIL test/progressive-gating.integration.spec.ts (9.064 s)
+  ● Progressive gating - PENDING client › keeps reads open but rejects agency writes with CLIENT_NOT_ACTIVE
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 403
+
+    [0m [90m 138 |[39m       ([36mawait[39m auth(http[33m.[39m[36mget[39m([32m`/api/clients/${clientId}/social-accounts`[39m)))
+     [90m 139 |[39m         [33m.[39mstatus[33m,[39m
+    [31m[1m>[22m[39m[90m 140 |[39m     )[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m       [31m[1m^[22m[39m
+     [90m 141 |[39m     expect(
+     [90m 142 |[39m       ([36mawait[39m auth(http[33m.[39m[36mget[39m([32m`/api/clients/${clientId}/content`[39m)))[33m.[39mstatus[33m,[39m
+     [90m 143 |[39m     )[33m.[39mtoBe([35m200[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (test/progressive-gating.integration.spec.ts:140:7)
+
+  ● Progressive gating - ACTIVE client content dependency › rejects creation with no active account, then allows it without a credential
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 409
+    Received: 403
+
+    [0m [90m 202 |[39m       http[33m.[39mpost(base)[33m.[39msend({ title[33m:[39m [32m'No account'[39m[33m,[39m body[33m:[39m [32m'Blocked.'[39m })[33m,[39m
+     [90m 203 |[39m     )[33m;[39m
+    [31m[1m>[22m[39m[90m 204 |[39m     expect(blocked[33m.[39mstatus)[33m.[39mtoBe([35m409[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 205 |[39m     expect(blocked[33m.[39mbody[33m.[39mcode)[33m.[39mtoBe([32m'SOCIAL_ACCOUNT_REQUIRED'[39m)[33m;[39m
+     [90m 206 |[39m
+     [90m 207 |[39m     [36mconst[39m account [33m=[39m [36mawait[39m auth([0m
+
+      at Object.<anonymous> (test/progressive-gating.integration.spec.ts:204:28)
+
+  ● Progressive gating - ACTIVE client content dependency › keeps RawData independent of the social-account gate
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 266 |[39m         extractedText[33m:[39m [32m'Brief before any account.'[39m[33m,[39m
+     [90m 267 |[39m       })[33m;[39m
+    [31m[1m>[22m[39m[90m 268 |[39m     expect(raw[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 269 |[39m   }[33m,[39m [35m30000[39m)[33m;[39m
+     [90m 270 |[39m })[33m;[39m
+     [90m 271 |[39m[0m
+
+      at Object.<anonymous> (test/progressive-gating.integration.spec.ts:268:24)
+
+FAIL test/client-operations-v1.integration.spec.ts (23.589 s)
+  ● Client Operations V1 - Social Accounts › records metadata, rejects credential keys, and enforces platform immutability
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 232 |[39m         profileUrl[33m:[39m [32m'https://instagram.com/socialops'[39m[33m,[39m
+     [90m 233 |[39m       })[33m;[39m
+    [31m[1m>[22m[39m[90m 234 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 235 |[39m     expect(created[33m.[39mbody[33m.[39mplatform)[33m.[39mtoBe([32m'INSTAGRAM'[39m)[33m;[39m
+     [90m 236 |[39m     expect(created[33m.[39mbody[33m.[39mplatformAccountId)[33m.[39mtoBeNull()[33m;[39m
+     [90m 237 |[39m     expect(created[33m.[39mbody[33m.[39misActive)[33m.[39mtoBe([36mtrue[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (test/client-operations-v1.integration.spec.ts:234:28)
+
+  ● Client Operations V1 - Social Accounts › isolates social accounts across Agencies and Clients
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 321 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agencyA[33m.[39morgId)
+     [90m 322 |[39m       [33m.[39msend({ platform[33m:[39m [32m'FACEBOOK'[39m[33m,[39m handle[33m:[39m [32m'@a'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 323 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 324 |[39m
+     [90m 325 |[39m     [90m// Agency B holds no ACTIVE relationship with client A -> uniform 404[39m
+     [90m 326 |[39m     [36mconst[39m crossAgency [33m=[39m [36mawait[39m http[0m
+
+      at Object.<anonymous> (test/client-operations-v1.integration.spec.ts:323:28)
+
+  ● Client Operations V1 - Social Accounts › requires a profileUrl to belong to the account platform
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 403
+
+    [0m [90m 368 |[39m       profileUrl[33m:[39m [32m'https://instagram.com/definitely-not-facebook'[39m[33m,[39m
+     [90m 369 |[39m     })[33m;[39m
+    [31m[1m>[22m[39m[90m 370 |[39m     expect(mismatch[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                             [31m[1m^[22m[39m
+     [90m 371 |[39m     expect(mismatch[33m.[39mbody[33m.[39mcode)[33m.[39mtoBe([32m'SOCIAL_ACCOUNT_URL_PLATFORM_MISMATCH'[39m)[33m;[39m
+     [90m 372 |[39m
+     [90m 373 |[39m     [90m// --- create: a matching URL per platform is accepted (201) ---[39m[0m
+
+      at Object.<anonymous> (test/client-operations-v1.integration.spec.ts:370:29)
+
+  ● Client Operations V1 - Content workflows › walks DRAFT -> review -> changes -> resubmit -> Final Confirmation, hashing the approved text
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 484 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 485 |[39m       [33m.[39msend({ title[33m,[39m body })[33m;[39m
+    [31m[1m>[22m[39m[90m 486 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 487 |[39m     expect(created[33m.[39mbody[33m.[39mstatus)[33m.[39mtoBe([32m'DRAFT'[39m)[33m;[39m
+     [90m 488 |[39m     expect(created[33m.[39mbody[33m.[39mfinalConfirmedAt)[33m.[39mtoBeNull()[33m;[39m
+     [90m 489 |[39m     [36mconst[39m contentId [33m=[39m created[33m.[39mbody[33m.[39mid [36mas[39m string[33m;[39m[0m
+
+      at Object.<anonymous> (test/client-operations-v1.integration.spec.ts:486:28)
+
+  ● Client Operations V1 - Content workflows › keeps APPROVED unreachable for the Agency and clears a confirmation on edit (D7)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 616 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 617 |[39m       [33m.[39msend({ title[33m:[39m [32m'Guard story'[39m[33m,[39m body[33m:[39m [32m'Body'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 618 |[39m     expect(created[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 619 |[39m     [36mconst[39m contentId [33m=[39m created[33m.[39mbody[33m.[39mid [36mas[39m string[33m;[39m
+     [90m 620 |[39m
+     [90m 621 |[39m     [90m// MEMBER cannot mutate (RoleGuard + @RequireMinimumRole('ADMIN'))[39m[0m
+
+      at Object.<anonymous> (test/client-operations-v1.integration.spec.ts:618:28)
+
+  ● Client Operations V1 - RawData intake (insert-only) › computed the integrity hash server-side and refuses foreign links
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+    [0m [90m 802 |[39m       [33m.[39m[36mset[39m([32m'X-Organization-Id'[39m[33m,[39m agency[33m.[39morgId)
+     [90m 803 |[39m       [33m.[39msend({ source[33m:[39m [32m'AGENCY_UPLOAD'[39m[33m,[39m extractedText[33m:[39m [32m'agency note'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 804 |[39m     expect(agencyCreated[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                                  [31m[1m^[22m[39m
+     [90m 805 |[39m
+     [90m 806 |[39m     [90m// linking to another Client's Content is a uniform 404[39m
+     [90m 807 |[39m     [36mconst[39m otherContent [33m=[39m [36mawait[39m http[0m
+
+      at Object.<anonymous> (test/client-operations-v1.integration.spec.ts:804:34)
+
+
+Test Suites: 7 failed, 15 passed, 22 total
+Tests:       40 failed, 182 passed, 222 total
+Snapshots:   0 total
+Time:        417.976 s
+Ran all test suites.

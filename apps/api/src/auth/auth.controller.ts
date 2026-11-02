@@ -25,6 +25,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 
 import { loginSchema } from './dto/login.dto.js';
 import { registerEmployeeSchema } from './dto/register-employee.dto.js';
+import { registerFreelancerSchema } from './dto/register-freelancer.dto.js';
 import { refreshTokenSchema } from './dto/refresh-token.dto.js';
 import { verifyEmailSchema } from './dto/verify-email.dto.js';
 import { resendVerificationSchema } from './dto/resend-verification.dto.js';
@@ -34,6 +35,7 @@ import { PublicAuth } from '../rbac/decorators/public-auth.decorator.js';
 
 import type { LoginDto } from './dto/login.dto.js';
 import type { RegisterEmployeeDto } from './dto/register-employee.dto.js';
+import type { RegisterFreelancerDto } from './dto/register-freelancer.dto.js';
 import type { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import type { VerifyEmailDto } from './dto/verify-email.dto.js';
 import type { ResendVerificationDto } from './dto/resend-verification.dto.js';
@@ -120,6 +122,31 @@ export class AuthController {
     @Body(new ZodValidationPipe(registerEmployeeSchema)) dto: RegisterEmployeeDto,
   ): Promise<RegisterResult> {
     return this.authService.registerEmployee(dto);
+  }
+
+  /**
+   * Register a freelancer account with its 1:1 profile atomically.
+   * Registration never issues tokens; email verification follows the
+   * standard registration contract.
+   */
+  @Post('register-freelancer')
+  @PublicAuth()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Register a freelancer account and its profile atomically.',
+    description:
+      'Creates a User (Argon2id-hashed password, accountType FREELANCER) plus a FreelancerProfile in one transaction. In production, queues email verification; the dev-only auto-verify gate returns registration_complete. Registration never returns tokens or a session.',
+  })
+  @ApiCreatedResponse({
+    description:
+      'Freelancer registered. Response body is { status: "verification_required", email } or { status: "registration_complete", email }.',
+  })
+  @ApiForbiddenResponse({ description: 'Email already in use.' })
+  registerFreelancer(
+    @Body(new ZodValidationPipe(registerFreelancerSchema))
+    dto: RegisterFreelancerDto,
+  ): Promise<RegisterResult> {
+    return this.authService.registerFreelancer(dto);
   }
 
   /**

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -37,12 +37,6 @@ export function OtpInput({
   label = '6-digit code',
 }: OtpInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [displayValue, setDisplayValue] = useState(value);
-
-  // Sync display value with prop value
-  useEffect(() => {
-    setDisplayValue(value);
-  }, [value]);
 
   // Auto-focus on mount
   useEffect(() => {
@@ -53,8 +47,7 @@ export function OtpInput({
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      let newValue = e.target.value.replace(/\D/g, '').slice(0, 8);
-      setDisplayValue(newValue);
+      const newValue = e.target.value.replace(/\D/g, '').slice(0, 8);
       onChange(newValue);
     },
     [onChange],
@@ -80,7 +73,6 @@ export function OtpInput({
     (e: React.ClipboardEvent<HTMLInputElement>) => {
       e.preventDefault();
       const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 8);
-      setDisplayValue(pasted);
       onChange(pasted);
     },
     [onChange],
@@ -97,7 +89,7 @@ export function OtpInput({
         pattern="[0-9]*"
         autoComplete="one-time-code"
         maxLength={8}
-        value={displayValue}
+        value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}

@@ -1,0 +1,13 @@
+(node:18236) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS test/oauth-row-scoped-connect.integration.spec.ts (68.173 s)
+PASS test/draft-from-intake.integration.spec.ts (40.469 s)
+PASS test/client-operations-v1.integration.spec.ts (18.297 s)
+PASS test/content-operations-v2.integration.spec.ts (29.614 s)
+PASS test/progressive-gating.integration.spec.ts (5.98 s)
+
+Test Suites: 5 passed, 5 total
+Tests:       53 passed, 53 total
+Snapshots:   0 total
+Time:        164.75 s
+Ran all test suites matching client-operations-v1|content-operations-v2|progressive-gating|draft-from-intake|oauth-row-scoped-connect.

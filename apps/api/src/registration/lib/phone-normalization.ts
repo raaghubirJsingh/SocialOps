@@ -1,5 +1,9 @@
 /**
- * Phone normalization for Registration Phase v1.0 (OPEN-2, LOCKED C).
+ * Compatibility normalizer for the original India-only OPEN-2 input shapes.
+ *
+ * User.phone registration and profile writes now use user-phone.ts, which
+ * requires a selected country and a number classified as MOBILE. Keep this
+ * helper's behavior unchanged for existing callers and regression fixtures.
  *
  * Approved input shapes (the ONLY accepted shapes):
  *   - 9876543210        (10 digits, national format)
@@ -10,9 +14,8 @@
  * representation: '+919876543210'.
  *
  * Common visual separators (spaces, hyphens, parentheses, dots) are
- * stripped before matching. Any input outside the approved shapes is
- * REJECTED (returns null) - no additional country/format rules may be
- * invented (GATE: OPEN-2).
+ * stripped before matching. Any input outside these legacy shapes is
+ * rejected.
  */
 const SEPARATORS = /[\s\-().]/g;
 

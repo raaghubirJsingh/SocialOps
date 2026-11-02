@@ -15,6 +15,7 @@ import type {
   OtpVerifyRequest,
   OtpVerifyResponse,
   RegisterEmployeeRequest,
+  RegisterFreelancerRequest,
   RegistrationCompleteResponse,
   RegistrationPasswordRequest,
   RegistrationResumeRequest,
@@ -183,13 +184,23 @@ export async function resumeRegistration(
  * navigation as standard registration (/verify-email or /login).
  *
  * Field contract (mirrors backend RegisterEmployeeDto): fullName, email,
- * phone (optional), password. NO accountType is sent — the EmployeeProfile
+ * phone (required; country-selected local input), password. NO accountType is sent — the EmployeeProfile
  * row is the discriminator (AGENTS.md §17.1).
  */
 export async function registerEmployee(
   input: RegisterEmployeeRequest,
 ): Promise<RegisterResult> {
   return apiFetch<RegisterResult>('/auth/register-employee', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+/** Register a Freelancer account; the backend creates its profile atomically. */
+export async function registerFreelancer(
+  input: RegisterFreelancerRequest,
+): Promise<RegisterResult> {
+  return apiFetch<RegisterResult>('/auth/register-freelancer', {
     method: 'POST',
     body: input,
   });

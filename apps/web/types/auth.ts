@@ -101,13 +101,12 @@ export interface LoginOtpResendResponse {
 }
 
 /**
- * Account classification (AGENTS.md §17.1 as amended by Registration
- * Phase v1.0 / Decision 014). Exactly two values; Individual vs
- * Business is a ClientType, never an AccountType. Employee is
- * intentionally NOT here: employees carry `accountType = null` and are
- * discriminated by the 1:1 EmployeeProfile row.
+ * Account classification (AGENTS.md §17.1 / Decisions 014 and 024).
+ * Individual vs Business is a ClientType, never an AccountType.
+ * Employee is intentionally NOT here: employees carry `accountType = null`
+ * and are discriminated by the 1:1 EmployeeProfile row.
  */
-export type AccountType = 'SERVICE_PROVIDER' | 'CLIENT';
+export type AccountType = 'SERVICE_PROVIDER' | 'CLIENT' | 'FREELANCER';
 export type ClientType = 'INDIVIDUAL' | 'BUSINESS';
 
 /**
@@ -155,11 +154,16 @@ export interface AuthenticatedUser {
  */
 export type DiscoveryAnswers = Record<string, unknown>;
 
+/** Country-selected local input; the API validates and stores canonical E.164. */
+export interface UserPhoneInput {
+  country: string;
+  number: string;
+}
+
 export interface RegistrationStartRequest {
   fullName: string;
   email: string;
-  /** Raw user input; the server normalizes to canonical form (OPEN-2). */
-  phone: string;
+  phone: UserPhoneInput;
   /** Nullable while discovery is unresolved (L13); required by /password. */
   accountType?: AccountType | null;
   clientType?: ClientType | null;
@@ -265,14 +269,22 @@ export interface RegistrationResumeSnapshot {
  * Employee registration request body.
  *
  * Mirrors the backend RegisterEmployeeDto (apps/api/src/auth/dto/
- * register-employee.dto.ts): fullName, email, phone (optional),
+ * register-employee.dto.ts): fullName, email, phone (required),
  * password. NO accountType — employee is discriminated by the 1:1
  * EmployeeProfile row, not AccountType (AGENTS.md §17.1).
  */
 export interface RegisterEmployeeRequest {
   fullName: string;
   email: string;
-  phone?: string;
+  phone: UserPhoneInput;
+  password: string;
+}
+
+/** Request body for the dedicated Freelancer registration endpoint. */
+export interface RegisterFreelancerRequest {
+  fullName: string;
+  email: string;
+  phone: UserPhoneInput;
   password: string;
 }
 

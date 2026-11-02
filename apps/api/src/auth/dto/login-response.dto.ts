@@ -1,4 +1,4 @@
-import type { AccountType } from './account-type.js';
+import type { AccountType } from '@prisma/client';
 
 /**
  * Canonical response returned by POST /api/auth/login.
