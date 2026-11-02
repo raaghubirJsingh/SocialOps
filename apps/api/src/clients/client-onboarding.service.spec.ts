@@ -5,7 +5,11 @@ import type { JwtAccessPayload } from '../auth/types/jwt-payload.type.js';
 import { ClientOnboardingService } from './client-onboarding.service.js';
 import { ClientsService } from './clients.service.js';
 import { MobileVerificationService } from './mobile-verification.service.js';
-import { SocialOpsProviderService } from './social-ops-provider.service.js';
+import {
+  ProviderAttachRaceError,
+  ProviderProvisioningRequiredError,
+  SocialOpsProviderService,
+} from './social-ops-provider.service.js';
 
 const CLIENT_ID = '11111111-1111-4111-8111-111111111111';
 const ORGANIZATION_ID = '22222222-2222-4222-8222-222222222222';
@@ -124,6 +128,9 @@ function makeHarness(options: {
   };
   const socialOpsProvider = {
     attachIfUnmanaged: jest.fn(),
+    provisionProviderOrganization: jest.fn(async () => ({
+      id: ORGANIZATION_ID,
+    })),
   };
   if (options.providerError) {
     asMock(socialOpsProvider.attachIfUnmanaged).mockRejectedValue(
@@ -211,6 +218,9 @@ describe('ClientOnboardingService.completeOnboardingActivation', () => {
     };
     const socialOpsProvider = {
       attachIfUnmanaged: jest.fn(),
+      provisionProviderOrganization: jest.fn(async () => ({
+        id: ORGANIZATION_ID,
+      })),
     };
     asMock(mobileVerification.resolveAndConsume).mockResolvedValue({
       outcome: 'CONSUMED',
@@ -488,3 +498,81 @@ describe('ClientOnboardingService.startSelfRegistration - pending draft resume',
     },
   );
 });
+
+/**
+ * The platform Service Provider can only be provisioned OUTSIDE the activation
+ * transaction: a P2002 inside it aborts the whole transaction, so the recovery
+ * read could never run (PostgreSQL 25P02). These pin that contract: the
+ * activation is retried once in a BRAND-NEW transaction, never more.
+ */
+describe('ClientOnboardingService - platform Service Provider recovery', () => {
+  it('provisions the provider, then retries the activation in a fresh transaction', async () => {
+    const harness = makeHarness();
+    asMock(
+      harness.socialOpsProvider.attachIfUnmanaged,
+    ).mockRejectedValueOnce(new ProviderProvisioningRequiredError());
+
+    const result = await harness.service.startSelfRegistration(USER, {});
+
+    expect(result.onboardingStatus).toBe('ACTIVE');
+    // Attempt 1 rolled back on the sentinel; attempt 2 committed.
+    expect(harness.prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(
+      harness.socialOpsProvider.provisionProviderOrganization,
+    ).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries an attach race without re-provisioning the provider', async () => {
+    const harness = makeHarness();
+    asMock(
+      harness.socialOpsProvider.attachIfUnmanaged,
+    ).mockRejectedValueOnce(new ProviderAttachRaceError(CLIENT_ID));
+
+    const result = await harness.service.startSelfRegistration(USER, {});
+
+    expect(result.onboardingStatus).toBe('ACTIVE');
+    expect(harness.prisma.$transaction).toHaveBeenCalledTimes(2);
+    // A concurrent activation already attached a provider: provisioning is
+    // not needed, the retry's pre-read adopts the winning relationship.
+    expect(
+      harness.socialOpsProvider.provisionProviderOrganization,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the failure instead of retrying forever', async () => {
+    const harness = makeHarness();
+    const sentinel = new ProviderProvisioningRequiredError();
+    asMock(harness.socialOpsProvider.attachIfUnmanaged).mockRejectedValue(
+      sentinel,
+    );
+
+    await expect(
+      harness.service.startSelfRegistration(USER, {}),
+    ).rejects.toBe(sentinel);
+
+    // Bounded: exactly one retry, never an unbounded loop.
+    expect(harness.prisma.$transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it('propagates a provisioning failure with nothing written outside the rolled-back transaction', async () => {
+    const harness = makeHarness();
+    const provisioningError = new Error('provider provisioning failed');
+    asMock(
+      harness.socialOpsProvider.attachIfUnmanaged,
+    ).mockRejectedValueOnce(new ProviderProvisioningRequiredError());
+    asMock(
+      harness.socialOpsProvider.provisionProviderOrganization,
+    ).mockRejectedValueOnce(provisioningError);
+
+    await expect(
+      harness.service.startSelfRegistration(USER, {}),
+    ).rejects.toBe(provisioningError);
+
+    // The activation was never re-attempted, and no Client/relationship write
+    // escaped onto the base client: the failed attempt is all there was, and
+    // PostgreSQL rolls it back entirely.
+    expect(harness.prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(harness.prisma.client.create).not.toHaveBeenCalled();
+  });
+});
+
