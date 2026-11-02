@@ -154,13 +154,15 @@ afterAll(async () => {
   });
   const ids = clients.map((c) => c.id);
   await prisma.clientEvent.deleteMany({ where: { clientId: { in: ids } } });
-  const socialopsOrg = await prisma.organization.findUnique({ where: { slug: 'socialops' } });
-  if (socialopsOrg) {
-    await prisma.clientAgencyRelationship.deleteMany({ where: { organizationId: socialopsOrg.id } });
-  }
+  // The provider may have been provisioned under an ALTERNATE slug when an
+  // Agency already owned "socialops", so clean it up by `kind`, not by slug.
+  await prisma.clientAgencyRelationship.deleteMany({
+    where: { organization: { kind: 'SOCIALOPS' } },
+  });
   await prisma.clientAgencyRelationship.deleteMany({ where: { clientId: { in: ids } } });
   await prisma.client.deleteMany({ where: { id: { in: ids } } });
   await prisma.loginOtpChallenge.deleteMany({});
+  await prisma.organization.deleteMany({ where: { kind: 'SOCIALOPS' } });
   await prisma.organization.deleteMany({ where: { slug: 'socialops' } });
   await prisma.user.deleteMany({ where: { email: emails } });
   await prisma.$disconnect();
@@ -255,6 +257,111 @@ describe('first-time self-registration attaches the platform Service Provider', 
         where: { client: { ownerUser: { email } } },
       }),
     ).toBe(0);
+  });
+});
+
+
+/**
+ * DEFECT REGRESSION: `Organization.slug` is globally UNIQUE and independent of
+ * `kind`, so a pre-existing external AGENCY can own the reserved "socialops"
+ * slug. Provisioning used to fail with a controlled 500
+ * (SERVICE_PROVIDER_UNAVAILABLE) and activation was impossible for every
+ * Client. It must now take the first free ALTERNATE slug instead, without ever
+ * reusing, renaming, or modifying the Agency that owns the preferred one.
+ */
+describe('an external Agency owning the preferred provider slug does not block activation', () => {
+  it('provisions the platform provider under an alternate slug and ACTIVATES', async () => {
+    // Start from "provider not provisioned yet" so provisioning must really run,
+    // and make sure the preferred slug is genuinely free first.
+    await prisma.clientAgencyRelationship.deleteMany({
+      where: { organization: { kind: 'SOCIALOPS' } },
+    });
+    await prisma.organization.deleteMany({ where: { kind: 'SOCIALOPS' } });
+    const previousSquatters = await prisma.organization.findMany({
+      where: { slug: 'socialops' },
+      select: { id: true },
+    });
+    for (const previous of previousSquatters) {
+      await prisma.clientAgencyRelationship.deleteMany({
+        where: { organizationId: previous.id },
+      });
+      await prisma.organization.deleteMany({ where: { id: previous.id } });
+    }
+
+    const squatter = await prisma.organization.create({
+      data: {
+        name: `Slug Owner ${runTag}`,
+        slug: 'socialops',
+        kind: 'AGENCY',
+        discoveryOptIn: false,
+      },
+    });
+
+    try {
+      const user = await selfRegisteringClient('slugcollision');
+      const res = await activate(user.accessToken);
+
+      // The activation endpoint succeeds instead of returning a 500.
+      expect(res.status).toBe(201);
+      expect(res.body.onboardingStatus).toBe('ACTIVE');
+
+      const rels = await relationshipsFor(res.body.clientId as string);
+      expect(rels).toHaveLength(1);
+      expect(rels[0].status).toBe('ACTIVE');
+      expect(rels[0].initiatedBy).toBe('PLATFORM');
+      // The Client is attached to the PLATFORM provider, never to the Agency
+      // that merely happens to own the slug.
+      expect(rels[0].organizationId).not.toBe(squatter.id);
+
+      const provider = await prisma.organization.findFirstOrThrow({
+        where: { kind: 'SOCIALOPS' },
+      });
+      expect(provider.id).toBe(rels[0].organizationId);
+      // The preferred slug was unavailable, so an ALTERNATE reserved slug was
+      // used - never the Agency's.
+      expect(provider.slug).not.toBe('socialops');
+      expect(
+        SocialOpsProviderService.PROVIDER_SLUG_CANDIDATES,
+      ).toContain(provider.slug);
+      expect(provider.discoveryOptIn).toBe(false);
+
+      // The pre-existing Agency is untouched: same id, slug, kind and name.
+      const agency = await prisma.organization.findUniqueOrThrow({
+        where: { id: squatter.id },
+      });
+      expect(agency.slug).toBe('socialops');
+      expect(agency.kind).toBe('AGENCY');
+      expect(agency.name).toBe(squatter.name);
+
+      // Exactly one SOCIALOPS row exists (singleton preserved).
+      expect(
+        await prisma.organization.count({ where: { kind: 'SOCIALOPS' } }),
+      ).toBe(1);
+    } finally {
+      await prisma.clientAgencyRelationship.deleteMany({
+        where: { organization: { kind: 'SOCIALOPS' } },
+      });
+      await prisma.organization.deleteMany({ where: { kind: 'SOCIALOPS' } });
+      await prisma.organization.deleteMany({ where: { id: squatter.id } });
+    }
+  });
+
+  it('reuses the existing SOCIALOPS organization and its ID on later activations', async () => {
+    const first = await selfRegisteringClient('reuse-first');
+    expect((await activate(first.accessToken)).status).toBe(201);
+    const provider = await prisma.organization.findFirstOrThrow({
+      where: { kind: 'SOCIALOPS' },
+    });
+
+    const second = await selfRegisteringClient('reuse-second');
+    const res = await activate(second.accessToken);
+    expect(res.status).toBe(201);
+
+    const rels = await relationshipsFor(res.body.clientId as string);
+    expect(rels[0].organizationId).toBe(provider.id);
+    expect(
+      await prisma.organization.count({ where: { kind: 'SOCIALOPS' } }),
+    ).toBe(1);
   });
 });
 
