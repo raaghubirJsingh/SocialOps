@@ -67,13 +67,17 @@ Final verified state of `apps/web` on Node.js 22.23.4:
 - `npm run test --workspace=apps/web`: 18/18 suites, 221/221 tests passing,
   including `client-agency-relationships-panel.test.tsx` at 8/8. The previously
   recorded figure of "12 passed" was incorrect; the spec contains 8 tests.
-- `npm run lint --workspace=apps/web`: still FAILS with 21 problems (8 errors,
-  13 warnings), all in files unrelated to this task. Not fixed here.
+- `npm run lint --workspace=apps/web`: PASSES (exit 0) with 3 warnings at the
+  time of writing, all `react-hooks/incompatible-library` against TanStack
+  Query/Virtual and react-hook-form internals, which cannot be satisfied without
+  replacing those libraries. Before the lint cleanup it was 8 errors and 13
+  warnings.
 
 Known verification limitations:
 
-- Web lint fails on 8 pre-existing errors in unrelated files (super-admin,
-  auth, raw-data, content, hooks). Out of scope for this task; not fixed.
+- Web lint: 3 remaining `react-hooks/incompatible-library` warnings against
+  TanStack Query/Virtual and react-hook-form internals. Not fixable without
+  replacing those libraries, so they are left visible rather than suppressed.
 - Component tests do not yet simulate actual clicks, dialog confirmation,
   or mutation-pending/success transitions.
 - API relationship/RBAC integration tests were not run because an approved

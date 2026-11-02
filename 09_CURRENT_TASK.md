@@ -50,12 +50,16 @@ Final verified state of `apps/web` on Node.js 22.23.4:
 - `tsc --noEmit`: exit 0, zero errors.
 - `npm run test --workspace=apps/web`: 18/18 suites, 221/221 tests passing,
   including this panel spec at 8/8 (not 12).
-- `npm run lint --workspace=apps/web`: still FAILS with 21 problems (8 errors,
-  13 warnings), all in files unrelated to this task.
+- `npm run lint --workspace=apps/web`: PASSES (exit 0) with 3 warnings, all
+  `react-hooks/incompatible-library` against TanStack Query/Virtual and
+  react-hook-form internals (not fixable without replacing those libraries).
+  Before the lint cleanup: 8 errors and 13 warnings.
 
 Known limitations:
 
-- Web lint fails on 8 pre-existing errors in unrelated files; not fixed here.
+- Web lint: 3 remaining `react-hooks/incompatible-library` warnings against
+  TanStack Query/Virtual and react-hook-form; not fixable without replacing
+  those libraries.
 - Component tests do not yet simulate actual clicks, dialog confirmation,
   or mutation-pending/success transitions.
 - API relationship/RBAC integration tests were not run because an approved
