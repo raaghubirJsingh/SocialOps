@@ -101,6 +101,27 @@ export class ClientOnboardingService {
   }
 
   /**
+   * Serialize Client-activation writes for ONE User inside a transaction.
+   *
+   * A PostgreSQL transaction-scoped advisory lock is used because the schema
+   * has no uniqueness rule tying a Client to its owner (`Client_ownerUserId_idx`
+   * is a plain index), and adding one is a schema change that is neither
+   * approved nor safe for pre-existing data. `pg_advisory_xact_lock` needs no
+   * table, is released automatically when the transaction ends (commit OR
+   * rollback), and gives a deterministic "first writer wins" order for
+   * double-clicks and retried requests.
+   */
+  private async lockUserActivation(
+    tx: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<void> {
+    // The lock function returns PostgreSQL `void`, which Prisma cannot
+    // deserialize, so the call is wrapped in a sub-select and only a
+    // deserializable column is returned.
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext(${userId}::text), 0)) AS activation_lock`;
+  }
+
+  /**
    * Run an activation unit of work in ONE transaction, healing the only two
    * failures a transaction cannot heal by itself.
    *
@@ -270,6 +291,22 @@ export class ClientOnboardingService {
       // Provider, or nothing is written. A failed activation therefore never
       // leaves an orphan Client that cannot connect anything.
       const client = await this.runActivationTransaction(async (tx) => {
+        // Serialize concurrent activations of THIS User, then re-check the
+        // ownership inside the transaction. The pre-check above is outside it
+        // and two simultaneous clicks can both pass it - there is no database
+        // constraint that makes a Client unique per owner, so without this
+        // lock a double click would create TWO Clients for one account.
+        await this.lockUserActivation(tx, user.sub);
+        const raced = await tx.client.findFirst({
+          where: { ownerUserId: user.sub },
+          select: { id: true },
+        });
+        if (raced) {
+          throw new ConflictException({
+            code: 'CLIENT_ALREADY_BOUND',
+            detail: 'This User already owns a Client',
+          });
+        }
         const created = await tx.client.create({
           data: {
             ...profile,
@@ -327,6 +364,19 @@ export class ClientOnboardingService {
     // when the caller actually supplied intake, and otherwise report
     // precisely what the account record is missing.
     const client = await this.prisma.$transaction(async (tx) => {
+      // Same double-submit guard as the 1-Click path: a second concurrent
+      // intake must not create a second PENDING draft for the same account.
+      await this.lockUserActivation(tx, user.sub);
+      const raced = await tx.client.findFirst({
+        where: { ownerUserId: user.sub },
+        select: { id: true },
+      });
+      if (raced) {
+        throw new ConflictException({
+          code: 'CLIENT_ALREADY_BOUND',
+          detail: 'This User already owns a Client',
+        });
+      }
       const created = await tx.client.create({
         data: {
           ...this.legacyIntakeOrExplain(dto, missing),

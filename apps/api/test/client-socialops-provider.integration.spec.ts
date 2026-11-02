@@ -271,11 +271,22 @@ describe('first-time self-registration attaches the platform Service Provider', 
  */
 describe('an external Agency owning the preferred provider slug does not block activation', () => {
   it('provisions the platform provider under an alternate slug and ACTIVATES', async () => {
-    // Start from "provider not provisioned yet" so provisioning must really run.
+    // Start from "provider not provisioned yet" so provisioning must really run,
+    // and make sure the preferred slug is genuinely free first.
     await prisma.clientAgencyRelationship.deleteMany({
       where: { organization: { kind: 'SOCIALOPS' } },
     });
     await prisma.organization.deleteMany({ where: { kind: 'SOCIALOPS' } });
+    const previousSquatters = await prisma.organization.findMany({
+      where: { slug: 'socialops' },
+      select: { id: true },
+    });
+    for (const previous of previousSquatters) {
+      await prisma.clientAgencyRelationship.deleteMany({
+        where: { organizationId: previous.id },
+      });
+      await prisma.organization.deleteMany({ where: { id: previous.id } });
+    }
 
     const squatter = await prisma.organization.create({
       data: {

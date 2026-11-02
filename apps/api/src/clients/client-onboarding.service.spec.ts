@@ -1,4 +1,5 @@
 import { jest } from '@jest/globals';
+import { ConflictException } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { JwtAccessPayload } from '../auth/types/jwt-payload.type.js';
@@ -56,11 +57,14 @@ function makeHarness(options: {
     client: {
       create: jest.fn(),
       findUnique: jest.fn(),
+      findFirst: jest.fn(async () => null as { id: string } | null),
       update: jest.fn(),
     },
     clientEvent: {
       create: jest.fn(),
     },
+    // `pg_advisory_xact_lock` (per-User activation serialization).
+    $queryRaw: jest.fn(async () => [] as unknown[]),
   };
   const createdClient = {
     id: CLIENT_ID,
@@ -552,6 +556,28 @@ describe('ClientOnboardingService - platform Service Provider recovery', () => {
 
     // Bounded: exactly one retry, never an unbounded loop.
     expect(harness.prisma.$transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses a double activation that won the race inside the transaction', async () => {
+    // Two simultaneous 1-Click clicks: both pass the pre-check outside the
+    // transaction, then the advisory lock serialises them. The loser must see
+    // the Client the winner just committed - never a second Client row.
+    const harness = makeHarness();
+    asMock(harness.transaction.client.findFirst).mockResolvedValue({
+      id: CLIENT_ID,
+    });
+
+    const err = await harness.service
+      .startSelfRegistration(USER, {})
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as ConflictException).getResponse()).toMatchObject({
+      code: 'CLIENT_ALREADY_BOUND',
+    });
+    // No duplicate Client, no relationship, no audit trail.
+    expect(harness.transaction.client.create).not.toHaveBeenCalled();
+    expect(harness.socialOpsProvider.attachIfUnmanaged).not.toHaveBeenCalled();
   });
 
   it('propagates a provisioning failure with nothing written outside the rolled-back transaction', async () => {
