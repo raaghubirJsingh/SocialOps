@@ -41,23 +41,39 @@ Re-verification on integration (Node.js 22.23.4, commit `3e572fd`):
   raw-data, content, hooks); the five changed files contribute 0 problems. The
   earlier claim that web lint "passed" is withdrawn — lint does not pass on
   this tree.
-- Web Jest: the claim "focused Web tests: 12 passed" is NOT reproducible.
-  `__tests__/client-agency-relationships-panel.test.tsx` terminates at import
-  with 0 tests run (`createNoMappedModuleFoundError` on
-  `@/components/ui/button`). The cause is pre-existing and unrelated to this
-  UI: `apps/web/jest.config.cjs` maps `'^@/(.*)$'` to `<rootDir>/$1`, which
-  does not resolve runtime `@/` imports under Jest 30.5.2. It affects 15 of 18
-  suites — only suites with no runtime `@/` import pass. Confirmed the mapped
-  target files exist on disk, and the failure is identical without
-  `--experimental-vm-modules`.
+- Web Jest: the claim "focused Web tests: 12 passed" was NOT reproducible. The
+  panel spec terminated at import with 0 tests run
+  (`createNoMappedModuleFoundError`). Two pre-existing harness defects were
+  found, fixed and verified in this branch, which is why the suite is now
+  green (see below).
 - `git diff --check`: clean.
+
+Test harness repair (two defects, each fixed as its own commit):
+
+- `fcef6fc` — `jest-resolve@30.5.2` returns null from `findNodeModule()` for an
+  absolute path with no extension, i.e. Jest 30 no longer appends
+  `moduleFileExtensions` to a `moduleNameMapper` target, so `'<rootDir>/$1'`
+  could never resolve an extensionless `@/...`. The mapping now enumerates
+  extension candidates. Effect: 3/17 suites and 18 tests passing became 13/18
+  suites and 172 tests passing.
+- `9225684` — the remaining 5 suites import real Next.js pages, and
+  `next/navigation` re-exports `@swc/helpers` ESM, which CommonJS Jest cannot
+  require. Only `@swc/helpers` is now allowed through the transform. Effect:
+  18/18 suites and 221/221 tests passing.
+
+Final verified state of `apps/web` on Node.js 22.23.4:
+
+- `tsc --noEmit`: exit 0, zero errors.
+- `npm run test --workspace=apps/web`: 18/18 suites, 221/221 tests passing,
+  including `client-agency-relationships-panel.test.tsx` at 8/8. The previously
+  recorded figure of "12 passed" was incorrect; the spec contains 8 tests.
+- `npm run lint --workspace=apps/web`: still FAILS with 21 problems (8 errors,
+  13 warnings), all in files unrelated to this task. Not fixed here.
 
 Known verification limitations:
 
-- The web test harness cannot execute any suite containing a runtime `@/`
-  import, so the panel component currently has no executed test coverage.
-  Repairing the Jest `moduleNameMapper` configuration is a project
-  configuration change requiring separate approval and was not made here.
+- Web lint fails on 8 pre-existing errors in unrelated files (super-admin,
+  auth, raw-data, content, hooks). Out of scope for this task; not fixed.
 - Component tests do not yet simulate actual clicks, dialog confirmation,
   or mutation-pending/success transitions.
 - API relationship/RBAC integration tests were not run because an approved

@@ -39,17 +39,23 @@ Re-verification on integration (Node.js 22.23.4, commit `3e572fd`):
 - `eslint` (apps/web): FAILS with 21 problems (8 errors, 13 warnings), all in
   files this task does not touch; the changed files contribute 0 problems. The
   earlier "web lint: passed" claim is withdrawn.
-- Web Jest: "12 passed" is NOT reproducible — the suite exits at import with 0
-  tests run because `apps/web/jest.config.cjs`'s `'^@/(.*)$'` mapping does not
-  resolve runtime `@/` imports under Jest 30.5.2 (pre-existing, affects 15 of
-  18 suites, unrelated to this UI).
+- Web Jest: "12 passed" was NOT reproducible — the spec exited at import with 0
+  tests run. Two pre-existing harness defects (`moduleNameMapper` extension
+  resolution under Jest 30, and `@swc/helpers` ESM via `next/navigation`) were
+  fixed in `fcef6fc` and `9225684`.
 - `git diff --check`: clean.
+
+Final verified state of `apps/web` on Node.js 22.23.4:
+
+- `tsc --noEmit`: exit 0, zero errors.
+- `npm run test --workspace=apps/web`: 18/18 suites, 221/221 tests passing,
+  including this panel spec at 8/8 (not 12).
+- `npm run lint --workspace=apps/web`: still FAILS with 21 problems (8 errors,
+  13 warnings), all in files unrelated to this task.
 
 Known limitations:
 
-- Web test harness cannot execute suites with runtime `@/` imports, so the
-  panel has no executed test coverage; repairing `moduleNameMapper` is a
-  configuration change requiring separate approval.
+- Web lint fails on 8 pre-existing errors in unrelated files; not fixed here.
 - Component tests do not yet simulate actual clicks, dialog confirmation,
   or mutation-pending/success transitions.
 - API relationship/RBAC integration tests were not run because an approved
