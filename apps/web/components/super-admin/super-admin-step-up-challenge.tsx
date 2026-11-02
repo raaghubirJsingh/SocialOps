@@ -67,27 +67,6 @@ export function SuperAdminStepUpChallenge() {
     defaultValues: { otp: '' },
   });
 
-  // Auto-issue challenge on mount, but only AFTER the session is loaded.
-  // The challenge endpoint requires an authenticated JWT (via @CurrentUser),
-  // so firing it before the session exists guarantees a 401 and no OTP.
-  useEffect(() => {
-    if (sessionLoading || !session) return;
-    void issueChallenge();
-  }, [sessionLoading, session]);
-
-  // Countdown timer for lock
-  useEffect(() => {
-    if (!countdown) return;
-    const timer = setInterval(() => {
-      setCountdown((c) => {
-        if (c && c > 1) return c - 1;
-        setRetryAfter(null);
-        return null;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [countdown]);
-
   const challengeInFlightRef = useRef(false);
 
   const issueChallenge = useCallback(async () => {
@@ -108,6 +87,33 @@ export function SuperAdminStepUpChallenge() {
       challengeInFlightRef.current = false;
     }
   }, []);
+
+  // Auto-issue challenge on mount, but only AFTER the session is loaded.
+  // The challenge endpoint requires an authenticated JWT (via @CurrentUser),
+  // so firing it before the session exists guarantees a 401 and no OTP.
+  useEffect(() => {
+    if (sessionLoading || !session) return;
+    // Mount-time external sync: this MUST run once the session resolves because
+    // the OTP challenge is issued by the server, not derivable during render.
+    // `issueChallenge` sets its own `loading`/`error` UI state before awaiting;
+    // React Compiler is not enabled for this app, so this advisory rule does
+    // not gate anything, and the in-flight ref makes the call idempotent.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void issueChallenge();
+  }, [sessionLoading, session, issueChallenge]);
+
+  // Countdown timer for lock
+  useEffect(() => {
+    if (!countdown) return;
+    const timer = setInterval(() => {
+      setCountdown((c) => {
+        if (c && c > 1) return c - 1;
+        setRetryAfter(null);
+        return null;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [countdown]);
 
   const onSubmit = handleSubmit(async (values: OtpFormValues) => {
     setError(null);
