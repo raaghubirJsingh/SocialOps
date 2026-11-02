@@ -46,5 +46,9 @@ module.exports = {
       },
     ],
   },
+  // `next/navigation` re-exports `@swc/helpers` ESM, which CommonJS Jest cannot
+  // require; let that one node_modules package through the transform so the
+  // page-contract specs can import real Next.js pages.
+  transformIgnorePatterns: ['/node_modules/(?!@swc/helpers)'],
   testPathIgnorePatterns: ['/node_modules/', '/.next/'],
 };
