@@ -9,8 +9,20 @@ module.exports = {
   roots: ['<rootDir>/__tests__'],
   testMatch: ['**/*.test.ts?(x)'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
+  // Jest 30 no longer appends `moduleFileExtensions` to a `moduleNameMapper`
+  // target, so a bare `<rootDir>/$1` cannot resolve an extensionless `@/...`
+  // specifier (findNodeModule returns null for an absolute path with no
+  // extension). Enumerate the candidates instead; the first hit wins.
   moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/$1',
+    '^@/(.*)$': [
+      '<rootDir>/$1.ts',
+      '<rootDir>/$1.tsx',
+      '<rootDir>/$1.js',
+      '<rootDir>/$1.jsx',
+      '<rootDir>/$1/index.ts',
+      '<rootDir>/$1/index.tsx',
+      '<rootDir>/$1',
+    ],
   },
   transform: {
     '^.+\\.[tj]sx?$': [
