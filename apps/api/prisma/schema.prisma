@@ -415,6 +415,12 @@ model PendingRegistration {
   clientType ClientType?
   /// JSON snapshot of the accepted discovery conversation (L8).
   discoveryAnswers   Json?
+  /// Source discriminator (Option A): which endpoint created this row.
+  /// Conversational rows (POST /auth/registration/start) MUST carry an
+  /// accepted discovery snapshot at completion; simple rows
+  /// (POST /auth/registration/client or /agency) carry none and the
+  /// discovery gate is skipped entirely for them.
+  registrationSource RegistrationSource?
   emailVerifiedAt    DateTime?
   whatsappVerifiedAt DateTime?
   /// Pending-global OTP lock: set to now + 1h after 3 wrong attempts (L4).
@@ -1273,6 +1279,17 @@ model GlobalSetting {
 /// Verification channel for a login OTP challenge. V1 EMAIL only.
 enum LoginOtpChannel {
   EMAIL
+}
+
+/// Source discriminator for a pending registration, used to distinguish
+/// conversational discovery rows from explicit simple paths.
+///   - CONVERSATIONAL: started via POST /auth/registration/start (requires discoveryAnswers acceptance at completion)
+///   - SIMPLE_CLIENT: started via POST /auth/registration/client (explicit CLIENT, no discovery snapshot)
+///   - SIMPLE_AGENCY: started via POST /auth/registration/agency (explicit SERVICE_PROVIDER, no discovery snapshot)
+enum RegistrationSource {
+  CONVERSATIONAL
+  SIMPLE_CLIENT
+  SIMPLE_AGENCY
 }
 
 /// A 6-digit numeric OTP challenge for a login attempt. Only the Argon2id

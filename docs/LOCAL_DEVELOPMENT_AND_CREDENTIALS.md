@@ -16,17 +16,22 @@ repository, environment templates, and verified audit findings.
 
 ## 2. Development services
 
-- Native PostgreSQL: `127.0.0.1:5432`.
+- Native PostgreSQL (WSL): `127.0.0.1:5433`.
   - Selected development database. See `docs/DEVELOPMENT.md` section 3.
+  - Data directory: `C:\SocialOps\pgdata_test` (WSL, owned by `pguser`).
+  - Database: `socialops_test`. Role: `socialops_test_user`.
+  - Provisioned on demand via WSL `pg_ctl` (PostgreSQL 16.15, Alpine apk
+    `postgresql16`); see section 5.
 - Development Redis / Memurai: port `6379`.
   - Local Redis-compatible service used by the API via `REDIS_URL`.
+  - Provisioned on demand via WSL `redis-server` (Alpine apk `redis`).
 - Local API LLM provider: `mock`.
   - `LLM_PROVIDER` is set to `mock` locally in the ignored
     `apps/api/.env`. Mock mode is deterministic and makes no external call.
-- Native PostgreSQL is the selected development database; Docker Compose
-  database use is not currently selected.
-  - `docker-compose.yml` remains a partial scaffold for environments that
-    prefer containerized services. It is not the selected path here.
+- Legacy PostgreSQL on port `5432` is preserved and NOT used by the app.
+  - `docker-compose.yml` targets port `5432` (`socialops_postgres` /
+    `socialops`); it is not the selected development path and is left
+    untouched. Docker Desktop is not available on this host.
 
 ## 3. Integration-test services
 
@@ -47,9 +52,10 @@ repository, environment templates, and verified audit findings.
 
 Names only. No values.
 
-- `DATABASE_URL`: Prisma / DB connection string. Dev targets native `5432`;
-  integration targets isolated `socialops_itest` on `55432`; CI uses an
-  ephemeral throwaway string for its service container only.
+- `DATABASE_URL`: Prisma / DB connection string. Dev targets native `5433`
+  (`socialops_test` / `socialops_test_user`); integration targets isolated
+  `socialops_itest` on `55432`; CI uses an ephemeral throwaway string for
+  its service container only.
 - `REDIS_URL`: API Redis connection URL. Dev targets local port `6379`;
   planned integration URL targets port `6380` (deferred, unverified);
   CI uses an ephemeral throwaway URL only.
@@ -122,7 +128,40 @@ Pending / unverified:
 - Redis `6380` setup is deferred.
 - Production credential management is outside the scope of this local guide.
 
-## 6. Safe next steps
+## 6. WSL dev-cluster provisioning (on-demand, approval-gated)
+
+Docker Desktop is not available on this host. The development PostgreSQL
+(5433) and Redis (6379) are provisioned on demand inside WSL (Docker
+Desktop distro) via Alpine `apk` packages.
+
+Scope locks:
+- PostgreSQL 16 only (`/usr/bin/pg_ctl`, `pg_config`, `psql`, `createuser`,
+  `createdb`). Data directory `C:\SocialOps\pgdata_test` (WSL path
+  `/mnt/host/c/SocialOps/pgdata_test`), owned by `pguser`.
+- Listener `127.0.0.1:5433` only. Database `socialops_test`, role
+  `socialops_test_user`.
+- Redis on `127.0.0.1:6379` only (`/usr/bin/redis-server`).
+- Never touches the legacy port `5432`, the integration cluster on
+  `55432`, or any other data directory.
+
+Procedure (one-time setup):
+1. `wsl -e sh -c "apk add postgresql16 redis"` (run as root; ~37 MiB).
+2. `wsl -e sh -c "adduser -D -s /bin/bash pguser"` (run as root).
+3. `wsl -e sh -c "mkdir -p /run/postgresql && chown pguser:pguser /run/postgresql"`
+4. `wsl -e sh -c "su pguser -s /bin/sh -c '/usr/bin/pg_ctl -D /mnt/host/c/SocialOps/pgdata_test initdb'"`
+5. `wsl -e sh -c "su pguser -s /bin/sh -c '/usr/bin/pg_ctl -D /mnt/host/c/SocialOps/pgdata_test -o \"-p 5433 -h 127.0.0.1\" start'"`
+6. `wsl -e sh -c "su pguser -s /bin/sh -c 'createuser -h 127.0.0.1 -p 5433 socialops_test_user'"`
+7. `wsl -e sh -c "su pguser -s /bin/sh -c 'createdb -h 127.0.0.1 -p 5433 -O socialops_test_user socialops_test'"`
+8. `wsl -e sh -c "su pguser -s /bin/sh -c 'psql -h 127.0.0.1 -p 5433 -d socialops_test -c \"GRANT USAGE ON SCHEMA public TO socialops_test_user;\"'"`
+9. `wsl -e sh -c "redis-server --port 6379 --daemonize yes"`
+10. `cd apps/api && npx prisma migrate deploy --schema=prisma/schema.prisma`
+11. `cd apps/api && npx prisma generate --schema=prisma/schema.prisma`
+
+Stop:
+- PostgreSQL: `wsl -e sh -c "su pguser -s /bin/sh -c '/usr/bin/pg_ctl -D /mnt/host/c/SocialOps/pgdata_test stop'"`
+- Redis: `wsl -e sh -c "redis-cli -p 6379 shutdown nosave"`
+
+## 7. Safe next steps
 
 - Verify isolated PostgreSQL ownership and readiness before use.
 - Establish the approved secure handoff for integration credentials.
@@ -130,7 +169,7 @@ Pending / unverified:
   approved migration workflow.
 - Never use development database credentials for integration tests.
 
-## 7. Existing-cluster restart (preservation-first, approval-gated)
+## 8. Existing-cluster restart (preservation-first, approval-gated)
 
 Scope locks: data directory `C:\SocialOps\.itest-data`; PostgreSQL 16
 binaries `C:\Program Files\PostgreSQL\16\bin`; listener `127.0.0.1:55432`

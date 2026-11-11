@@ -8,9 +8,15 @@ import type { Redis } from 'ioredis';
 import request from 'supertest';
 
 import { AppModule } from '../src/app.module.js';
-import { EMAIL_VERIFICATION_PROVIDER, WHATSAPP_VERIFICATION_PROVIDER } from '../src/registration/providers/verification-provider.port.js';
+import {
+  EMAIL_VERIFICATION_PROVIDER,
+  WHATSAPP_VERIFICATION_PROVIDER,
+} from '../src/registration/providers/verification-provider.port.js';
 import type { VerificationProvider } from '../src/registration/providers/verification-provider.port.js';
-import { clearDevConsoleOutbox, readDevConsoleOutbox } from '../src/registration/providers/dev-console.provider.js';
+import {
+  clearDevConsoleOutbox,
+  readDevConsoleOutbox,
+} from '../src/registration/providers/dev-console.provider.js';
 import { ReminderService } from '../src/registration/reminder/reminder.service.js';
 import { REDIS_CLIENT } from '../src/redis/redis.constants.js';
 jest.setTimeout(30000);
@@ -38,8 +44,10 @@ import { assertDisposableTestDatabase } from '../src/common/disposable-database.
  */
 
 process.loadEnvFile();
-if (!process.env.JWT_ACCESS_SECRET) process.env.JWT_ACCESS_SECRET = 'integration-reg-access-32-chars-min!';
-if (!process.env.JWT_REFRESH_SECRET) process.env.JWT_REFRESH_SECRET = 'integration-reg-refresh-32-chars!!';
+if (!process.env.JWT_ACCESS_SECRET)
+  process.env.JWT_ACCESS_SECRET = 'integration-reg-access-32-chars-min!';
+if (!process.env.JWT_REFRESH_SECRET)
+  process.env.JWT_REFRESH_SECRET = 'integration-reg-refresh-32-chars!!';
 if (!process.env.JWT_ACCESS_TTL) process.env.JWT_ACCESS_TTL = '900';
 if (!process.env.JWT_REFRESH_TTL) process.env.JWT_REFRESH_TTL = '604800';
 process.env.AUTH_DEV_AUTO_VERIFY_REGISTER = 'false';
@@ -61,23 +69,23 @@ let moduleRef: TestingModule;
 let redis: Redis;
 
 const baseStart = (name: string, overrides: Record<string, unknown> = {}) => ({
-    fullName: `Reg User ${name}`,
-    email: testEmail(name),
-    phone: { country: 'IN', number: '9876543210' },
-    accountType: 'CLIENT',
-    // Accepted discovery snapshot (Option A): the frontend's
-    // discoveryAnswersSnapshot always sets discoveryAccepted: true and a
-    // definite classification before /start is submitted. The completion
-    // gate now enforces this, so every test that completes registration
-    // must send an accepted snapshot.
-    discoveryAnswers: {
-      root: 'own',
-      ownBranch: 'personal',
-      classification: 'CLIENT',
-      discoveryAccepted: true,
-    },
-    ...overrides,
-  });
+  fullName: `Reg User ${name}`,
+  email: testEmail(name),
+  phone: { country: 'IN', number: '9876543210' },
+  accountType: 'CLIENT',
+  // Accepted discovery snapshot (Option A): the frontend's
+  // discoveryAnswersSnapshot always sets discoveryAccepted: true and a
+  // definite classification before /start is submitted. The completion
+  // gate now enforces this, so every test that completes registration
+  // must send an accepted snapshot.
+  discoveryAnswers: {
+    root: 'own',
+    ownBranch: 'personal',
+    classification: 'CLIENT',
+    discoveryAccepted: true,
+  },
+  ...overrides,
+});
 
 /** Flush the five registration rate-limit buckets (fresh 15-min window). */
 async function flushRateLimits(): Promise<void> {
@@ -107,7 +115,10 @@ async function startPending(
     .post('/api/auth/registration/start')
     .send(baseStart(name, overrides));
   expect(res.status).toBe(201);
-  return { token: res.body.resumeToken as string, body: res.body as Record<string, unknown> };
+  return {
+    token: res.body.resumeToken as string,
+    body: res.body as Record<string, unknown>,
+  };
 }
 
 async function verifyChannel(token: string, channel: 'EMAIL' | 'WHATSAPP') {
@@ -118,7 +129,9 @@ async function verifyChannel(token: string, channel: 'EMAIL' | 'WHATSAPP') {
 }
 
 async function cleanup(): Promise<void> {
-  await prisma.pendingRegistration.deleteMany({ where: { email: { contains: runTag } } });
+  await prisma.pendingRegistration.deleteMany({
+    where: { email: { contains: runTag } },
+  });
   const users = await prisma.user.findMany({
     where: { email: { contains: runTag } },
     select: { id: true },
@@ -130,9 +143,15 @@ async function cleanup(): Promise<void> {
       select: { organizationId: true },
     });
     const orgIds = [...new Set(memberships.map((m) => m.organizationId))];
-    await prisma.organizationMembership.deleteMany({ where: { userId: { in: userIds } } });
-    await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
-    await prisma.loginOtpChallenge.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.organizationMembership.deleteMany({
+      where: { userId: { in: userIds } },
+    });
+    await prisma.refreshToken.deleteMany({
+      where: { userId: { in: userIds } },
+    });
+    await prisma.loginOtpChallenge.deleteMany({
+      where: { userId: { in: userIds } },
+    });
     if (orgIds.length > 0) {
       await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
     }
@@ -144,7 +163,10 @@ const prisma = new PrismaService();
 
 const diagnosticClock = process.hrtime.bigint();
 
-async function diagnosticPhase<T>(name: string, work: () => T | Promise<T>): Promise<T> {
+async function diagnosticPhase<T>(
+  name: string,
+  work: () => T | Promise<T>,
+): Promise<T> {
   const startedAt = Date.now();
   const elapsedStart = process.hrtime.bigint();
   process.stderr.write(
@@ -152,13 +174,17 @@ async function diagnosticPhase<T>(name: string, work: () => T | Promise<T>): Pro
   );
   try {
     const result = await work();
-    const durationMs = Number((process.hrtime.bigint() - elapsedStart) / 1_000_000n);
+    const durationMs = Number(
+      (process.hrtime.bigint() - elapsedStart) / 1_000_000n,
+    );
     process.stderr.write(
       `[registration-diagnostic] ${name} completed duration_ms=${durationMs}\n`,
     );
     return result;
   } catch (error) {
-    const durationMs = Number((process.hrtime.bigint() - elapsedStart) / 1_000_000n);
+    const durationMs = Number(
+      (process.hrtime.bigint() - elapsedStart) / 1_000_000n,
+    );
     const errorType = error instanceof Error ? error.name : typeof error;
     process.stderr.write(
       `[registration-diagnostic] ${name} failed error_type=${errorType} duration_ms=${durationMs}\n`,
@@ -196,8 +222,9 @@ afterAll(async () => {
 
 describe('Registration Phase v1.0 (staged conversational registration)', () => {
   it('completes the full CLIENT journey: dual verification -> password -> login (no session before completion)', async () => {
-    const { token, body } = await diagnosticPhase('firstTest.startPending', () =>
-      startPending('happy'),
+    const { token, body } = await diagnosticPhase(
+      'firstTest.startPending',
+      () => startPending('happy'),
     );
     expect(body.status).toBe('pending_created');
     expect(body.maskedEmail).toContain('***@');
@@ -222,8 +249,9 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
     );
     expect(passwordBeforeVerification.status).toBe(403);
 
-    const emailVerification = await diagnosticPhase('firstTest.verifyEmail', () =>
-      verifyChannel(token, 'EMAIL'),
+    const emailVerification = await diagnosticPhase(
+      'firstTest.verifyEmail',
+      () => verifyChannel(token, 'EMAIL'),
     );
     expect(emailVerification.status).toBe(200);
 
@@ -268,13 +296,15 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
     // PendingRegistration is gone; the current resume token died with it.
     expect(
       await diagnosticPhase('firstTest.pendingCountAfterCompletion', () =>
-        prisma.pendingRegistration.count({ where: { email: testEmail('happy') } }),
+        prisma.pendingRegistration.count({
+          where: { email: testEmail('happy') },
+        }),
       ),
     ).toBe(0);
-    const resumeOldToken = await diagnosticPhase('firstTest.resumeOldToken', () =>
-      http
-        .post('/api/auth/registration/resume')
-        .send({ resumeToken: token }),
+    const resumeOldToken = await diagnosticPhase(
+      'firstTest.resumeOldToken',
+      () =>
+        http.post('/api/auth/registration/resume').send({ resumeToken: token }),
     );
     expect(resumeOldToken.status).toBe(404);
 
@@ -290,10 +320,14 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
     expect(step1.body.status).toBe('otp_required');
     // Read OTP from dev console outbox
     const outbox = readDevConsoleOutbox();
-    const lastMsg = outbox.find((m) => m.channel === 'EMAIL' && m.message.to === testEmail('happy'));
-    if (!lastMsg) throw new Error(`No OTP message in outbox for ${testEmail('happy')}`);
+    const lastMsg = outbox.find(
+      (m) => m.channel === 'EMAIL' && m.message.to === testEmail('happy'),
+    );
+    if (!lastMsg)
+      throw new Error(`No OTP message in outbox for ${testEmail('happy')}`);
     const match = lastMsg.message.body.match(/login code is (\d{6})/);
-    if (!match) throw new Error(`Could not extract OTP from: ${lastMsg.message.body}`);
+    if (!match)
+      throw new Error(`Could not extract OTP from: ${lastMsg.message.body}`);
     const otp = match[1];
     const step2 = await diagnosticPhase('firstTest.login.step2', () =>
       http
@@ -359,9 +393,14 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
 
     await flushRateLimits();
     clearDevConsoleOutbox();
-    const resumed = await http.post('/api/auth/registration/start').send(
-      baseStart('dup-pending', { resumeToken: token, fullName: 'Edited Name' }),
-    );
+    const resumed = await http
+      .post('/api/auth/registration/start')
+      .send(
+        baseStart('dup-pending', {
+          resumeToken: token,
+          fullName: 'Edited Name',
+        }),
+      );
     expect(resumed.status).toBe(201);
     expect(resumed.body.status).toBe('pending_resumed');
     expect(resumed.body.expiresAt).toBe(row1.expiresAt.toISOString()); // no timer reset
@@ -422,7 +461,9 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
       .post('/api/auth/registration/password')
       .send({ resumeToken: token, password: PASSWORD });
     expect(withoutClass.status).toBe(403);
-    expect(JSON.stringify(withoutClass.body)).toContain('Account type is required');
+    expect(JSON.stringify(withoutClass.body)).toContain(
+      'Account type is required',
+    );
 
     const withClass = await http.post('/api/auth/registration/password').send({
       resumeToken: token,
@@ -478,7 +519,9 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
       // Uniform generic line - no discovery-specific detail leaks.
       expect(JSON.stringify(res.body)).toContain('Invalid or expired code');
       expect(
-        await prisma.user.count({ where: { email: testEmail('disc-omitted') } }),
+        await prisma.user.count({
+          where: { email: testEmail('disc-omitted') },
+        }),
       ).toBe(0);
     });
 
@@ -561,7 +604,9 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
     it('never creates a User when completion is rejected for invalid discovery (pending survives)', async () => {
       const { token } = await attemptCompletion('disc-no-user', {});
       expect(
-        await prisma.user.count({ where: { email: testEmail('disc-no-user') } }),
+        await prisma.user.count({
+          where: { email: testEmail('disc-no-user') },
+        }),
       ).toBe(0);
       // The pending row is NOT deleted on a rejected completion.
       const pending = await prisma.pendingRegistration.findUnique({
@@ -609,14 +654,12 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
       // Resume 1: incoming discovery omitted -> stored snapshot preserved.
       await flushRateLimits();
       clearDevConsoleOutbox();
-      const omitResume = await http
-        .post('/api/auth/registration/start')
-        .send(
-          baseStart('disc-resume-preserve', {
-            resumeToken: token,
-            discoveryAnswers: undefined,
-          }),
-        );
+      const omitResume = await http.post('/api/auth/registration/start').send(
+        baseStart('disc-resume-preserve', {
+          resumeToken: token,
+          discoveryAnswers: undefined,
+        }),
+      );
       expect(omitResume.status).toBe(201);
       expect(omitResume.body.status).toBe('pending_resumed');
       const afterOmit = await prisma.pendingRegistration.findUniqueOrThrow({
@@ -662,15 +705,13 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
         classification: 'SERVICE_PROVIDER',
         discoveryAccepted: true,
       };
-      const updated = await http
-        .post('/api/auth/registration/start')
-        .send(
-          baseStart('disc-resume-update', {
-            resumeToken: token,
-            accountType: 'SERVICE_PROVIDER',
-            discoveryAnswers: newAccepted,
-          }),
-        );
+      const updated = await http.post('/api/auth/registration/start').send(
+        baseStart('disc-resume-update', {
+          resumeToken: token,
+          accountType: 'SERVICE_PROVIDER',
+          discoveryAnswers: newAccepted,
+        }),
+      );
       expect(updated.status).toBe(201);
       const after = await prisma.pendingRegistration.findUniqueOrThrow({
         where: { email: testEmail('disc-resume-update') },
@@ -816,7 +857,9 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
     const reminderService = () => moduleRef.get(ReminderService);
     const providers = () => ({
       email: moduleRef.get<VerificationProvider>(EMAIL_VERIFICATION_PROVIDER),
-      whatsapp: moduleRef.get<VerificationProvider>(WHATSAPP_VERIFICATION_PROVIDER),
+      whatsapp: moduleRef.get<VerificationProvider>(
+        WHATSAPP_VERIFICATION_PROVIDER,
+      ),
     });
 
     async function newPending(name: string): Promise<string> {
@@ -830,7 +873,9 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
     }
     async function resumeStatus(token: string) {
       return (
-        await http.post('/api/auth/registration/resume').send({ resumeToken: token })
+        await http
+          .post('/api/auth/registration/resume')
+          .send({ resumeToken: token })
       ).status;
     }
 
@@ -980,8 +1025,12 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
     });
   });
   it('L14: an unavailable provider never bypasses verification (pending stays active, both verified required)', async () => {
-    const emailProvider = moduleRef.get<VerificationProvider>(EMAIL_VERIFICATION_PROVIDER);
-    const availSpy = jest.spyOn(emailProvider, 'isAvailable').mockReturnValue(false);
+    const emailProvider = moduleRef.get<VerificationProvider>(
+      EMAIL_VERIFICATION_PROVIDER,
+    );
+    const availSpy = jest
+      .spyOn(emailProvider, 'isAvailable')
+      .mockReturnValue(false);
     const { token, body } = await startPending('provider-down');
     const sendStatus = body.sendStatus as { email: string; whatsapp: string };
     expect(sendStatus.email).toBe('unavailable');
@@ -994,7 +1043,9 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
       .post('/api/auth/registration/password')
       .send({ resumeToken: token, password: PASSWORD });
     expect(blocked.status).toBe(403);
-    expect(JSON.stringify(blocked.body)).toContain('Both verifications must be completed');
+    expect(JSON.stringify(blocked.body)).toContain(
+      'Both verifications must be completed',
+    );
 
     // Later retry of the email channel works: no bypass, no quota abuse.
     const resend = await http
@@ -1013,7 +1064,9 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
   });
 
   it('provisions an Organization + OWNER membership only for SERVICE_PROVIDER (CLIENT gets none)', async () => {
-    const sp = await startPending('sp-prov', { accountType: 'SERVICE_PROVIDER' });
+    const sp = await startPending('sp-prov', {
+      accountType: 'SERVICE_PROVIDER',
+    });
     await verifyChannel(sp.token, 'EMAIL');
     await verifyChannel(sp.token, 'WHATSAPP');
     await http
@@ -1034,7 +1087,9 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
       where: { email: testEmail('happy') },
     });
     expect(
-      await prisma.organizationMembership.count({ where: { userId: clientUser.id } }),
+      await prisma.organizationMembership.count({
+        where: { userId: clientUser.id },
+      }),
     ).toBe(0);
   });
 
@@ -1046,11 +1101,19 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
 
     // Route-surface guard: no user/profile mutation endpoints exist at
     // all, so User.email is structurally immutable.
-    expect((await http.patch('/api/users/me').send({ email: 'x@y.test' })).status).toBe(404);
-    expect((await http.put('/api/users/me').send({ email: 'x@y.test' })).status).toBe(404);
+    expect(
+      (await http.patch('/api/users/me').send({ email: 'x@y.test' })).status,
+    ).toBe(404);
+    expect(
+      (await http.put('/api/users/me').send({ email: 'x@y.test' })).status,
+    ).toBe(404);
     expect((await http.get('/api/users/me')).status).toBe(404);
-    expect((await http.patch('/api/auth/registration/password').send({})).status).toBe(404);
-    expect((await http.put('/api/auth/registration/start').send({})).status).toBe(404);
+    expect(
+      (await http.patch('/api/auth/registration/password').send({})).status,
+    ).toBe(404);
+    expect(
+      (await http.put('/api/auth/registration/start').send({})).status,
+    ).toBe(404);
   });
 
   it('structural (D1-A): PendingRegistration exposes exactly ONE credential field', () => {
@@ -1075,13 +1138,16 @@ describe('Registration Phase v1.0 (staged conversational registration)', () => {
       'lockedUntil',
       'otps',
       'phone',
+      'registrationSource',
       'reminderState',
       'resumeTokenHash',
       'updatedAt',
       'whatsappVerifiedAt',
     ]);
     expect(names).not.toContain('registrationRefHash');
-    const credentialLike = names.filter((n) => /token|secret|credential|key/i.test(n));
+    const credentialLike = names.filter((n) =>
+      /token|secret|credential|key/i.test(n),
+    );
     expect(credentialLike).toEqual(['resumeTokenHash']);
   });
 });
