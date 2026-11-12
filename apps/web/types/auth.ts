@@ -172,6 +172,37 @@ export interface RegistrationStartRequest {
   resumeToken?: string;
 }
 
+/**
+ * Request body for POST /api/auth/registration/client.
+ *
+ * Explicit CLIENT registration (simple form). Carries NO conversational
+ * discovery snapshot: the account type is explicit and server-validated,
+ * never inferred from discovery answers.
+ */
+export interface RegisterClientRequest {
+  fullName: string;
+  email: string;
+  phone: UserPhoneInput;
+  /** Optional ClientType (INDIVIDUAL | BUSINESS). Not inferred. */
+  clientType?: ClientType | null;
+  password: string;
+}
+
+/**
+ * Request body for POST /api/auth/registration/agency.
+ *
+ * Explicit SERVICE_PROVIDER / Agency registration (simple form). Carries
+ * NO conversational discovery snapshot: the account type is explicit and
+ * server-validated, never inferred from discovery answers.
+ */
+export interface RegisterAgencyRequest {
+  fullName: string;
+  email: string;
+  phone: UserPhoneInput;
+  organizationName: string;
+  password: string;
+}
+
 export interface RegistrationStartResponse {
   status: 'pending_created' | 'pending_resumed';
   resumeToken: string;
@@ -285,6 +316,24 @@ export interface RegisterFreelancerRequest {
   fullName: string;
   email: string;
   phone: UserPhoneInput;
+  password: string;
+}
+
+/**
+ * Request body for the News Organisation registration endpoint (REG-04, REG-05).
+ *
+ * Creates a User (SERVICE_PROVIDER accountType) plus an Organization
+ * (kind: NEWS_ORGANIZATION, verificationStatus: PENDING). The registrant
+ * is NOT automatically granted OWNER membership.
+ */
+export interface RegisterNewsOrganisationRequest {
+  fullName: string;
+  email: string;
+  phone: UserPhoneInput;
+  organisationName: string;
+  website?: string;
+  organisationDescription?: string;
+  designation?: string;
   password: string;
 }
 
