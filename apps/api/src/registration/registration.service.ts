@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  InternalServerErrorException,
   Injectable,
   Logger,
   NotFoundException,
@@ -8,13 +9,20 @@ import {
 import * as argon2 from 'argon2';
 
 import { Prisma } from '@prisma/client';
-import type { ClientType, PendingRegistration } from '@prisma/client';
+import type {
+  AccountType as PrismaAccountType,
+  ClientType,
+  PendingRegistration,
+  RegistrationSource,
+} from '@prisma/client';
 
 import { OrganizationProvisioningService } from '../memberships/organization-provisioning.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { deriveClientType } from './client-persona.js';
 
 import type { AccountType } from '../auth/dto/account-type.js';
+import type { RegisterAgencyDto } from '../auth/dto/register-agency.dto.js';
+import type { RegisterClientDto } from '../auth/dto/register-client.dto.js';
 import type {
   OtpResendDto,
   OtpVerifyDto,
@@ -127,14 +135,20 @@ export class RegistrationService {
   // ------------------------------------------------------------------
   // POST /auth/registration/start
   // ------------------------------------------------------------------
-  async start(dto: RegistrationStartDto): Promise<StartRegistrationResult> {
+  async start(
+    dto: RegistrationStartDto,
+    source: RegistrationSource = 'CONVERSATIONAL',
+  ): Promise<StartRegistrationResult> {
     // Email is the primary identity and the duplicate key (OPEN-9/L7).
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
       select: { id: true },
     });
     if (existingUser) {
-      throw new ConflictException({ code: 'EMAIL_IN_USE', message: EMAIL_IN_USE_MESSAGE });
+      throw new ConflictException({
+        code: 'EMAIL_IN_USE',
+        message: EMAIL_IN_USE_MESSAGE,
+      });
     }
 
     const existing = await this.pending.loadAliveByEmail(dto.email);
@@ -157,8 +171,78 @@ export class RegistrationService {
       throw new NotFoundException(PENDING_NOT_FOUND_MESSAGE);
     }
 
-    return this.createNew(dto);
+    return this.createNew(dto, source);
   }
+
+  // ------------------------------------------------------------------
+  // POST /auth/registration/client - explicit CLIENT registration
+  // ------------------------------------------------------------------
+  /**
+   * Start a pending registration for an explicit CLIENT account type.
+   *
+   * Reuses the same staged lifecycle as the conversational /start: a
+   * PendingRegistration is created (or resumed for the same email), BOTH
+   * Email and WhatsApp OTP challenges are dispatched, and a single-use
+   * resumeToken is returned. The account type is explicit and
+   * server-validated - never inferred from discovery answers.
+   *
+   * No discovery snapshot is stored: the simple registration experience
+   * has no conversational discovery to persist. The completion gate
+   * (`password`) does NOT require a discovery snapshot for rows created
+   * through this path.
+   */
+  async startClient(dto: RegisterClientDto): Promise<StartRegistrationResult> {
+    return this.start(
+      {
+        fullName: dto.fullName,
+        email: dto.email,
+        phone: dto.phone,
+        accountType: 'CLIENT',
+        clientType: dto.clientType ?? null,
+        // No discovery snapshot for the simple registration path.
+        discoveryAnswers: undefined,
+      },
+      'SIMPLE_CLIENT',
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // POST /auth/registration/agency - explicit SERVICE_PROVIDER registration
+  // ------------------------------------------------------------------
+  /**
+   * Start a pending registration for an explicit SERVICE_PROVIDER /
+   * Agency account type.
+   *
+   * Reuses the same staged lifecycle as the conversational /start: a
+   * PendingRegistration is created (or resumed for the same email), BOTH
+   * Email and WhatsApp OTP challenges are dispatched, and a single-use
+   * resumeToken is returned. The account type is explicit and
+   * server-validated - never inferred from discovery answers.
+   *
+   * The organizationName is carried on the DTO but is NOT persisted on
+   * PendingRegistration (the model has no such field). It is applied at
+   * completion time through the existing OrganizationProvisioningService
+   * contract, which derives the Organization name from the user's Full
+   * Name. The explicit organizationName is reserved for future use and
+   * is validated here only at the API boundary.
+   */
+  async startAgency(dto: RegisterAgencyDto): Promise<StartRegistrationResult> {
+    // organizationName is validated at the API boundary (Zod) but not
+    // stored on PendingRegistration. It is reserved for future use.
+    void dto.organizationName;
+    return this.start(
+      {
+        fullName: dto.fullName,
+        email: dto.email,
+        phone: dto.phone,
+        accountType: 'SERVICE_PROVIDER',
+        // No discovery snapshot for the simple registration path.
+        discoveryAnswers: undefined,
+      },
+      'SIMPLE_AGENCY',
+    );
+  }
+
   // CONTINUE-MARKER
 
   /**
@@ -168,6 +252,7 @@ export class RegistrationService {
    */
   private async createNew(
     dto: RegistrationStartDto,
+    source: RegistrationSource,
   ): Promise<StartRegistrationResult> {
     const rawToken = generateResumeToken();
 
@@ -177,15 +262,17 @@ export class RegistrationService {
         data: {
           email: dto.email,
           fullName: dto.fullName,
-          phone: dto.phone, // canonical form (OPEN-2, normalized by DTO)
+          phone: dto.phone, // canonical E.164 form, normalized by the DTO
           accountType: dto.accountType ?? null, // may be null (L13)
           // Persona: an explicit choice always wins; otherwise derive it from
           // the discovery answers the user just gave. Ambiguous answers leave
           // it null (never guessed), and the Client activation falls back.
-          clientType:
-            dto.clientType ?? deriveClientType(dto.discoveryAnswers),
+          clientType: dto.clientType ?? deriveClientType(dto.discoveryAnswers),
           // JSON snapshot (L8), cast to Prisma's InputJsonValue.
-          discoveryAnswers: dto.discoveryAnswers as Prisma.InputJsonValue | undefined,
+          discoveryAnswers: dto.discoveryAnswers as
+            Prisma.InputJsonValue | undefined,
+          // Source discriminator (Option A): which endpoint created this row.
+          registrationSource: source,
           resumeTokenHash: hashResumeToken(rawToken),
           expiresAt: this.pending.computeExpiresAt(new Date()), // +72h
         },
@@ -241,7 +328,7 @@ export class RegistrationService {
       expiresAt: pending.expiresAt.toISOString(),
       maskedEmail: maskEmail(pending.email),
       maskedPhone: maskPhone(pending.phone),
-      accountType: pending.accountType,
+      accountType: toRegistrationAccountType(pending.accountType),
       clientType: pending.clientType,
       emailVerified: Boolean(pending.emailVerifiedAt),
       whatsappVerified: Boolean(pending.whatsappVerifiedAt),
@@ -305,9 +392,7 @@ export class RegistrationService {
       dto.clientType !== undefined
         ? dto.clientType
         : (existing.clientType ??
-          deriveClientType(
-            dto.discoveryAnswers ?? existing.discoveryAnswers,
-          ));
+          deriveClientType(dto.discoveryAnswers ?? existing.discoveryAnswers));
 
     const updated = await this.prisma.pendingRegistration.update({
       where: { id: existing.id },
@@ -322,15 +407,12 @@ export class RegistrationService {
         // preserved verbatim instead. This keeps resume from invalidating
         // acceptance that the completion gate later relies on.
         ...(dto.discoveryAnswers !== undefined &&
-          RegistrationService.isAcceptedDiscovery(dto.discoveryAnswers)
+        RegistrationService.isAcceptedDiscovery(dto.discoveryAnswers)
           ? {
-              discoveryAnswers:
-                dto.discoveryAnswers as Prisma.InputJsonValue,
+              discoveryAnswers: dto.discoveryAnswers as Prisma.InputJsonValue,
             }
           : {}),
-        ...(phoneChanged
-          ? { phone: dto.phone, whatsappVerifiedAt: null }
-          : {}),
+        ...(phoneChanged ? { phone: dto.phone, whatsappVerifiedAt: null } : {}),
         // createdAt / expiresAt deliberately absent: timer never resets.
       },
     });
@@ -406,7 +488,9 @@ export class RegistrationService {
   // ------------------------------------------------------------------
   // POST /auth/registration/password - completion transaction
   // ------------------------------------------------------------------
-  async password(dto: RegistrationPasswordDto): Promise<RegistrationCompleteResponse> {
+  async password(
+    dto: RegistrationPasswordDto,
+  ): Promise<RegistrationCompleteResponse> {
     let pending = await this.pending.loadAliveByToken(dto.resumeToken);
     if (!pending) {
       throw new NotFoundException(PENDING_NOT_FOUND_MESSAGE);
@@ -425,7 +509,21 @@ export class RegistrationService {
     // ambiguous accepted discovery (ownBranch 'both' / 'mixedBranch
     // 'undecided') legitimately yields a null persona, and the server never
     // guesses one (see `deriveClientType`).
-    if (!RegistrationService.isAcceptedDiscovery(pending.discoveryAnswers)) {
+    //
+    // Simple registration rows (created via /auth/registration/client or
+    // /auth/registration/agency) carry NO discovery snapshot and are tagged
+    // with `registrationSource` = SIMPLE_CLIENT / SIMPLE_AGENCY. The gate is
+    // skipped entirely for them: there is no conversational discovery to
+    // accept, and the account type was set explicitly by the server at
+    // /start - never inferred from answers. Conversational rows
+    // (registrationSource = CONVERSATIONAL) always carry a snapshot and
+    // MUST pass the gate.
+    if (
+      pending.registrationSource === 'CONVERSATIONAL' &&
+      (pending.discoveryAnswers === null ||
+        pending.discoveryAnswers === undefined ||
+        !RegistrationService.isAcceptedDiscovery(pending.discoveryAnswers))
+    ) {
       throw new ForbiddenException(UNIFORM_INVALID_MESSAGE);
     }
     // L13: classification must be resolved BEFORE Account Creation and
@@ -480,7 +578,7 @@ export class RegistrationService {
             passwordHash,
             displayName: pending.fullName, // back-compat (§17.2 pattern)
             fullName: pending.fullName,
-            phone: pending.phone, // canonical (OPEN-2)
+            phone: pending.phone, // canonical E.164
             accountType, // non-null (L13)
             // Persona captured once here; NULL = legacy activation path.
             clientType,
@@ -502,7 +600,10 @@ export class RegistrationService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        throw new ConflictException({ code: 'EMAIL_IN_USE', message: EMAIL_IN_USE_MESSAGE });
+        throw new ConflictException({
+          code: 'EMAIL_IN_USE',
+          message: EMAIL_IN_USE_MESSAGE,
+        });
       }
       throw error;
     }
@@ -540,12 +641,12 @@ export class RegistrationService {
       this.otp.resendRemaining(pending.id, 'WHATSAPP'),
     ]);
 
-    const bothVerified = Boolean(pending.emailVerifiedAt) &&
-      Boolean(pending.whatsappVerifiedAt);
+    const bothVerified =
+      Boolean(pending.emailVerifiedAt) && Boolean(pending.whatsappVerifiedAt);
     return {
       stage: bothVerified ? 'password' : 'verification',
       expiresAt: pending.expiresAt.toISOString(),
-      accountType: pending.accountType,
+      accountType: toRegistrationAccountType(pending.accountType),
       clientType: pending.clientType,
       fullName: pending.fullName,
       maskedEmail: maskEmail(pending.email),
@@ -558,6 +659,17 @@ export class RegistrationService {
   }
 }
 
+function toRegistrationAccountType(
+  accountType: PrismaAccountType | null,
+): AccountType | null {
+  if (accountType === 'FREELANCER') {
+    throw new InternalServerErrorException(
+      'Freelancer accounts cannot use staged registration',
+    );
+  }
+  return accountType;
+}
+
 /** j***@example.com - never echo the full address back in snapshots. */
 export function maskEmail(email: string): string {
   const [local, domain] = email.split('@');
@@ -566,7 +678,7 @@ export function maskEmail(email: string): string {
   return `${head}***@${domain}`;
 }
 
-/** +91******4321 - last 4 digits only. */
+/** Mask the destination, retaining only its final four digits. */
 export function maskPhone(phone: string): string {
   const tail = phone.slice(-4);
   return `+*******${tail}`;

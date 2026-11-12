@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { accountTypeSchema } from '../../auth/dto/account-type.js';
 
-import { normalizePhone } from '../lib/phone-normalization.js';
+import { userPhoneSchema } from './user-phone.dto.js';
 
 /**
  * Zod schemas for the Registration Phase v1.0 staged endpoints.
@@ -34,14 +34,7 @@ export const registrationStartSchema = z.object({
     .min(1, 'Full name is required')
     .max(200, 'Full name must be 200 characters or fewer'),
   email: z.string().email('Invalid email format'),
-  phone: z
-    .string()
-    .min(1, 'Phone is too short')
-    .max(50, 'Phone is too long')
-    .refine((value) => normalizePhone(value) !== null, {
-      message: 'Invalid phone format',
-    })
-    .transform((value) => normalizePhone(value)!),
+  phone: userPhoneSchema,
   // Nullable: PendingRegistration.accountType MAY be null while discovery
   // is unresolved (L13). It MUST be non-null before User creation - the
   // password stage enforces that. Classification is never guessed.

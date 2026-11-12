@@ -1,0 +1,32 @@
+(node:17272) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS src/social-accounts/oauth/social-accounts-oauth.row-scope.spec.ts
+(node:1960) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS src/freelancers/freelancers.service.spec.ts
+(node:22232) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS src/freelancers/guards/freelancer-profile-complete.guard.spec.ts
+PASS src/social-accounts/oauth/providers/facebook-graph.oauth.spec.ts
+(node:4988) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS src/auth/guards/jwt-auth.guard.spec.ts
+PASS src/auth/dev-auto-verify.spec.ts
+PASS src/auth/email-audit.spec.ts
+PASS src/freelancers/guards/freelancer-context.guard.spec.ts
+(node:14400) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS src/social-accounts/oauth/social-accounts-oauth.service.spec.ts
+(node:15208) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS src/social-accounts/oauth/oauth-callback.controller.spec.ts
+PASS src/auth/auth.service.spec.ts (5.341 s)
+(node:6496) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS src/auth/auth.controller.spec.ts (5.471 s)
+
+Test Suites: 12 passed, 12 total
+Tests:       139 passed, 139 total
+Snapshots:   0 total
+Time:        6.6 s
+Ran all test suites matching auth|freelancers.

@@ -21,11 +21,15 @@ export type RevokePlatformAdminDto = z.infer<typeof revokePlatformAdminSchema>;
 
 /** Bootstrap first platform admin (one-time) */
 export const bootstrapPlatformAdminSchema = z.object({
-  /** User ID to bootstrap as platform admin */
-  userId: z.string().uuid(),
+  /** Bootstrap secret (must match BOOTSTRAP_ADMIN_SECRET) */
+  bootstrapSecret: z.string().min(1),
+  /** User ID is ignored; target is BOOTSTRAP_ADMIN_USER_ID from environment */
+  userId: z.string().uuid().optional(),
 });
 
-export type BootstrapPlatformAdminDto = z.infer<typeof bootstrapPlatformAdminSchema>;
+export type BootstrapPlatformAdminDto = z.infer<
+  typeof bootstrapPlatformAdminSchema
+>;
 
 /** Query params for paginated lists */
 export const platformAdminListQuerySchema = z.object({
@@ -34,7 +38,9 @@ export const platformAdminListQuerySchema = z.object({
   cursor: z.string().uuid().optional(),
 });
 
-export type PlatformAdminListQueryDto = z.infer<typeof platformAdminListQuerySchema>;
+export type PlatformAdminListQueryDto = z.infer<
+  typeof platformAdminListQuerySchema
+>;
 
 /** All platform permissions (for bootstrap default) */
 export const ALL_PLATFORM_PERMISSIONS: PlatformPermission[] = [
@@ -48,4 +54,5 @@ export const ALL_PLATFORM_PERMISSIONS: PlatformPermission[] = [
   'PLATFORM_ROLE_GRANT',
   'PLATFORM_ROLE_REVOKE',
   'PLATFORM_AUDIT_READ',
+  'PLATFORM_SETTINGS_MANAGE',
 ];

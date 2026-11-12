@@ -1,0 +1,84 @@
+[32m[Nest] 21656  - [39m01/11/2026, 11:42:43 am [32m    LOG[39m [38;5;3m[AuthService] [39m[32m[boot-artifact] Email verification URL for stageb6.register.stageb6-aa5e2d4b-9d83-4fb8-b057-69e349f753fa@example.test: http://localhost:3000/verify-email?token=W2pHqBNu73wFAkDHui2pp_qvPl5LpBzIZAsK1aWghnQ[39m
+[32m[Nest] 21656  - [39m01/11/2026, 11:42:43 am [32m    LOG[39m [38;5;3m[AuthService] [39m[32m[boot-artifact] Email verification URL for stageb6.indi-phone.stageb6-aa5e2d4b-9d83-4fb8-b057-69e349f753fa@example.test: http://localhost:3000/verify-email?token=22jfmBeo7wudNrM1qb5VWTqyvqH7IUtTymOLyeCLq9A[39m
+[32m[Nest] 21656  - [39m01/11/2026, 11:42:43 am [32m    LOG[39m [38;5;3m[AuthService] [39m[32m[boot-artifact] Email verification URL for stageb6.dup.stageb6-aa5e2d4b-9d83-4fb8-b057-69e349f753fa@example.test: http://localhost:3000/verify-email?token=3N55ivnbEqq-psZ-DNEgTZ-I8Xn6_wvHQF8-ObNUI9U[39m
+[32m[Nest] 21656  - [39m01/11/2026, 11:42:44 am [32m    LOG[39m [38;5;3m[DevConsole_EMAIL] [39m[32m[DEV-CONSOLE][EMAIL] to=stageb6.login.stageb6-aa5e2d4b-9d83-4fb8-b057-69e349f753fa@example.test subject="Your SocialOps login code" body="Your SocialOps login code is 110347. It is valid for 5 minutes. SocialOps will never ask you to share this code."[39m
+[32m[Nest] 21656  - [39m01/11/2026, 11:42:45 am [32m    LOG[39m [38;5;3m[DevConsole_EMAIL] [39m[32m[DEV-CONSOLE][EMAIL] to=stageb6.rotate.stageb6-aa5e2d4b-9d83-4fb8-b057-69e349f753fa@example.test subject="Your SocialOps login code" body="Your SocialOps login code is 886822. It is valid for 5 minutes. SocialOps will never ask you to share this code."[39m
+[33m[Nest] 21656  - [39m01/11/2026, 11:42:45 am [33m   WARN[39m [38;5;3m[AuthService] [39m[33mPossible token reuse for user ed70fc46-2c47-40cd-b718-fdac2c72e417; revoking all tokens[39m
+[32m[Nest] 21656  - [39m01/11/2026, 11:42:46 am [32m    LOG[39m [38;5;3m[DevConsole_EMAIL] [39m[32m[DEV-CONSOLE][EMAIL] to=stageb6.logout.stageb6-aa5e2d4b-9d83-4fb8-b057-69e349f753fa@example.test subject="Your SocialOps login code" body="Your SocialOps login code is 197271. It is valid for 5 minutes. SocialOps will never ask you to share this code."[39m
+[95m[Nest] 21656  - [39m01/11/2026, 11:42:46 am [95m  DEBUG[39m [38;5;3m[AuthService] [39m[95mRevoked refresh token hash c00b5cb6[39m
+[33m[Nest] 21656  - [39m01/11/2026, 11:42:46 am [33m   WARN[39m [38;5;3m[AuthService] [39m[33mPossible token reuse for user 206eaba6-8f45-48cc-b7d4-5c941e6b0dbf; revoking all tokens[39m
+[32m[Nest] 21656  - [39m01/11/2026, 11:42:46 am [32m    LOG[39m [38;5;3m[DevConsole_EMAIL] [39m[32m[DEV-CONSOLE][EMAIL] to=stageb6.e2e.stageb6-aa5e2d4b-9d83-4fb8-b057-69e349f753fa@example.test subject="Your SocialOps login code" body="Your SocialOps login code is 824911. It is valid for 5 minutes. SocialOps will never ask you to share this code."[39m
+[32m[Nest] 21656  - [39m01/11/2026, 11:42:47 am [32m    LOG[39m [38;5;3m[AuthService] [39m[32m[boot-artifact] Email verification URL for stageb6.hashcheck.stageb6-aa5e2d4b-9d83-4fb8-b057-69e349f753fa@example.test: http://localhost:3000/verify-email?token=YIDeDS7vsxSFfPmCXxiLNSebpT4mPjWkRo49ClL6uuI[39m
+[32m[Nest] 21656  - [39m01/11/2026, 11:42:48 am [32m    LOG[39m [38;5;3m[DevConsole_EMAIL] [39m[32m[DEV-CONSOLE][EMAIL] to=stageb6.dev-bypass-login.stageb6-aa5e2d4b-9d83-4fb8-b057-69e349f753fa@example.test subject="Your SocialOps login code" body="Your SocialOps login code is 353583. It is valid for 5 minutes. SocialOps will never ask you to share this code."[39m
+[32m[Nest] 21656  - [39m01/11/2026, 11:42:48 am [32m    LOG[39m [38;5;3m[AuthService] [39m[32m[boot-artifact] Email verification URL for stageb6.bypass-off.stageb6-aa5e2d4b-9d83-4fb8-b057-69e349f753fa@example.test: http://localhost:3000/verify-email?token=LsYyU9bJ_jj6xzyeY8iBVjm_mm4cI1jHgSFF4_61srU[39m
+[33m[Nest] 21656  - [39m01/11/2026, 11:43:12 am [33m   WARN[39m [38;5;3m[OrganizationProvisioningService] [39m[33mService Provider tenant provisioning failed for user 3a609775-f833-426b-94a3-649b2d975cfa; login will proceed and retry next time. Error: 
+Invalid `tx.organization.create()` invocation in
+C:\SocialOps\apps\api\src\memberships\organization-provisioning.service.ts:79:52
+
+  76 
+  77 try {
+  78   await this.prisma.$transaction(async (tx) => {
+→ 79     const organization = await tx.organization.create(
+The column `verificationStatus` does not exist in the current database.[39m
+[32m[Nest] 21656  - [39m01/11/2026, 11:43:12 am [32m    LOG[39m [38;5;3m[DevConsole_EMAIL] [39m[32m[DEV-CONSOLE][EMAIL] to=sp-once.provisioning-79d0da11-2cd2-4b8a-a54e-bf359e81216a@example.test subject="Your SocialOps login code" body="Your SocialOps login code is 618876. It is valid for 5 minutes. SocialOps will never ask you to share this code."[39m
+[33m[Nest] 21656  - [39m01/11/2026, 11:43:12 am [33m   WARN[39m [38;5;3m[OrganizationProvisioningService] [39m[33mService Provider tenant provisioning failed for user 6a8be9fa-6218-4118-8ede-3de319a5bd54; login will proceed and retry next time. Error: 
+Invalid `tx.organization.create()` invocation in
+C:\SocialOps\apps\api\src\memberships\organization-provisioning.service.ts:79:52
+
+  76 
+  77 try {
+  78   await this.prisma.$transaction(async (tx) => {
+→ 79     const organization = await tx.organization.create(
+The column `verificationStatus` does not exist in the current database.[39m
+[32m[Nest] 21656  - [39m01/11/2026, 11:43:12 am [32m    LOG[39m [38;5;3m[DevConsole_EMAIL] [39m[32m[DEV-CONSOLE][EMAIL] to=sp-idempotent.provisioning-79d0da11-2cd2-4b8a-a54e-bf359e81216a@example.test subject="Your SocialOps login code" body="Your SocialOps login code is 736328. It is valid for 5 minutes. SocialOps will never ask you to share this code."[39m
+[33m[Nest] 21656  - [39m01/11/2026, 11:43:13 am [33m   WARN[39m [38;5;3m[OrganizationProvisioningService] [39m[33mService Provider tenant provisioning failed for user 6a8be9fa-6218-4118-8ede-3de319a5bd54; login will proceed and retry next time. Error: 
+Invalid `tx.organization.create()` invocation in
+C:\SocialOps\apps\api\src\memberships\organization-provisioning.service.ts:79:52
+
+  76 
+  77 try {
+  78   await this.prisma.$transaction(async (tx) => {
+→ 79     const organization = await tx.organization.create(
+The column `verificationStatus` does not exist in the current database.[39m
+[32m[Nest] 21656  - [39m01/11/2026, 11:43:13 am [32m    LOG[39m [38;5;3m[DevConsole_EMAIL] [39m[32m[DEV-CONSOLE][EMAIL] to=sp-idempotent.provisioning-79d0da11-2cd2-4b8a-a54e-bf359e81216a@example.test subject="Your SocialOps login code" body="Your SocialOps login code is 282011. It is valid for 5 minutes. SocialOps will never ask you to share this code."[39m
+[33m[Nest] 21656  - [39m01/11/2026, 11:43:13 am [33m   WARN[39m [38;5;3m[OrganizationProvisioningService] [39m[33mService Provider tenant provisioning failed for user 6a8be9fa-6218-4118-8ede-3de319a5bd54; login will proceed and retry next time. Error: 
+Invalid `tx.organization.create()` invocation in
+C:\SocialOps\apps\api\src\memberships\organization-provisioning.service.ts:79:52
+
+  76 
+  77 try {
+  78   await this.prisma.$transaction(async (tx) => {
+→ 79     const organization = await tx.organization.create(
+The column `verificationStatus` does not exist in the current database.[39m
+[32m[Nest] 21656  - [39m01/11/2026, 11:43:13 am [32m    LOG[39m [38;5;3m[DevConsole_EMAIL] [39m[32m[DEV-CONSOLE][EMAIL] to=sp-idempotent.provisioning-79d0da11-2cd2-4b8a-a54e-bf359e81216a@example.test subject="Your SocialOps login code" body="Your SocialOps login code is 177405. It is valid for 5 minutes. SocialOps will never ask you to share this code."[39m
+[32m[Nest] 21656  - [39m01/11/2026, 11:43:14 am [32m    LOG[39m [38;5;3m[DevConsole_EMAIL] [39m[32m[DEV-CONSOLE][EMAIL] to=client-no-provision.provisioning-79d0da11-2cd2-4b8a-a54e-bf359e81216a@example.test subject="Your SocialOps login code" body="Your SocialOps login code is 051269. It is valid for 5 minutes. SocialOps will never ask you to share this code."[39m
+[33m[Nest] 21656  - [39m01/11/2026, 11:43:14 am [33m   WARN[39m [38;5;3m[OrganizationProvisioningService] [39m[33mService Provider tenant provisioning failed for user 65b5b4aa-bbd5-4380-8def-a18ef82dec50; login will proceed and retry next time. Error: 
+Invalid `tx.organization.create()` invocation in
+C:\SocialOps\apps\api\src\memberships\organization-provisioning.service.ts:79:52
+
+  76 
+  77 try {
+  78   await this.prisma.$transaction(async (tx) => {
+→ 79     const organization = await tx.organization.create(
+The column `verificationStatus` does not exist in the current database.[39m
+[32m[Nest] 21656  - [39m01/11/2026, 11:43:15 am [32m    LOG[39m [38;5;3m[DevConsole_EMAIL] [39m[32m[DEV-CONSOLE][EMAIL] to=sp-memberships-me.provisioning-79d0da11-2cd2-4b8a-a54e-bf359e81216a@example.test subject="Your SocialOps login code" body="Your SocialOps login code is 671801. It is valid for 5 minutes. SocialOps will never ask you to share this code."[39m
+[33m[Nest] 21656  - [39m01/11/2026, 11:43:15 am [33m   WARN[39m [38;5;3m[OrganizationProvisioningService] [39m[33mService Provider tenant provisioning failed for user 3bd46656-3586-4c71-8b2c-6829679c7711; login will proceed and retry next time. Error: 
+Invalid `tx.organization.create()` invocation in
+C:\SocialOps\apps\api\src\memberships\organization-provisioning.service.ts:79:52
+
+  76 
+  77 try {
+  78   await this.prisma.$transaction(async (tx) => {
+→ 79     const organization = await tx.organization.create(
+The column `verificationStatus` does not exist in the current database.[39m
+[32m[Nest] 21656  - [39m01/11/2026, 11:43:15 am [32m    LOG[39m [38;5;3m[DevConsole_EMAIL] [39m[32m[DEV-CONSOLE][EMAIL] to=sp-isolated-a.provisioning-79d0da11-2cd2-4b8a-a54e-bf359e81216a@example.test subject="Your SocialOps login code" body="Your SocialOps login code is 665961. It is valid for 5 minutes. SocialOps will never ask you to share this code."[39m
+[33m[Nest] 21656  - [39m01/11/2026, 11:43:16 am [33m   WARN[39m [38;5;3m[OrganizationProvisioningService] [39m[33mService Provider tenant provisioning failed for user 7f60a912-7518-45fd-88a2-3052537847a9; login will proceed and retry next time. Error: 
+Invalid `tx.organization.create()` invocation in
+C:\SocialOps\apps\api\src\memberships\organization-provisioning.service.ts:79:52
+
+  76 
+  77 try {
+  78   await this.prisma.$transaction(async (tx) => {
+→ 79     const organization = await tx.organization.create(
+The column `verificationStatus` does not exist in the current database.[39m
+[32m[Nest] 21656  - [39m01/11/2026, 11:43:16 am [32m    LOG[39m [38;5;3m[DevConsole_EMAIL] [39m[32m[DEV-CONSOLE][EMAIL] to=sp-isolated-b.provisioning-79d0da11-2cd2-4b8a-a54e-bf359e81216a@example.test subject="Your SocialOps login code" body="Your SocialOps login code is 129763. It is valid for 5 minutes. SocialOps will never ask you to share this code."[39m

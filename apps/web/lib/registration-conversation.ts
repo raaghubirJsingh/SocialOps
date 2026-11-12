@@ -61,6 +61,7 @@ export interface ConversationState {
    */
   fullName: string | null;
   phone: string | null;
+  phoneCountry: string | null;
   email: string | null;
 }
 
@@ -140,6 +141,7 @@ export function createConversation(): ConversationState {
     discoveryAccepted: false,
     fullName: null,
     phone: null,
+    phoneCountry: null,
     email: null,
   };
 }
@@ -219,15 +221,22 @@ export function identityFieldFor(
 export function submitIdentityField(
   state: ConversationState,
   value: string,
+  phoneCountry?: string,
 ): ConversationState {
   const trimmed = value.trim();
   if (!trimmed) return state;
+  if (state.stage === 'identity-phone' && !phoneCountry) return state;
 
   switch (state.stage) {
     case 'identity-name':
       return { ...state, fullName: trimmed, stage: 'identity-phone' };
     case 'identity-phone':
-      return { ...state, phone: trimmed, stage: 'identity-email' };
+      return {
+        ...state,
+        phone: trimmed,
+        phoneCountry: phoneCountry ?? null,
+        stage: 'identity-email',
+      };
     case 'identity-email':
       return { ...state, email: trimmed, stage: 'identity' };
     default:

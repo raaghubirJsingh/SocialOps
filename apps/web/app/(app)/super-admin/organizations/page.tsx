@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Building2, Search, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -14,43 +15,41 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { apiFetch } from '@/lib/api';
-import { loadSuperAdminSession } from '@/lib/super-admin-session';
+import { fetchOrganizations } from '@/lib/super-admin-api';
+import { loadSuperAdminSession, clearSuperAdminSession } from '@/lib/super-admin-session';
+import { apiFetch, ApiError } from '@/lib/api';
 
-interface Organization {
-  id: string;
-  name: string;
-  slug: string;
-  isActive: boolean;
-  kind: 'AGENCY' | 'SOCIALOPS';
-  discoveryOptIn: boolean;
-  discoveryApprovedAt: string | null;
-  createdAt: string;
-}
-
-interface PaginatedResponse<T> {
-  data: T[];
-  meta: {
-    total: number;
-    page: number;
-    limit: number;
-  };
-}
-
-function fetchWithSessionToken<T>(url: string): Promise<T> {
-  const sessionData = loadSuperAdminSession();
-  return apiFetch<T>(url, {
-    headers: { 'X-Admin-Session-Token': sessionData?.sessionToken ?? '' },
-  });
-}
-
-export default function AgenciesPage() {
-  const { data, isLoading } = useQuery({
+/**
+ * Cross-tenant organizations dashboard.
+ *
+ * Uses the centralized super-admin-api helper (fetchOrganizations) so that
+ * the X-Admin-Session-Token header injection and 403 → step-up redirect
+ * are consistent with the rest of the super-admin UI.
+ */
+export default function OrganizationsPage() {
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['superadmin', 'organizations'],
-    queryFn: () => fetchWithSessionToken<PaginatedResponse<Organization>>('/admin/organizations?limit=50'),
+    queryFn: () => fetchOrganizations({ limit: 50 }),
+    retry: false,
   });
 
   const orgs = data?.data ?? [];
+
+  // Handle 403 from expired/revoked step-up sessions by redirecting
+  // to the step-up page. The apiFetch layer already throws ApiError
+  // with status 403 — we catch it here to trigger re-authentication.
+  const handleSuperAdminError = useCallback((error: unknown) => {
+    if (error instanceof ApiError && error.status === 403) {
+      clearSuperAdminSession();
+      window.location.href = '/super-admin/step-up';
+    }
+  }, []);
+
+  useEffect(() => {
+    if (error) {
+      handleSuperAdminError(error);
+    }
+  }, [error, handleSuperAdminError]);
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6 p-6">
@@ -65,15 +64,17 @@ export default function AgenciesPage() {
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-100">Agencies</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-100">
+            Organizations
+          </h1>
           <p className="mt-1 text-sm text-slate-400">
-            Manage and monitor all service provider organizations on the platform.
+            Cross-tenant list of all registered organizations on the platform.
           </p>
         </div>
         <div className="relative w-full max-w-sm sm:w-72">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
           <Input
-            placeholder="Search agencies..."
+            placeholder="Search organizations..."
             className="pl-9 bg-slate-900/50 border-slate-800 text-slate-200"
           />
         </div>

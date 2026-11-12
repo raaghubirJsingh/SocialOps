@@ -34,6 +34,10 @@ import type {
   RegistrationResumeDto,
   RegistrationStartDto,
 } from './dto/registration.dto.js';
+import { registerAgencySchema } from '../auth/dto/register-agency.dto.js';
+import { registerClientSchema } from '../auth/dto/register-client.dto.js';
+import type { RegisterAgencyDto } from '../auth/dto/register-agency.dto.js';
+import type { RegisterClientDto } from '../auth/dto/register-client.dto.js';
 import { RateLimitService } from './rate-limit.service.js';
 import type { RegistrationRateBucket } from './rate-limit.service.js';
 import { RegistrationService } from './registration.service.js';
@@ -110,7 +114,77 @@ export class RegistrationController {
     @Res({ passthrough: true }) res: HeaderSink,
   ): Promise<unknown> {
     await this.enforce(res, 'start', { ip: this.clientIp(req) });
-    return this.registration.start(dto);
+    return this.registration.start(dto, 'CONVERSATIONAL');
+  }
+
+  // ------------------------------------------------------------------
+  // POST /auth/registration/client - explicit CLIENT registration
+  // ------------------------------------------------------------------
+  /**
+   * Start a pending registration for an explicit CLIENT account type.
+   *
+   * Reuses the same staged lifecycle as /start: a PendingRegistration is
+   * created (or resumed for the same email), BOTH Email and WhatsApp OTP
+   * challenges are dispatched, and a single-use resumeToken is returned.
+   * The account type is explicit and server-validated - never inferred
+   * from discovery answers. No conversational discovery snapshot is stored.
+   */
+  @Post('client')
+  @PublicAuth()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Start a pending CLIENT registration (rate-limited 5/15min/IP).',
+    description:
+      'Creates a PendingRegistration with accountType=CLIENT (explicit, server-set). Dispatches BOTH Email and WhatsApp OTP challenges simultaneously. Returns the raw resumeToken ONCE (stage credential, not a session). Explicit 403 "Email already in use" when the email belongs to an existing User. No conversational discovery snapshot is stored - the account type is never inferred from discovery answers.',
+  })
+  @ApiCreatedResponse({
+    description:
+      'Pending registration active: { status, resumeToken, expiresAt, maskedEmail, maskedPhone, accountType, emailVerified, whatsappVerified, sendStatus, resendRemaining, lockedUntil }.',
+  })
+  async startClient(
+    @Body(new ZodValidationPipe(registerClientSchema))
+    dto: RegisterClientDto,
+    @Req() req: IpRequest,
+    @Res({ passthrough: true }) res: HeaderSink,
+  ): Promise<unknown> {
+    await this.enforce(res, 'start', { ip: this.clientIp(req) });
+    return this.registration.startClient(dto);
+  }
+
+  // ------------------------------------------------------------------
+  // POST /auth/registration/agency - explicit SERVICE_PROVIDER registration
+  // ------------------------------------------------------------------
+  /**
+   * Start a pending registration for an explicit SERVICE_PROVIDER /
+   * Agency account type.
+   *
+   * Reuses the same staged lifecycle as /start: a PendingRegistration is
+   * created (or resumed for the same email), BOTH Email and WhatsApp OTP
+   * challenges are dispatched, and a single-use resumeToken is returned.
+   * The account type is explicit and server-validated - never inferred
+   * from discovery answers. No conversational discovery snapshot is stored.
+   */
+  @Post('agency')
+  @PublicAuth()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary:
+      'Start a pending SERVICE_PROVIDER/Agency registration (rate-limited 5/15min/IP).',
+    description:
+      'Creates a PendingRegistration with accountType=SERVICE_PROVIDER (explicit, server-set). Dispatches BOTH Email and WhatsApp OTP challenges simultaneously. Returns the raw resumeToken ONCE (stage credential, not a session). Explicit 403 "Email already in use" when the email belongs to an existing User. No conversational discovery snapshot is stored - the account type is never inferred from discovery answers. The organizationName is validated at the API boundary only; the Organization is provisioned later through the existing OrganizationProvisioningService contract.',
+  })
+  @ApiCreatedResponse({
+    description:
+      'Pending registration active: { status, resumeToken, expiresAt, maskedEmail, maskedPhone, accountType, emailVerified, whatsappVerified, sendStatus, resendRemaining, lockedUntil }.',
+  })
+  async startAgency(
+    @Body(new ZodValidationPipe(registerAgencySchema))
+    dto: RegisterAgencyDto,
+    @Req() req: IpRequest,
+    @Res({ passthrough: true }) res: HeaderSink,
+  ): Promise<unknown> {
+    await this.enforce(res, 'start', { ip: this.clientIp(req) });
+    return this.registration.startAgency(dto);
   }
 
   @Post('otp/verify')

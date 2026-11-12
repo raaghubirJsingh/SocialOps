@@ -15,6 +15,7 @@ const JWT_REFRESH_SECRET = 'test-refresh-secret-32-chars-minimum';
 function makePrismaMock(overrides: Record<string, unknown> = {}) {
     const prisma = {
     user: { create: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
+      freelancerProfile: { create: jest.fn() },
     refreshToken: {
       findUnique: jest.fn(),
       update: jest.fn(),
@@ -97,6 +98,71 @@ function makeService(prismaOverrides: Record<string, unknown> = {}) {
 }
 
 describe('AuthService', () => {
+  describe('registerFreelancer', () => {
+    it('creates a FREELANCER user and FreelancerProfile before issuing verification', async () => {
+      const { service, prisma, provisioning } = makeService();
+      (prisma.user.create as ReturnType<typeof jest.fn>).mockResolvedValue({
+        id: 'freelancer-1',
+        email: 'freelancer@example.com',
+      });
+
+      const result = await service.registerFreelancer({
+        fullName: 'Freelancer One',
+        email: 'freelancer@example.com',
+        phone: '+919876543210',
+        password: 'password123',
+      });
+
+      expect(result).toEqual({
+        status: 'verification_required',
+        email: 'freelancer@example.com',
+      });
+      expect(prisma.user.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          email: 'freelancer@example.com',
+          fullName: 'Freelancer One',
+          phone: '+919876543210',
+          accountType: 'FREELANCER',
+          isActive: false,
+          emailVerifiedAt: null,
+        }),
+      }));
+      expect(prisma.freelancerProfile.create).toHaveBeenCalledWith({
+        data: { userId: 'freelancer-1' },
+      });
+      expect(prisma.emailVerificationToken.create).toHaveBeenCalledTimes(1);
+      expect(provisioning.ensureForServiceProvider).not.toHaveBeenCalled();
+    });
+
+    it('uses the dev auto-verify contract without issuing a verification token', async () => {
+      const { service, prisma } = makeService();
+      process.env.AUTH_DEV_AUTO_VERIFY_REGISTER = 'true';
+      (prisma.user.create as ReturnType<typeof jest.fn>).mockResolvedValue({
+        id: 'freelancer-1',
+        email: 'freelancer@example.com',
+      });
+
+      const result = await service.registerFreelancer({
+        fullName: 'Freelancer One',
+        email: 'freelancer@example.com',
+        phone: '+919876543210',
+        password: 'password123',
+      });
+
+      expect(result).toEqual({
+        status: 'registration_complete',
+        email: 'freelancer@example.com',
+      });
+      expect(prisma.user.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          isActive: true,
+          emailVerifiedAt: expect.any(Date),
+        }),
+      }));
+      expect(prisma.emailVerificationToken.create).not.toHaveBeenCalled();
+    });
+  });
+
   describe('login', () => {
     it('returns otp_required for valid credentials (step 1 of 2)', async () => {
       const { service, prisma, loginOtp } = makeService();
@@ -159,6 +225,32 @@ describe('AuthService', () => {
         email: 'employee@example.com',
         challengeExpiresAt: expect.any(String),
       }));
+    });
+
+    it('preserves FREELANCER account identity when login OTP is verified', async () => {
+      const { service, prisma } = makeService();
+      (prisma.user.findUnique as ReturnType<typeof jest.fn>).mockResolvedValue({
+        id: 'freelancer-1',
+        email: 'freelancer@example.com',
+        isActive: true,
+        emailVerifiedAt: new Date(),
+        fullName: 'Freelancer One',
+        accountType: 'FREELANCER',
+        employeeProfile: null,
+        isSocialOpsAdmin: false,
+      });
+
+      const result = await service.verifyLoginOtp(
+        'freelancer@example.com',
+        '123456',
+      );
+
+      expect('accessToken' in result).toBe(true);
+      if (!('accessToken' in result)) {
+        throw new Error('Expected successful login after OTP verification');
+      }
+      expect(result.user.accountType).toBe('FREELANCER');
+      expect(result.user.isEmployee).toBe(false);
     });
 
     it('returns null fullName/accountType for a pre-migration user row', async () => {

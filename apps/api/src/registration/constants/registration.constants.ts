@@ -47,6 +47,15 @@ export const REGISTRATION_RATE_LIMITS = {
 } as const;
 
 /**
+ * Bootstrap rate-limit budget.
+ * Window is 1 hour = 3600 seconds.
+ * 5 attempts per hour per IP.
+ */
+export const BOOTSTRAP_RATE_WINDOW_SECONDS = 3600;
+
+export const BOOTSTRAP_RATE_LIMIT = 5;
+
+/**
  * Controlled Recovery locked values (Section 23).
  *
  * These govern the atomic claim/lease/abandonment lifecycle for reminder
@@ -65,7 +74,8 @@ export const REMINDER_ABANDONMENT_TIMEOUT_MINUTES = 30;
 export const REMINDER_RECONCILIATION_WINDOW_MINUTES = 15;
 
 /** Uniform message for any unknown/expired/rotated pending registration. */
-export const PENDING_NOT_FOUND_MESSAGE = 'Registration not found or has expired';
+export const PENDING_NOT_FOUND_MESSAGE =
+  'Registration not found or has expired';
 
 /** Explicit duplicate-User message (L7 - matches legacy register behavior). */
 export const EMAIL_IN_USE_MESSAGE = 'Email already in use';

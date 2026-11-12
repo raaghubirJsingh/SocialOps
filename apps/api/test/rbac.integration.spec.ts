@@ -11,10 +11,17 @@
  * Executed via `npm run test:integration --workspace=apps/api`.
  */
 import { randomUUID } from 'node:crypto';
-import { Controller, Get, INestApplication, Module, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  INestApplication,
+  Module,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
-import { PrismaClient, type OrganizationRole } from '@prisma/client';
+import { PrismaService } from '../src/prisma/prisma.service.js';
+import type { OrganizationRole } from '@prisma/client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
@@ -24,8 +31,10 @@ import { RequireMinimumRole } from '../src/rbac/decorators/require-roles.decorat
 import { RoleGuard } from '../src/rbac/guards/role.guard.js';
 import { OrganizationContextService } from '../src/rbac/organization-context.service.js';
 
-if (!process.env.JWT_ACCESS_SECRET) process.env.JWT_ACCESS_SECRET = 'integration-b7-access-secret-32-chars';
-if (!process.env.JWT_REFRESH_SECRET) process.env.JWT_REFRESH_SECRET = 'integration-b7-refresh-secret-32-chars';
+if (!process.env.JWT_ACCESS_SECRET)
+  process.env.JWT_ACCESS_SECRET = 'integration-b7-access-secret-32-chars';
+if (!process.env.JWT_REFRESH_SECRET)
+  process.env.JWT_REFRESH_SECRET = 'integration-b7-refresh-secret-32-chars';
 if (!process.env.JWT_ACCESS_TTL) process.env.JWT_ACCESS_TTL = '900';
 if (!process.env.JWT_REFRESH_TTL) process.env.JWT_REFRESH_TTL = '604800';
 
@@ -36,23 +45,30 @@ if (!process.env.JWT_REFRESH_TTL) process.env.JWT_REFRESH_TTL = '604800';
 process.env.AUTH_DEV_AUTO_VERIFY_REGISTER = 'false';
 
 /** Two-step login: login -> read OTP from dev console -> verify OTP -> tokens. */
-async function twoStepLogin(auth: AuthService, email: string, password: string) {
+async function twoStepLogin(
+  auth: AuthService,
+  email: string,
+  password: string,
+) {
   const step1 = await auth.login({ email, password });
   if ('status' in step1 && step1.status !== 'otp_required') {
     throw new Error(`Expected otp_required, got ${JSON.stringify(step1)}`);
   }
   const outbox = readDevConsoleOutbox();
-  const lastMsg = outbox.find((m) => m.channel === 'EMAIL' && m.message.to === email);
+  const lastMsg = outbox.find(
+    (m) => m.channel === 'EMAIL' && m.message.to === email,
+  );
   if (!lastMsg) throw new Error(`No OTP message in outbox for ${email}`);
   const match = lastMsg.message.body.match(/login code is (\d{6})/);
-  if (!match) throw new Error(`Could not extract OTP from: ${lastMsg.message.body}`);
+  if (!match)
+    throw new Error(`Could not extract OTP from: ${lastMsg.message.body}`);
   const otp = match[1];
   const step2 = await auth.verifyLoginOtp(email, otp);
-  if ('status' in step2) throw new Error(`OTP verification failed: ${JSON.stringify(step2)}`);
+  if ('status' in step2)
+    throw new Error(`OTP verification failed: ${JSON.stringify(step2)}`);
   return step2;
 }
 
-const prisma = new PrismaClient();
 const runTag = `stageb7-${randomUUID()}`;
 const testEmail = (name: string) => `stageb7.${name}.${runTag}@example.test`;
 const testSlug = (name: string) => `stageb7-${name}-${runTag}`;
@@ -83,6 +99,7 @@ class RbacTestModule {}
 
 let app: INestApplication;
 let http: ReturnType<typeof request>;
+let prisma: PrismaService;
 
 interface SeededUser {
   id: string;
@@ -120,7 +137,9 @@ async function seedUser(
 
   const preUser = await prisma.user.findUniqueOrThrow({ where: { email } });
   await prisma.organizationMembership.upsert({
-    where: { userId_organizationId: { userId: preUser.id, organizationId: orgId } },
+    where: {
+      userId_organizationId: { userId: preUser.id, organizationId: orgId },
+    },
     create: { userId: preUser.id, organizationId: orgId, role },
     update: { role },
   });
@@ -135,7 +154,9 @@ async function seedUser(
 
   const tokens = await twoStepLogin(authService, email, password);
 
-  const user = await prisma.user.findUnique({ where: { email: testEmail(name) } });
+  const user = await prisma.user.findUnique({
+    where: { email: testEmail(name) },
+  });
   if (!user) throw new Error(`seeded user not found: ${testEmail(name)}`);
 
   return {
@@ -149,8 +170,6 @@ async function seedUser(
 }
 
 beforeAll(async () => {
-  await prisma.$connect();
-
   const moduleRef: TestingModule = await Test.createTestingModule({
     imports: [AppModule, RbacTestModule],
   }).compile();
@@ -159,19 +178,30 @@ beforeAll(async () => {
   app.setGlobalPrefix('api');
   await app.init();
   http = request(app.getHttpServer());
+
+  prisma = app.get(PrismaService);
+  await prisma.$connect();
 });
 
 afterAll(async () => {
   // FK-safe cleanup restricted to this run's rows.
   await app.close();
-  await prisma.refreshToken.deleteMany({ where: { user: { email: { contains: runTag } } } });
-  await prisma.emailVerificationToken.deleteMany({ where: { user: { email: { contains: runTag } } } });
-  await prisma.loginOtpChallenge.deleteMany({ where: { user: { email: { contains: runTag } } } });
+  await prisma.refreshToken.deleteMany({
+    where: { user: { email: { contains: runTag } } },
+  });
+  await prisma.emailVerificationToken.deleteMany({
+    where: { user: { email: { contains: runTag } } },
+  });
+  await prisma.loginOtpChallenge.deleteMany({
+    where: { user: { email: { contains: runTag } } },
+  });
   await prisma.organizationMembership.deleteMany({
     where: { user: { email: { contains: runTag } } },
   });
   await prisma.user.deleteMany({ where: { email: { contains: runTag } } });
-  await prisma.organization.deleteMany({ where: { slug: { contains: runTag } } });
+  await prisma.organization.deleteMany({
+    where: { slug: { contains: runTag } },
+  });
   await prisma.$disconnect();
 });
 
@@ -195,7 +225,7 @@ describe('RBAC foundation (real PostgreSQL + real JWT)', () => {
     const res = await http.post('/api/auth/registration/start').send({
       fullName: 'RBAC Register Test',
       email,
-      phone: '+919876543210',
+      phone: { country: 'IN', number: '9876543210' },
     });
 
     // 201 = the route was reachable with no Authorization and no
@@ -254,10 +284,17 @@ describe('RBAC foundation (real PostgreSQL + real JWT)', () => {
     expect(step1.body.status).toBe('otp_required');
 
     const outbox = readDevConsoleOutbox();
-    const lastMsg = outbox.find((m) => m.channel === 'EMAIL' && m.message.to === testEmail('regress-logout'));
-    if (!lastMsg) throw new Error(`No OTP message in outbox for ${testEmail('regress-logout')}`);
+    const lastMsg = outbox.find(
+      (m) =>
+        m.channel === 'EMAIL' && m.message.to === testEmail('regress-logout'),
+    );
+    if (!lastMsg)
+      throw new Error(
+        `No OTP message in outbox for ${testEmail('regress-logout')}`,
+      );
     const match = lastMsg.message.body.match(/login code is (\d{6})/);
-    if (!match) throw new Error(`Could not extract OTP from: ${lastMsg.message.body}`);
+    if (!match)
+      throw new Error(`Could not extract OTP from: ${lastMsg.message.body}`);
     const otp = match[1];
 
     const step2 = await http
@@ -335,7 +372,11 @@ describe('RBAC foundation (real PostgreSQL + real JWT)', () => {
     });
     // Guarded route resolves (user, org) so isActive is enforced server-side.
     await prisma.organizationMembership.create({
-      data: { userId: user.id, organizationId: deactivatedOrgId, role: 'MEMBER' },
+      data: {
+        userId: user.id,
+        organizationId: deactivatedOrgId,
+        role: 'MEMBER',
+      },
     });
 
     const res = await http
@@ -419,10 +460,12 @@ describe('RBAC foundation (real PostgreSQL + real JWT)', () => {
     // Active seed org remains; deactivated org is filtered server-side.
     expect(rows).toHaveLength(1);
     expect(rows[0]?.organization.id).toBe(user.organizationId);
-    expect(rows.some((r) => r.organization.id === deactivatedOrgId)).toBe(false);
+    expect(rows.some((r) => r.organization.id === deactivatedOrgId)).toBe(
+      false,
+    );
   });
 
-  it('GET /api/memberships/me - 200 with only the caller\'s own membership row, not the row of any other user', async () => {
+  it("GET /api/memberships/me - 200 with only the caller's own membership row, not the row of any other user", async () => {
     const member = await seedUser('member-ok', 'MEMBER');
     // Create a second user who is also a member of the SAME
     // organization. The response for `member` must not include this
@@ -490,6 +533,3 @@ describe('RBAC foundation (real PostgreSQL + real JWT)', () => {
     expect(res.body).toEqual({ ok: true });
   });
 });
-
-
-

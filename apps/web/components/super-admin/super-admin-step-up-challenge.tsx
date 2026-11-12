@@ -67,27 +67,6 @@ export function SuperAdminStepUpChallenge() {
     defaultValues: { otp: '' },
   });
 
-  // Auto-issue challenge on mount, but only AFTER the session is loaded.
-  // The challenge endpoint requires an authenticated JWT (via @CurrentUser),
-  // so firing it before the session exists guarantees a 401 and no OTP.
-  useEffect(() => {
-    if (sessionLoading || !session) return;
-    void issueChallenge();
-  }, [sessionLoading, session]);
-
-  // Countdown timer for lock
-  useEffect(() => {
-    if (!countdown) return;
-    const timer = setInterval(() => {
-      setCountdown((c) => {
-        if (c && c > 1) return c - 1;
-        setRetryAfter(null);
-        return null;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [countdown]);
-
   const challengeInFlightRef = useRef(false);
 
   const issueChallenge = useCallback(async () => {
@@ -108,6 +87,30 @@ export function SuperAdminStepUpChallenge() {
       challengeInFlightRef.current = false;
     }
   }, []);
+
+  // Auto-issue challenge on mount, but only AFTER the session is loaded.
+  // The challenge endpoint requires an authenticated JWT (via @CurrentUser),
+  // so firing it before the session exists guarantees a 401 and no OTP.
+  useEffect(() => {
+    if (sessionLoading || !session) return;
+    const timeoutId = window.setTimeout(() => {
+      void issueChallenge();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [issueChallenge, sessionLoading, session]);
+
+  // Countdown timer for lock
+  useEffect(() => {
+    if (!countdown) return;
+    const timer = setInterval(() => {
+      setCountdown((c) => {
+        if (c && c > 1) return c - 1;
+        setRetryAfter(null);
+        return null;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [countdown]);
 
   const onSubmit = handleSubmit(async (values: OtpFormValues) => {
     setError(null);

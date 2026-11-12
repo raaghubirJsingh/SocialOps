@@ -19,6 +19,9 @@ import type {
   AcceptInvitationResponse,
   ManagementRequestDto,
   AcceptManagementRequestResponse,
+  AgencyRelationshipDto,
+  AgencyRelationshipMutationResponse,
+  DiscoverableAgencyDto,
   CreateClientRequest,
   CreateClientResponse,
   InviteClientRequest,
@@ -206,6 +209,47 @@ export const clientApi = {
     }),
 
   /**
+   * Get this Client's relationship history and current Agency relationship.
+   * JWT + X-Client-Id required; ownership is re-verified by ClientAccessGuard.
+   */
+  getMyAgencyRelationships: (
+    clientId: string,
+  ): Promise<AgencyRelationshipDto[]> =>
+    apiFetch<AgencyRelationshipDto[]>('/client/me/agency-relationships', {
+      headers: { 'X-Client-Id': clientId },
+    }),
+
+  /** Get the approved, opted-in Agency catalog for this Client. */
+  discoverAgencies: (clientId: string): Promise<DiscoverableAgencyDto[]> =>
+    apiFetch<DiscoverableAgencyDto[]>('/client/agencies/discover', {
+      headers: { 'X-Client-Id': clientId },
+    }),
+
+  /** Request a relationship with a discoverable Agency. */
+  createAgencyRequest: (
+    clientId: string,
+    organizationId: string,
+  ): Promise<AgencyRelationshipMutationResponse> =>
+    apiFetch<AgencyRelationshipMutationResponse>('/client/me/agency-requests', {
+      method: 'POST',
+      body: { organizationId },
+      headers: { 'X-Client-Id': clientId },
+    }),
+
+  /** Cancel a Client-originated pending Agency request. */
+  cancelAgencyRequest: (
+    clientId: string,
+    requestId: string,
+  ): Promise<AgencyRelationshipMutationResponse> =>
+    apiFetch<AgencyRelationshipMutationResponse>(
+      `/client/me/agency-requests/${requestId}/reject`,
+      {
+        method: 'POST',
+        headers: { 'X-Client-Id': clientId },
+      },
+    ),
+
+  /**
    * Accept a management request. JWT + X-Client-Id required.
    */
   acceptManagementRequest: (
@@ -214,6 +258,31 @@ export const clientApi = {
   ): Promise<AcceptManagementRequestResponse> =>
     apiFetch<AcceptManagementRequestResponse>(
       `/client/me/management-requests/${requestId}/accept`,
+      {
+        method: 'POST',
+        headers: { 'X-Client-Id': clientId },
+      },
+    ),
+
+  /** Reject an incoming Agency invitation. JWT + X-Client-Id required. */
+  rejectManagementRequest: (
+    clientId: string,
+    requestId: string,
+  ): Promise<AgencyRelationshipMutationResponse> =>
+    apiFetch<AgencyRelationshipMutationResponse>(
+      `/client/me/management-requests/${requestId}/reject`,
+      {
+        method: 'POST',
+        headers: { 'X-Client-Id': clientId },
+      },
+    ),
+
+  /** Explicitly terminate this Client's active Agency relationship. */
+  terminateAgencyRelationship: (
+    clientId: string,
+  ): Promise<AgencyRelationshipMutationResponse> =>
+    apiFetch<AgencyRelationshipMutationResponse>(
+      '/client/me/agency-relationship/terminate',
       {
         method: 'POST',
         headers: { 'X-Client-Id': clientId },

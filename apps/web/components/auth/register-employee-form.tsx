@@ -1,22 +1,24 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useForm, type Resolver } from 'react-hook-form';
+import { Controller, useForm, type Resolver } from 'react-hook-form';
 import { z } from 'zod';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { UserPhoneInput } from '@/components/shared/user-phone-input';
 import {
   registerEmployee as registerEmployeeAccount,
 } from '@/lib/auth-client';
+import { normalizeSelectedUserPhone } from '@/lib/user-phone';
 import type { RegisterResult } from '@/types/auth';
 
 /**
  * Employee registration form (Employee Module V1, Phase 3).
  *
- * Collects EXACTLY: fullName, email, phone (optional), password, and
+ * Collects EXACTLY: fullName, email, country-selected mobile number, password, and
  * confirmPassword (UI-only). NO accountType selector — employee is
  * discriminated by the 1:1 EmployeeProfile row, not AccountType
  * (AGENTS.md §17.1).
@@ -43,12 +45,8 @@ const registerEmployeeSchema = z
       .string()
       .min(1, 'Email is required')
       .email('Invalid email format'),
-    phone: z
-      .string()
-      .min(1, 'Phone is too short')
-      .max(50, 'Phone is too long')
-      .optional()
-      .or(z.literal('').transform(() => undefined)),
+    phoneCountry: z.string().min(1, 'Select a country'),
+    phone: z.string().trim().min(1, 'Mobile number is required').max(50),
     password: z
       .string()
       .min(8, 'Password must be at least 8 characters'),
@@ -59,6 +57,15 @@ const registerEmployeeSchema = z
   .refine((v) => v.password === v.confirmPassword, {
     path: ['confirmPassword'],
     message: 'Passwords do not match',
+  })
+  .superRefine(({ phoneCountry, phone }, ctx) => {
+    if (!normalizeSelectedUserPhone(phoneCountry, phone)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['phone'],
+        message: 'Enter a valid mobile number for the selected country',
+      });
+    }
   });
 
 export type RegisterEmployeeFormValues = z.infer<
@@ -89,6 +96,7 @@ export function RegisterEmployeeForm() {
 
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm<RegisterEmployeeFormValues>({
@@ -97,6 +105,7 @@ export function RegisterEmployeeForm() {
     defaultValues: {
       fullName: '',
       email: '',
+      phoneCountry: '',
       phone: '',
       password: '',
       confirmPassword: '',
@@ -114,12 +123,17 @@ export function RegisterEmployeeForm() {
       //
       // confirmPassword is intentionally NOT sent to the backend
       // (UI-only validation).
-      const { confirmPassword: _confirm, phone, ...payload } = values;
+      const {
+        confirmPassword: _confirm,
+        phoneCountry,
+        phone,
+        ...payload
+      } = values;
       void _confirm;
       const result: RegisterResult = await registerEmployeeAccount({
         fullName: payload.fullName,
         email: payload.email,
-        phone: phone && phone.length > 0 ? phone : undefined,
+        phone: { country: phoneCountry, number: phone },
         password: payload.password,
       });
 
@@ -197,29 +211,30 @@ export function RegisterEmployeeForm() {
         )}
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="phone">
-          Phone
-          <span className="ml-1 text-xs font-normal text-slate-400">
-            (optional)
-          </span>
-        </Label>
-        <Input
-          id="phone"
-          type="tel"
-          autoComplete="tel"
-          maxLength={50}
-          aria-invalid={errors.phone ? 'true' : undefined}
-          aria-describedby={errors.phone ? 'phone-error' : undefined}
-          disabled={isLoading}
-          {...register('phone')}
-        />
-        {errors.phone && (
-          <p id="phone-error" className="text-xs text-red-400">
-            {errors.phone.message}
-          </p>
+      <Controller
+        control={control}
+        name="phoneCountry"
+        render={({ field: countryField }) => (
+          <Controller
+            control={control}
+            name="phone"
+            render={({ field: numberField }) => (
+              <UserPhoneInput
+                idPrefix="employee-phone"
+                country={countryField.value}
+                number={numberField.value}
+                onCountryChange={countryField.onChange}
+                onNumberChange={numberField.onChange}
+                disabled={isLoading}
+                error={errors.phone?.message ?? errors.phoneCountry?.message}
+              />
+            )}
+          />
         )}
-      </div>
+      />
+      <p className="text-xs text-slate-400">
+        Select the country first; only valid mobile numbers are accepted.
+      </p>
 
       <div className="space-y-2">
         <Label htmlFor="password">Password</Label>

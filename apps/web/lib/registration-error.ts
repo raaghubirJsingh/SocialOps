@@ -1,4 +1,4 @@
-import { ApiError } from './api';
+import { ApiError } from '@/lib/api';
 import { describeApiError } from './api-error-messages';
 
 /**

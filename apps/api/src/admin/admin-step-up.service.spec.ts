@@ -18,16 +18,30 @@ const TEST_USER_ID = 'user-123';
 function makePrismaMock() {
   const prisma = {
     adminStepUpChallenge: {
-      upsert: jest.fn() as jest.MockedFunction<(...args: any[]) => Promise<any>>,
-      findUnique: jest.fn() as jest.MockedFunction<(...args: any[]) => Promise<any>>,
-      updateMany: jest.fn() as jest.MockedFunction<(...args: any[]) => Promise<any>>,
+      upsert: jest.fn() as jest.MockedFunction<
+        (...args: any[]) => Promise<any>
+      >,
+      findUnique: jest.fn() as jest.MockedFunction<
+        (...args: any[]) => Promise<any>
+      >,
+      updateMany: jest.fn() as jest.MockedFunction<
+        (...args: any[]) => Promise<any>
+      >,
     },
     adminStepUpSession: {
-      create: jest.fn() as jest.MockedFunction<(...args: any[]) => Promise<any>>,
-      findUnique: jest.fn() as jest.MockedFunction<(...args: any[]) => Promise<any>>,
-      updateMany: jest.fn() as jest.MockedFunction<(...args: any[]) => Promise<any>>,
+      create: jest.fn() as jest.MockedFunction<
+        (...args: any[]) => Promise<any>
+      >,
+      findUnique: jest.fn() as jest.MockedFunction<
+        (...args: any[]) => Promise<any>
+      >,
+      updateMany: jest.fn() as jest.MockedFunction<
+        (...args: any[]) => Promise<any>
+      >,
     },
-    $transaction: jest.fn() as jest.MockedFunction<(cb: (tx: any) => Promise<unknown>) => Promise<unknown>>,
+    $transaction: jest.fn() as jest.MockedFunction<
+      (cb: (tx: any) => Promise<unknown>) => Promise<unknown>
+    >,
   };
   prisma.$transaction.mockImplementation(async (cb) => cb(prisma));
   return prisma;
@@ -87,7 +101,8 @@ describe('AdminStepUpService', () => {
       prisma.adminStepUpChallenge.upsert.mockResolvedValue(row);
 
       const result = await service.issueChallenge(
-        { id: TEST_USER_ID }, 'EMAIL',
+        { id: TEST_USER_ID },
+        'EMAIL',
         { resetAttempts: false, countResend: false },
       );
 
@@ -95,10 +110,16 @@ describe('AdminStepUpService', () => {
       const call = prisma.adminStepUpChallenge.upsert.mock.calls[0][0];
       expect(call.where).toEqual({ userId: TEST_USER_ID });
       expect(call.create).toMatchObject({
-        userId: TEST_USER_ID, channel: 'EMAIL',
-        codeHash: 'hashed-otp', attempts: 0, resendCount: 0,
+        userId: TEST_USER_ID,
+        channel: 'EMAIL',
+        codeHash: 'hashed-otp',
+        attempts: 0,
+        resendCount: 0,
       });
-      expect(call.update).toMatchObject({ codeHash: 'hashed-otp', usedAt: null });
+      expect(call.update).toMatchObject({
+        codeHash: 'hashed-otp',
+        usedAt: null,
+      });
       expect(prisma.adminStepUpChallenge.updateMany).not.toHaveBeenCalled();
     });
 
@@ -111,11 +132,16 @@ describe('AdminStepUpService', () => {
       );
 
       await service.issueChallenge({ id: TEST_USER_ID }, 'EMAIL', {
-        resetAttempts: true, countResend: false,
+        resetAttempts: true,
+        countResend: false,
       });
 
       const call = prisma.adminStepUpChallenge.upsert.mock.calls[0][0];
-      expect(call.update).toMatchObject({ codeHash: 'new-hash', usedAt: null, attempts: 0 });
+      expect(call.update).toMatchObject({
+        codeHash: 'new-hash',
+        usedAt: null,
+        attempts: 0,
+      });
     });
 
     it('consumes resend quota when countResend is true', async () => {
@@ -127,7 +153,8 @@ describe('AdminStepUpService', () => {
       prisma.adminStepUpChallenge.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await service.issueChallenge(
-        { id: TEST_USER_ID }, 'EMAIL',
+        { id: TEST_USER_ID },
+        'EMAIL',
         { resetAttempts: false, countResend: true },
       );
 
@@ -148,12 +175,16 @@ describe('AdminStepUpService', () => {
 
       try {
         await service.issueChallenge({ id: TEST_USER_ID }, 'EMAIL', {
-          resetAttempts: false, countResend: true,
+          resetAttempts: false,
+          countResend: true,
         });
         throw new Error('Expected ForbiddenException to be thrown');
       } catch (e) {
         expect(e).toBeInstanceOf(ForbiddenException);
-        const resp = (e as ForbiddenException).getResponse() as Record<string, unknown>;
+        const resp = (e as ForbiddenException).getResponse() as Record<
+          string,
+          unknown
+        >;
         expect(resp.code).toBe(ADMIN_STEP_UP_ERROR_CODES.OTP_RESEND_LIMIT);
       }
     });
@@ -163,7 +194,11 @@ describe('AdminStepUpService', () => {
   describe('verify', () => {
     it('returns invalid for non-EMAIL channels', async () => {
       const { service } = makeService();
-      const result = await service.verify(TEST_USER_ID, 'SMS' as never, '123456');
+      const result = await service.verify(
+        TEST_USER_ID,
+        'SMS' as never,
+        '123456',
+      );
       expect(result).toEqual({ outcome: 'invalid' });
     });
 
@@ -231,14 +266,19 @@ describe('AdminStepUpService', () => {
       const result = await service.verify(TEST_USER_ID, 'EMAIL', 'wrong');
       expect(result).toEqual({ outcome: 'invalid' });
       expect(prisma.adminStepUpChallenge.updateMany).toHaveBeenCalledWith({
-        where: { id: row.id, attempts: { lt: ADMIN_STEP_UP_MAX_WRONG_ATTEMPTS - 1 } },
+        where: {
+          id: row.id,
+          attempts: { lt: ADMIN_STEP_UP_MAX_WRONG_ATTEMPTS - 1 },
+        },
         data: { attempts: { increment: 1 } },
       });
     });
 
     it('returns locked with retryAfterSeconds=60 on 3rd wrong attempt', async () => {
       const { service, prisma } = makeService();
-      const row = makeChallengeRow({ attempts: ADMIN_STEP_UP_MAX_WRONG_ATTEMPTS - 1 });
+      const row = makeChallengeRow({
+        attempts: ADMIN_STEP_UP_MAX_WRONG_ATTEMPTS - 1,
+      });
       prisma.adminStepUpChallenge.findUnique.mockResolvedValue(row);
       jest.spyOn(service as any, 'safeVerifyOtp').mockResolvedValue(false);
 
@@ -266,7 +306,9 @@ describe('AdminStepUpService', () => {
   describe('createSession', () => {
     it('hashes session token with SHA-256 and stores with 15-min expiry', async () => {
       const { service, prisma } = makeService();
-      jest.spyOn(service as any, 'generateSessionToken').mockReturnValue('raw-token-xyz');
+      jest
+        .spyOn(service as any, 'generateSessionToken')
+        .mockReturnValue('raw-token-xyz');
 
       let capturedCreateArg: any = null;
       prisma.adminStepUpSession.create.mockImplementation(
@@ -284,8 +326,12 @@ describe('AdminStepUpService', () => {
       expect(data.sessionTokenHash).not.toBe('raw-token-xyz');
       expect(data.sessionTokenHash).toMatch(/^[0-9a-f]{64}$/);
       const ttl = (data.expiresAt as Date).getTime() - Date.now();
-      expect(ttl).toBeGreaterThan(ADMIN_STEP_UP_SESSION_TTL_MINUTES * 60_000 - 1_000);
-      expect(ttl).toBeLessThan(ADMIN_STEP_UP_SESSION_TTL_MINUTES * 60_000 + 1_000);
+      expect(ttl).toBeGreaterThan(
+        ADMIN_STEP_UP_SESSION_TTL_MINUTES * 60_000 - 1_000,
+      );
+      expect(ttl).toBeLessThan(
+        ADMIN_STEP_UP_SESSION_TTL_MINUTES * 60_000 + 1_000,
+      );
     });
   });
 
@@ -293,9 +339,9 @@ describe('AdminStepUpService', () => {
   describe('resend', () => {
     it('rejects non-EMAIL channels with ForbiddenException', async () => {
       const { service } = makeService();
-      await expect(service.resend(TEST_USER_ID, 'SMS' as never)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.resend(TEST_USER_ID, 'SMS' as never),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('seeds a new challenge when no existing challenge is found', async () => {
@@ -327,7 +373,10 @@ describe('AdminStepUpService', () => {
         throw new Error('Expected ForbiddenException to be thrown');
       } catch (e) {
         expect(e).toBeInstanceOf(ForbiddenException);
-        const resp = (e as ForbiddenException).getResponse() as Record<string, unknown>;
+        const resp = (e as ForbiddenException).getResponse() as Record<
+          string,
+          unknown
+        >;
         expect(resp.code).toBe(ADMIN_STEP_UP_ERROR_CODES.OTP_LOCKED);
         // Verify the dynamically calculated retry value (~60s).
         expect(resp.retryAfterSeconds).toBeGreaterThanOrEqual(55);
@@ -345,7 +394,10 @@ describe('AdminStepUpService', () => {
         throw new Error('Expected ForbiddenException to be thrown');
       } catch (e) {
         expect(e).toBeInstanceOf(ForbiddenException);
-        const resp = (e as ForbiddenException).getResponse() as Record<string, unknown>;
+        const resp = (e as ForbiddenException).getResponse() as Record<
+          string,
+          unknown
+        >;
         expect(resp.code).toBe(ADMIN_STEP_UP_ERROR_CODES.OTP_RESEND_LIMIT);
       }
     });
@@ -403,7 +455,10 @@ describe('AdminStepUpService', () => {
   describe('resendRemaining', () => {
     it('returns 0 for non-EMAIL channels', async () => {
       const { service, prisma } = makeService();
-      const result = await service.resendRemaining(TEST_USER_ID, 'SMS' as never);
+      const result = await service.resendRemaining(
+        TEST_USER_ID,
+        'SMS' as never,
+      );
       expect(result).toBe(0);
       expect(prisma.adminStepUpChallenge.findUnique).not.toHaveBeenCalled();
     });
@@ -466,14 +521,14 @@ describe('AdminStepUpService', () => {
       expect(result).toBeNull();
     });
 
-    it('returns userId for a valid, un-consumed, un-revoked, un-expired session', async () => {
+    it('returns userId for a valid, un-revoked, un-expired session', async () => {
       const { service, prisma } = makeService();
       prisma.adminStepUpSession.findUnique.mockResolvedValue({
         id: 'sess-1',
         userId: TEST_USER_ID,
         sessionTokenHash: 'hash',
         expiresAt: new Date(Date.now() + 60_000),
-        consumedAt: null,
+
         revokedAt: null,
         createdAt: new Date(),
       });
@@ -482,23 +537,15 @@ describe('AdminStepUpService', () => {
       expect(result).toEqual({ userId: TEST_USER_ID });
     });
 
-    it('returns null for a consumed session', async () => {
-      const { service, prisma } = makeService();
-      prisma.adminStepUpSession.findUnique.mockResolvedValue({
-        id: 'sess-2', userId: TEST_USER_ID, sessionTokenHash: 'hash',
-        expiresAt: new Date(Date.now() + 60_000),
-        consumedAt: new Date(), revokedAt: null, createdAt: new Date(),
-      });
-
-      expect(await service.validateSession('token')).toBeNull();
-    });
-
     it('returns null for a revoked session', async () => {
       const { service, prisma } = makeService();
       prisma.adminStepUpSession.findUnique.mockResolvedValue({
-        id: 'sess-3', userId: TEST_USER_ID, sessionTokenHash: 'hash',
+        id: 'sess-3',
+        userId: TEST_USER_ID,
+        sessionTokenHash: 'hash',
         expiresAt: new Date(Date.now() + 60_000),
-        consumedAt: null, revokedAt: new Date(), createdAt: new Date(),
+        revokedAt: new Date(),
+        createdAt: new Date(),
       });
 
       expect(await service.validateSession('token')).toBeNull();
@@ -507,65 +554,15 @@ describe('AdminStepUpService', () => {
     it('returns null for an expired session', async () => {
       const { service, prisma } = makeService();
       prisma.adminStepUpSession.findUnique.mockResolvedValue({
-        id: 'sess-4', userId: TEST_USER_ID, sessionTokenHash: 'hash',
+        id: 'sess-4',
+        userId: TEST_USER_ID,
+        sessionTokenHash: 'hash',
         expiresAt: new Date(Date.now() - 1000),
-        consumedAt: null, revokedAt: null, createdAt: new Date(),
+        revokedAt: null,
+        createdAt: new Date(),
       });
 
       expect(await service.validateSession('token')).toBeNull();
     });
   });
-
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ consumeSession â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-  describe('consumeSession', () => {
-    it('returns null when no session matches', async () => {
-      const { service, prisma } = makeService();
-      prisma.adminStepUpSession.findUnique.mockResolvedValue(null);
-
-      expect(await service.consumeSession('token')).toBeNull();
-    });
-
-    it('consumes a valid session and returns userId', async () => {
-      const { service, prisma } = makeService();
-      const session = {
-        id: 'sess-5', userId: TEST_USER_ID, sessionTokenHash: 'hash',
-        expiresAt: new Date(Date.now() + 60_000),
-        consumedAt: null, revokedAt: null, createdAt: new Date(),
-      };
-      prisma.adminStepUpSession.findUnique.mockResolvedValue(session);
-      prisma.adminStepUpSession.updateMany.mockResolvedValue({ count: 1 });
-
-      const result = await service.consumeSession('token');
-      expect(result).toEqual({ userId: TEST_USER_ID });
-      expect(prisma.adminStepUpSession.updateMany).toHaveBeenCalledWith({
-        where: { id: session.id, consumedAt: null },
-        data: { consumedAt: expect.any(Date) },
-      });
-    });
-
-    it('returns null when concurrent consume race loses', async () => {
-      const { service, prisma } = makeService();
-      prisma.adminStepUpSession.findUnique.mockResolvedValue({
-        id: 'sess-6', userId: TEST_USER_ID, sessionTokenHash: 'hash',
-        expiresAt: new Date(Date.now() + 60_000),
-        consumedAt: null, revokedAt: null, createdAt: new Date(),
-      });
-      prisma.adminStepUpSession.updateMany.mockResolvedValue({ count: 0 });
-
-      expect(await service.consumeSession('token')).toBeNull();
-    });
-
-    it('returns null for an expired session without calling updateMany', async () => {
-      const { service, prisma } = makeService();
-      prisma.adminStepUpSession.findUnique.mockResolvedValue({
-        id: 'sess-7', userId: TEST_USER_ID, sessionTokenHash: 'hash',
-        expiresAt: new Date(Date.now() - 1000),
-        consumedAt: null, revokedAt: null, createdAt: new Date(),
-      });
-
-      expect(await service.consumeSession('token')).toBeNull();
-      expect(prisma.adminStepUpSession.updateMany).not.toHaveBeenCalled();
-    });
-  });
 });
-

@@ -18,6 +18,7 @@ import { ChangeRequestModule } from './change-requests/change-request.module.js'
 import { EmployeesModule } from './employees/employees.module.js';
 import { HealthModule } from './health/health.module.js';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module.js';
+import { FreelancersModule } from './freelancers/freelancers.module.js';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { PlatformAdminModule } from './platform-admin/platform-admin.module.js';
     HealthModule,
     PlatformAdminModule,
     AdminStepUpModule,
+    FreelancersModule,
   ],
   controllers: [AppController],
   providers: [

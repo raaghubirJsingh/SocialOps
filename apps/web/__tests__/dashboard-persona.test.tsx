@@ -12,6 +12,7 @@ import {
   AGENCY_NAV_ITEMS,
   CLIENT_NAV_ITEMS,
   EMPLOYEE_NAV_ITEMS,
+  FREELANCER_NAV_ITEMS,
 } from '@/components/layout/sidebar';
 import {
   clearBoundClientId,
@@ -128,6 +129,13 @@ describe('persona navigation contracts', () => {
       '/dashboard',
     ]);
   });
+
+  it('Freelancer persona exposes only the dashboard and own profile', () => {
+    expect(FREELANCER_NAV_ITEMS.map((item) => item.href)).toEqual([
+      '/dashboard',
+      '/freelancer/profile',
+    ]);
+  });
 });
 
 describe('dashboard persona contracts', () => {
@@ -143,6 +151,8 @@ describe('dashboard persona contracts', () => {
     expect(src).toMatch(/CLIENT/);
     expect(src).toMatch(/ClientPersonaSurface/);
     expect(src).toMatch(/ClientActivationPanel/);
+    expect(src).toMatch(/isFreelancerAccount/);
+    expect(src).toMatch(/getFreelancerProfile/);
     expect(src).toMatch(/ApiStatusCard/);
   });
 

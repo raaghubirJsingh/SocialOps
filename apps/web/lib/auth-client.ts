@@ -5,16 +5,24 @@ import type {
   AdminStepUpResendResponse,
   AdminStepUpVerifyRequest,
   AdminStepUpVerifyResponse,
+  ForgotPasswordRequest,
+  ForgotPasswordResponse,
   GenericStatusResponse,
   LogoutRequest,
   LoginRequest,
   LoginResponse,
   RefreshRequest,
+  ResetPasswordRequest,
+  ResetPasswordResponse,
   OtpResendRequest,
   OtpResendResponse,
   OtpVerifyRequest,
   OtpVerifyResponse,
+  RegisterAgencyRequest,
+  RegisterClientRequest,
   RegisterEmployeeRequest,
+  RegisterFreelancerRequest,
+  RegisterNewsOrganisationRequest,
   RegistrationCompleteResponse,
   RegistrationPasswordRequest,
   RegistrationResumeRequest,
@@ -183,13 +191,74 @@ export async function resumeRegistration(
  * navigation as standard registration (/verify-email or /login).
  *
  * Field contract (mirrors backend RegisterEmployeeDto): fullName, email,
- * phone (optional), password. NO accountType is sent — the EmployeeProfile
+ * phone (required; country-selected local input), password. NO accountType is sent — the EmployeeProfile
  * row is the discriminator (AGENTS.md §17.1).
  */
 export async function registerEmployee(
   input: RegisterEmployeeRequest,
 ): Promise<RegisterResult> {
   return apiFetch<RegisterResult>('/auth/register-employee', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+/** Register a Freelancer account; the backend creates its profile atomically. */
+export async function registerFreelancer(
+  input: RegisterFreelancerRequest,
+): Promise<RegisterResult> {
+  return apiFetch<RegisterResult>('/auth/register-freelancer', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+/**
+ * Start a pending CLIENT registration (simple form).
+ *
+ * POST /api/auth/registration/client — creates a PendingRegistration
+ * with accountType=CLIENT (explicit, server-set). Dispatches BOTH Email
+ * and WhatsApp OTP challenges simultaneously. Returns the raw
+ * resumeToken ONCE (stage credential, not a session).
+ */
+export async function registerClient(
+  input: RegisterClientRequest,
+): Promise<RegistrationStartResponse> {
+  return apiFetch<RegistrationStartResponse>('/auth/registration/client', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+/**
+ * Start a pending SERVICE_PROVIDER / Agency registration (simple form).
+ *
+ * POST /api/auth/registration/agency — creates a PendingRegistration
+ * with accountType=SERVICE_PROVIDER (explicit, server-set). Dispatches
+ * BOTH Email and WhatsApp OTP challenges simultaneously. Returns the
+ * raw resumeToken ONCE (stage credential, not a session).
+ */
+export async function registerAgency(
+  input: RegisterAgencyRequest,
+): Promise<RegistrationStartResponse> {
+  return apiFetch<RegistrationStartResponse>('/auth/registration/agency', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+/**
+ * Register a News Organisation account (REG-04, REG-05).
+ *
+ * Creates a User (SERVICE_PROVIDER accountType) plus an Organization
+ * (kind: NEWS_ORGANIZATION, verificationStatus: PENDING) atomically.
+ * Registration NEVER issues tokens or a session — the response
+ * discriminator guides post-registration navigation.
+ */
+export async function registerNewsOrganisation(
+  input: RegisterNewsOrganisationRequest,
+): Promise<RegisterResult> {
+  return apiFetch<RegisterResult>('/auth/register-news-organisation', {
     method: 'POST',
     body: input,
   });
@@ -312,4 +381,46 @@ export async function adminStepUpResend(
     method: 'POST',
     body: input,
   });
+}
+
+/**
+ * Initiate a password reset.
+ *
+ * POST /api/auth/forgot-password — generates a reset token and sends it
+ * via email (or logs it in dev mode). The response is always
+ * {"status": "queued"} to prevent email enumeration.
+ */
+export async function forgotPassword(
+  input: ForgotPasswordRequest,
+): Promise<ForgotPasswordResponse> {
+  return apiFetch<ForgotPasswordResponse>('/auth/forgot-password', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+/**
+ * Complete password reset using a token.
+ *
+ * POST /api/auth/reset-password — validates the token and sets a new password.
+ * On success, returns a new session with JWT tokens for immediate login.
+ */
+export async function resetPassword(
+  input: ResetPasswordRequest,
+): Promise<Session> {
+  const response = await apiFetch<ResetPasswordResponse>('/auth/reset-password', {
+    method: 'POST',
+    body: input,
+  });
+  if ('accessToken' in response) {
+    const session: Session = {
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken,
+      user: response.user,
+      email: response.user.email,
+    };
+    saveSession(session);
+    return session;
+  }
+  throw new ApiError(400, 'Invalid or expired reset token', null);
 }

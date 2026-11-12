@@ -19,6 +19,7 @@ import { useSession } from '@/hooks/use-session';
  *     self-registered client has no Organization membership and would
  *     only hit the organization-selection dead end.
  *   - Employee (isEmployee): no tenant navigation at all (§17.4).
+ *   - Freelancer (FREELANCER): dashboard and own profile only (§17.6).
  * A non-employee session with a null accountType (pre-migration row or a
  * stale localStorage session) degrades to the agency list, matching the
  * pre-persona behavior.
@@ -75,6 +76,15 @@ export const CLIENT_NAV_ITEMS: readonly NavItem[] = [
 
 export const EMPLOYEE_NAV_ITEMS: readonly NavItem[] = [DASHBOARD_ITEM];
 
+export const FREELANCER_NAV_ITEMS: readonly NavItem[] = [
+  DASHBOARD_ITEM,
+  {
+    href: '/freelancer/profile',
+    label: 'My Profile',
+    description: 'Complete and review your Freelancer profile',
+  },
+];
+
 export const SUPER_ADMIN_NAV_ITEMS: readonly NavItem[] = [
   { href: '/super-admin', label: 'Overview', description: 'Platform overview' },
   { href: '/super-admin/organizations', label: 'Agencies', description: 'Manage agencies' },
@@ -95,6 +105,10 @@ export function Sidebar() {
   const isSuperAdmin = session?.user?.isSocialOpsAdmin ?? false;
   const isClientAccount =
     !isEmployee && !isSuperAdmin && session?.user?.accountType === 'CLIENT';
+  const isFreelancerAccount =
+    !isEmployee &&
+    !isSuperAdmin &&
+    session?.user?.accountType === 'FREELANCER';
 
   const items = isEmployee
     ? EMPLOYEE_NAV_ITEMS
@@ -102,15 +116,18 @@ export function Sidebar() {
       ? SUPER_ADMIN_NAV_ITEMS
       : isClientAccount
         ? CLIENT_NAV_ITEMS
-        : AGENCY_NAV_ITEMS;
+        : isFreelancerAccount
+          ? FREELANCER_NAV_ITEMS
+          : AGENCY_NAV_ITEMS;
 
   const clientHrefs = new Set(CLIENT_NAV_ITEMS.map((item) => item.href));
 
   // The `?clientId=` search parameter is preserved across client-route
   // transitions so the client workspace keeps its context on every click. It
   // is meaningful only to the CLIENT persona, so it is stamped onto that
-  // persona's links and deliberately never onto Agency/Employee links. The id
-  // is a UX lookup hint only, never an authorization input (AGENTS.md §7).
+  // persona's links and deliberately never onto Agency/Employee/Freelancer
+  // links. The id is a UX lookup hint only, never an authorization input
+  // (AGENTS.md §7).
   //
   // Longest-prefix active match: `/client/social-accounts` highlights
   // "Social accounts" and NOT also "My client" (`/client`).

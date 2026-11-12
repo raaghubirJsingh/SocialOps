@@ -33,16 +33,18 @@ enum OrganizationRole {
   VIEWER
 }
 
-/// Account classification derived during Registration Phase v1.0
-/// discovery (human-approved; supersedes the previous
-/// SERVICE_PROVIDER | INDIVIDUAL_BUSINESS pairing - see L12 /
-/// AGENTS.md §17.1). Exactly two values:
+/// Account classification derived during registration discovery.
+/// SERVICE_PROVIDER and CLIENT are governed by Decision 014;
+/// FREELANCER is added by Decision 024. Individual vs Business remains a
+/// ClientType, never an AccountType.
 ///   - CLIENT: the person primarily manages their own account(s).
 ///     Individual vs Business is a ClientType, NOT an AccountType.
 ///   - SERVICE_PROVIDER: manages accounts for others (including
 ///     mixed own + others).
-/// Employee is intentionally NOT here: employee registration is a
-/// separate flow and employees carry `accountType = null` (AGENTS.md §17.1).
+///   - FREELANCER: a self-service Freelancer account with its own
+///     FreelancerProfile.
+/// Employee is intentionally NOT here: employees carry `accountType = null`
+/// and are identified by EmployeeProfile (AGENTS.md §17.1).
 enum AccountType {
   SERVICE_PROVIDER
   CLIENT
@@ -155,6 +157,7 @@ model User {
   refreshTokens              RefreshToken[]
   verificationTokens         EmailVerificationToken[]
   mobileVerificationRequests MobileVerificationToken[] @relation("MobileVerificationRequester")
+  passwordResetTokens        PasswordResetToken[]
 
   // Employee Module V1 (Phase 1): 1:1 employee-profile extension. At most
   // one profile per user (UNIQUE userId on EmployeeProfile).
@@ -355,6 +358,24 @@ model EmailVerificationToken {
   @@index([userId])
 }
 
+/// Password reset token for the "Forgot Password" flow.
+/// Stores only the SHA-256 hash of the raw token (AGENTS.md §8).
+/// Single-use: `usedAt` prevents double-consumption.
+/// 24-hour expiry. Invalidates all previous reset tokens for the user.
+model PasswordResetToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
 // ---------------------------------------------------------------------------
 // Registration Phase v1.0 (human-approved; GATE A).
 // ---------------------------------------------------------------------------
@@ -394,6 +415,12 @@ model PendingRegistration {
   clientType ClientType?
   /// JSON snapshot of the accepted discovery conversation (L8).
   discoveryAnswers   Json?
+  /// Source discriminator (Option A): which endpoint created this row.
+  /// Conversational rows (POST /auth/registration/start) MUST carry an
+  /// accepted discovery snapshot at completion; simple rows
+  /// (POST /auth/registration/client or /agency) carry none and the
+  /// discovery gate is skipped entirely for them.
+  registrationSource RegistrationSource?
   emailVerifiedAt    DateTime?
   whatsappVerifiedAt DateTime?
   /// Pending-global OTP lock: set to now + 1h after 3 wrong attempts (L4).
@@ -810,16 +837,15 @@ model AdminStepUpChallenge {
 /// A short-lived session token issued ONLY after a successful step-up OTP
 /// verification. It is the credential that satisfies SUPERADMIN routes; a
 /// normal access token can never satisfy them. Only the SHA-256 hash is
-/// persisted (AGENTS.md §8). Sessions are single-use: consumed on first
-/// SUPERADMIN request and revoked afterwards, so a leaked session token
-/// cannot be replayed.
+/// persisted (AGENTS.md §8). Sessions are TTL-bound (15-minute expiry)
+/// and can be used for multiple SUPERADMIN requests until they expire or
+/// are explicitly revoked, supporting SPA dashboards with parallel requests.
 model AdminStepUpSession {
   id               String   @id @default(uuid()) @db.Uuid
   userId           String   @db.Uuid
   sessionTokenHash String   @unique
   expiresAt        DateTime
   revokedAt        DateTime?
-  consumedAt       DateTime?
   createdAt        DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
@@ -1252,6 +1278,17 @@ model GlobalSetting {
 /// Verification channel for a login OTP challenge. V1 EMAIL only.
 enum LoginOtpChannel {
   EMAIL
+}
+
+/// Source discriminator for a pending registration, used to distinguish
+/// conversational discovery rows from explicit simple paths.
+///   - CONVERSATIONAL: started via POST /auth/registration/start (requires discoveryAnswers acceptance at completion)
+///   - SIMPLE_CLIENT: started via POST /auth/registration/client (explicit CLIENT, no discovery snapshot)
+///   - SIMPLE_AGENCY: started via POST /auth/registration/agency (explicit SERVICE_PROVIDER, no discovery snapshot)
+enum RegistrationSource {
+  CONVERSATIONAL
+  SIMPLE_CLIENT
+  SIMPLE_AGENCY
 }
 
 /// A 6-digit numeric OTP challenge for a login attempt. Only the Argon2id

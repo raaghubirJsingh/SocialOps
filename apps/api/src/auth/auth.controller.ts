@@ -25,21 +25,27 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 
 import { loginSchema } from './dto/login.dto.js';
 import { registerEmployeeSchema } from './dto/register-employee.dto.js';
+import { registerFreelancerSchema } from './dto/register-freelancer.dto.js';
 import { refreshTokenSchema } from './dto/refresh-token.dto.js';
 import { verifyEmailSchema } from './dto/verify-email.dto.js';
 import { resendVerificationSchema } from './dto/resend-verification.dto.js';
+import { forgotPasswordSchema } from './dto/forgot-password.dto.js';
+import { resetPasswordSchema } from './dto/reset-password.dto.js';
 
 import { Public } from '../rbac/decorators/public.decorator.js';
 import { PublicAuth } from '../rbac/decorators/public-auth.decorator.js';
 
 import type { LoginDto } from './dto/login.dto.js';
 import type { RegisterEmployeeDto } from './dto/register-employee.dto.js';
+import type { RegisterFreelancerDto } from './dto/register-freelancer.dto.js';
 import type { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import type { VerifyEmailDto } from './dto/verify-email.dto.js';
 import type { ResendVerificationDto } from './dto/resend-verification.dto.js';
 import type { RegisterResult } from './dto/register-response.dto.js';
 import type { LoginResult } from './dto/login-response.dto.js';
 import type { TokenPair } from './auth.service.js';
+import type { ForgotPasswordDto, ForgotPasswordResponse } from './dto/forgot-password.dto.js';
+import type { ResetPasswordDto, ResetPasswordSuccessResponse } from './dto/reset-password.dto.js';
 import { verifyLoginOtpSchema } from './dto/verify-login-otp.dto.js';
 import type { VerifyLoginOtpDto } from './dto/verify-login-otp.dto.js';
 
@@ -120,6 +126,31 @@ export class AuthController {
     @Body(new ZodValidationPipe(registerEmployeeSchema)) dto: RegisterEmployeeDto,
   ): Promise<RegisterResult> {
     return this.authService.registerEmployee(dto);
+  }
+
+  /**
+   * Register a freelancer account with its 1:1 profile atomically.
+   * Registration never issues tokens; email verification follows the
+   * standard registration contract.
+   */
+  @Post('register-freelancer')
+  @PublicAuth()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Register a freelancer account and its profile atomically.',
+    description:
+      'Creates a User (Argon2id-hashed password, accountType FREELANCER) plus a FreelancerProfile in one transaction. In production, queues email verification; the dev-only auto-verify gate returns registration_complete. Registration never returns tokens or a session.',
+  })
+  @ApiCreatedResponse({
+    description:
+      'Freelancer registered. Response body is { status: "verification_required", email } or { status: "registration_complete", email }.',
+  })
+  @ApiForbiddenResponse({ description: 'Email already in use.' })
+  registerFreelancer(
+    @Body(new ZodValidationPipe(registerFreelancerSchema))
+    dto: RegisterFreelancerDto,
+  ): Promise<RegisterResult> {
+    return this.authService.registerFreelancer(dto);
   }
 
   /**
@@ -359,5 +390,64 @@ export class AuthController {
     @Body(new ZodValidationPipe(refreshTokenSchema)) dto: RefreshTokenDto,
   ): Promise<void> {
     return this.authService.logout(dto.refreshToken);
+  }
+
+  /**
+   * Request a password reset.
+   *
+   * Public endpoint - no JWT required.
+   * Returns a generic response to prevent email enumeration.
+   * In dev mode, the reset URL is logged to console.
+   */
+  @Post('forgot-password')
+  @PublicAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Request a password reset link. Returns generic response to prevent email enumeration.',
+    description:
+      'Generates a password reset token, sends it via email (or logs it in dev mode). Returns {"status": "queued"} regardless of whether the email exists.',
+  })
+  @ApiOkResponse({
+    description: 'Request accepted. Returns {"status": "queued"}.',
+  })
+  forgotPassword(
+    @Body(new ZodValidationPipe(forgotPasswordSchema)) dto: ForgotPasswordDto,
+  ): Promise<ForgotPasswordResponse> {
+    return this.authService.initiatePasswordReset(dto.email);
+  }
+
+  /**
+   * Reset password using a reset token.
+   *
+   * Public endpoint - no JWT required.
+   * On success, issues new JWT tokens for immediate login access.
+   *
+   * Note: The frontend can optionally pass email in the body for convenience,
+   * but it's validated against the token's email for security.
+   */
+  @Post('reset-password')
+  @PublicAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Reset password using a password reset token.',
+    description:
+      'Consumes a reset token and sets a new password. On success, returns new JWT tokens.',
+  })
+  @ApiOkResponse({
+    description:
+      'Password reset successfully. Returns new access/refresh tokens.',
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid or expired reset token.',
+  })
+  resetPassword(
+    @Body(new ZodValidationPipe(resetPasswordSchema)) dto: ResetPasswordDto,
+  ): Promise<ResetPasswordSuccessResponse> {
+    return this.authService.resetPassword(
+      dto.token,
+      dto.password,
+    );
   }
 }

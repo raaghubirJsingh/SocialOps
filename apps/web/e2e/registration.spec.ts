@@ -46,14 +46,15 @@ test.describe('conversational registration discovery', () => {
     await page.getByLabel('Name').fill('टेस्ट यूज़र');
     await page.getByRole('button', { name: 'अगला (Next)' }).click();
 
-    await expect(page.getByLabel('WhatsApp mobile')).toBeVisible();
+    await expect(page.getByLabel('Mobile number (required)')).toBeVisible();
     await expect(page.getByLabel('Name')).toHaveCount(0);
     await expect(page.getByLabel('Email address')).toHaveCount(0);
-    await page.getByLabel('WhatsApp mobile').fill('9876543210');
+    await page.getByLabel('Country').selectOption('IN');
+    await page.getByLabel('Mobile number (required)').fill('9876543210');
     await page.getByRole('button', { name: 'अगला (Next)' }).click();
 
     await expect(page.getByLabel('Email address')).toBeVisible();
-    await expect(page.getByLabel('WhatsApp mobile')).toHaveCount(0);
+    await expect(page.getByLabel('Mobile number (required)')).toHaveCount(0);
     // No forced Client/Agency/Individual/Business classification control:
     await expect(page.getByText('Individual / Business')).toHaveCount(0);
   });

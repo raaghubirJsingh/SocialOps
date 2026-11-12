@@ -1,4 +1,4 @@
-import { ApiError } from './api';
+import { ApiError } from '@/lib/api';
 
 /**
  * Human-readable messages for the backend's structured error codes.

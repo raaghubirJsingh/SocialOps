@@ -101,13 +101,12 @@ export interface LoginOtpResendResponse {
 }
 
 /**
- * Account classification (AGENTS.md §17.1 as amended by Registration
- * Phase v1.0 / Decision 014). Exactly two values; Individual vs
- * Business is a ClientType, never an AccountType. Employee is
- * intentionally NOT here: employees carry `accountType = null` and are
- * discriminated by the 1:1 EmployeeProfile row.
+ * Account classification (AGENTS.md §17.1 / Decisions 014 and 024).
+ * Individual vs Business is a ClientType, never an AccountType.
+ * Employee is intentionally NOT here: employees carry `accountType = null`
+ * and are discriminated by the 1:1 EmployeeProfile row.
  */
-export type AccountType = 'SERVICE_PROVIDER' | 'CLIENT';
+export type AccountType = 'SERVICE_PROVIDER' | 'CLIENT' | 'FREELANCER';
 export type ClientType = 'INDIVIDUAL' | 'BUSINESS';
 
 /**
@@ -155,17 +154,53 @@ export interface AuthenticatedUser {
  */
 export type DiscoveryAnswers = Record<string, unknown>;
 
+/** Country-selected local input; the API validates and stores canonical E.164. */
+export interface UserPhoneInput {
+  country: string;
+  number: string;
+}
+
 export interface RegistrationStartRequest {
   fullName: string;
   email: string;
-  /** Raw user input; the server normalizes to canonical form (OPEN-2). */
-  phone: string;
+  phone: UserPhoneInput;
   /** Nullable while discovery is unresolved (L13); required by /password. */
   accountType?: AccountType | null;
   clientType?: ClientType | null;
   discoveryAnswers?: DiscoveryAnswers;
   /** Present only when resuming/editing an existing pending row (L6). */
   resumeToken?: string;
+}
+
+/**
+ * Request body for POST /api/auth/registration/client.
+ *
+ * Explicit CLIENT registration (simple form). Carries NO conversational
+ * discovery snapshot: the account type is explicit and server-validated,
+ * never inferred from discovery answers.
+ */
+export interface RegisterClientRequest {
+  fullName: string;
+  email: string;
+  phone: UserPhoneInput;
+  /** Optional ClientType (INDIVIDUAL | BUSINESS). Not inferred. */
+  clientType?: ClientType | null;
+  password: string;
+}
+
+/**
+ * Request body for POST /api/auth/registration/agency.
+ *
+ * Explicit SERVICE_PROVIDER / Agency registration (simple form). Carries
+ * NO conversational discovery snapshot: the account type is explicit and
+ * server-validated, never inferred from discovery answers.
+ */
+export interface RegisterAgencyRequest {
+  fullName: string;
+  email: string;
+  phone: UserPhoneInput;
+  organizationName: string;
+  password: string;
 }
 
 export interface RegistrationStartResponse {
@@ -265,14 +300,40 @@ export interface RegistrationResumeSnapshot {
  * Employee registration request body.
  *
  * Mirrors the backend RegisterEmployeeDto (apps/api/src/auth/dto/
- * register-employee.dto.ts): fullName, email, phone (optional),
+ * register-employee.dto.ts): fullName, email, phone (required),
  * password. NO accountType — employee is discriminated by the 1:1
  * EmployeeProfile row, not AccountType (AGENTS.md §17.1).
  */
 export interface RegisterEmployeeRequest {
   fullName: string;
   email: string;
-  phone?: string;
+  phone: UserPhoneInput;
+  password: string;
+}
+
+/** Request body for the dedicated Freelancer registration endpoint. */
+export interface RegisterFreelancerRequest {
+  fullName: string;
+  email: string;
+  phone: UserPhoneInput;
+  password: string;
+}
+
+/**
+ * Request body for the News Organisation registration endpoint (REG-04, REG-05).
+ *
+ * Creates a User (SERVICE_PROVIDER accountType) plus an Organization
+ * (kind: NEWS_ORGANIZATION, verificationStatus: PENDING). The registrant
+ * is NOT automatically granted OWNER membership.
+ */
+export interface RegisterNewsOrganisationRequest {
+  fullName: string;
+  email: string;
+  phone: UserPhoneInput;
+  organisationName: string;
+  website?: string;
+  organisationDescription?: string;
+  designation?: string;
   password: string;
 }
 
@@ -388,4 +449,43 @@ export interface AdminStepUpResendRequest {
 export interface AdminStepUpResendResponse {
   sendStatus: 'sent' | 'unavailable';
   resendRemaining: number;
+}
+
+/**
+ * Password reset request body for POST /api/auth/forgot-password.
+ */
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+/**
+ * Response from POST /api/auth/forgot-password.
+ * Always returns {"status": "queued"} to prevent email enumeration.
+ */
+export interface ForgotPasswordResponse {
+  status: 'queued';
+}
+
+/**
+ * Request body for POST /api/auth/reset-password.
+ */
+export interface ResetPasswordRequest {
+  token: string;
+  password: string;
+}
+
+/**
+ * Response from POST /api/auth/reset-password.
+ * Returns new JWT tokens on success for immediate login access.
+ */
+export interface ResetPasswordResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: {
+    id: string;
+    email: string;
+    fullName: string | null;
+    accountType: AccountType | null;
+    isEmployee: boolean;
+  };
 }

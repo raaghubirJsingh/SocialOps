@@ -5,6 +5,8 @@ import { RedisService } from '../redis/redis.service.js';
 import {
   REGISTRATION_RATE_LIMITS,
   REGISTRATION_RATE_WINDOW_SECONDS,
+  BOOTSTRAP_RATE_LIMIT,
+  BOOTSTRAP_RATE_WINDOW_SECONDS,
 } from './constants/registration.constants.js';
 
 /**
@@ -16,6 +18,7 @@ import {
  *   - OTP resend         : 6  / 15 min / IP + channel
  *   - password           : 5  / 15 min / IP + registration
  *   - resume             : 10 / 15 min / IP
+ *   - bootstrap          : 5  / 1 hour / IP
  *
  * Over limit -> HTTP 429 + Retry-After (seconds remaining in window).
  *
@@ -38,6 +41,8 @@ export interface RateLimitResult {
 }
 
 export type RegistrationRateBucket = keyof typeof REGISTRATION_RATE_LIMITS;
+export type BootstrapRateBucket = 'bootstrap';
+export type RateBucket = RegistrationRateBucket | BootstrapRateBucket;
 
 /** Fixed-window INCR + EXPIRE via the existing Redis client. */
 @Injectable()
@@ -45,15 +50,27 @@ export class RateLimitService {
   constructor(private readonly redis: RedisService) {}
 
   async consume(
-    bucket: RegistrationRateBucket,
+    bucket: RateBucket,
     parts: { ip: string; scope?: string; channel?: string },
   ): Promise<RateLimitResult> {
-    const limit = REGISTRATION_RATE_LIMITS[bucket];
-    const windowSeconds = REGISTRATION_RATE_WINDOW_SECONDS;
+    // Determine limit and window based on bucket type
+    let limit: number;
+    let windowSeconds: number;
+    let keyPrefix: string;
+
+    if (bucket === 'bootstrap') {
+      limit = BOOTSTRAP_RATE_LIMIT;
+      windowSeconds = BOOTSTRAP_RATE_WINDOW_SECONDS;
+      keyPrefix = 'rl:bootstrap';
+    } else {
+      limit = REGISTRATION_RATE_LIMITS[bucket];
+      windowSeconds = REGISTRATION_RATE_WINDOW_SECONDS;
+      keyPrefix = 'rl:reg';
+    }
 
     // Raw resumeTokens never appear in keys: callers pass the SHA-256.
     const key = [
-      'rl:reg',
+      keyPrefix,
       bucket,
       parts.ip,
       parts.scope ?? '',
@@ -104,5 +121,13 @@ export class RateLimitService {
 
   static get windowSeconds(): number {
     return REGISTRATION_RATE_WINDOW_SECONDS;
+  }
+
+  static get bootstrapLimit(): number {
+    return BOOTSTRAP_RATE_LIMIT;
+  }
+
+  static get bootstrapWindowSeconds(): number {
+    return BOOTSTRAP_RATE_WINDOW_SECONDS;
   }
 }

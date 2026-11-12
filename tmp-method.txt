@@ -1,0 +1,45 @@
+  async ensureOwnProfile(userId: string): Promise<FreelancerProfileResponse> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { accountType: true },
+    });
+    if (!user) {
+      throw new ForbiddenException('Freelancer access denied');
+    }
+    if (user.accountType === 'CLIENT') {
+      throw new ForbiddenException('Freelancer access denied');
+    }
+
+    const existing = await this.prisma.freelancerProfile.findUnique({
+      where: { userId },
+      include: {
+        user: { select: { id: true, email: true, fullName: true, phone: true } },
+      },
+    });
+    if (existing) {
+      throw new ConflictException('Freelancer profile already exists');
+    }
+
+    let created;
+    try {
+      created = await this.prisma.freelancerProfile.create({
+        data: { userId },
+        include: {
+          user: { select: { id: true, email: true, fullName: true, phone: true } },
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('Freelancer profile already exists');
+      }
+      throw error;
+    }
+
+    const basicInfoCompleted = Boolean(
+      created.user.fullName && created.user.email && created.user.phone,
+    );
+    return toResponse({ ...created, basicInfoCompleted });
+  }

@@ -18,7 +18,7 @@
  * read by the frontend - the backend completes the exchange on its public
  * callback and stores the result server-side.
  */
-import { apiFetch } from './api';
+import { apiFetch } from '@/lib/api';
 import type {
   CreateSocialAccountRequest,
   OAuthConnectResponse,

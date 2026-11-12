@@ -1,10 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { SuperAdminStepUpChallenge } from '@/components/super-admin/super-admin-step-up-challenge';
 import { hasValidSuperAdminSession } from '@/lib/super-admin-session';
+
+const subscribeToSuperAdminSession = (callback: () => void) => {
+  const handleStorage = () => callback();
+  window.addEventListener('storage', handleStorage);
+  return () => window.removeEventListener('storage', handleStorage);
+};
 
 /**
  * Super Admin step-up challenge route (/super-admin/step-up) — requires auth.
@@ -21,17 +27,19 @@ import { hasValidSuperAdminSession } from '@/lib/super-admin-session';
  */
 export default function SuperAdminStepUpPage() {
   const router = useRouter();
-  const [checking, setChecking] = useState(true);
+  const hasSession = useSyncExternalStore(
+    subscribeToSuperAdminSession,
+    hasValidSuperAdminSession,
+    () => null,
+  );
 
   useEffect(() => {
-    if (hasValidSuperAdminSession()) {
+    if (hasSession) {
       router.replace('/super-admin');
-    } else {
-      setChecking(false);
     }
-  }, [router]);
+  }, [hasSession, router]);
 
-  if (checking) {
+  if (hasSession !== false) {
     return null;
   }
 

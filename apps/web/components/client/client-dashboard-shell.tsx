@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import type { ClientDto } from '@/types/client';
+import { ClientAgencyRelationshipsPanel } from './client-agency-relationships-panel';
 import { ClientStatusBanner } from './client-status-banner';
 import { OnboardingPendingBanner } from './onboarding-pending-banner';
 
@@ -115,24 +116,10 @@ export function ClientDashboardShell({ client }: ClientDashboardShellProps) {
         </Link>
       </div>
 
-      {/* Placeholder sections */}
-      <div className="surface-panel rounded-lg p-6">
-        <h2 className="text-xl font-semibold tracking-tight text-slate-100">
-          Agency Relationships
-        </h2>
-        <p className="mt-2 text-sm text-slate-400">
-          Agency relationship management will appear here.
-        </p>
-      </div>
-
-      <div className="surface-panel rounded-lg p-6">
-        <h2 className="text-xl font-semibold tracking-tight text-slate-100">
-          Invitations
-        </h2>
-        <p className="mt-2 text-sm text-slate-400">
-          Pending invitations will appear here.
-        </p>
-      </div>
+      <ClientAgencyRelationshipsPanel
+        clientId={client.id}
+        onboardingPending={isPending}
+      />
     </div>
   );
 }
