@@ -18,8 +18,11 @@ import type {
   OtpResendResponse,
   OtpVerifyRequest,
   OtpVerifyResponse,
+  RegisterAgencyRequest,
+  RegisterClientRequest,
   RegisterEmployeeRequest,
   RegisterFreelancerRequest,
+  RegisterNewsOrganisationRequest,
   RegistrationCompleteResponse,
   RegistrationPasswordRequest,
   RegistrationResumeRequest,
@@ -205,6 +208,57 @@ export async function registerFreelancer(
   input: RegisterFreelancerRequest,
 ): Promise<RegisterResult> {
   return apiFetch<RegisterResult>('/auth/register-freelancer', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+/**
+ * Start a pending CLIENT registration (simple form).
+ *
+ * POST /api/auth/registration/client — creates a PendingRegistration
+ * with accountType=CLIENT (explicit, server-set). Dispatches BOTH Email
+ * and WhatsApp OTP challenges simultaneously. Returns the raw
+ * resumeToken ONCE (stage credential, not a session).
+ */
+export async function registerClient(
+  input: RegisterClientRequest,
+): Promise<RegistrationStartResponse> {
+  return apiFetch<RegistrationStartResponse>('/auth/registration/client', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+/**
+ * Start a pending SERVICE_PROVIDER / Agency registration (simple form).
+ *
+ * POST /api/auth/registration/agency — creates a PendingRegistration
+ * with accountType=SERVICE_PROVIDER (explicit, server-set). Dispatches
+ * BOTH Email and WhatsApp OTP challenges simultaneously. Returns the
+ * raw resumeToken ONCE (stage credential, not a session).
+ */
+export async function registerAgency(
+  input: RegisterAgencyRequest,
+): Promise<RegistrationStartResponse> {
+  return apiFetch<RegistrationStartResponse>('/auth/registration/agency', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+/**
+ * Register a News Organisation account (REG-04, REG-05).
+ *
+ * Creates a User (SERVICE_PROVIDER accountType) plus an Organization
+ * (kind: NEWS_ORGANIZATION, verificationStatus: PENDING) atomically.
+ * Registration NEVER issues tokens or a session — the response
+ * discriminator guides post-registration navigation.
+ */
+export async function registerNewsOrganisation(
+  input: RegisterNewsOrganisationRequest,
+): Promise<RegisterResult> {
+  return apiFetch<RegisterResult>('/auth/register-news-organisation', {
     method: 'POST',
     body: input,
   });
