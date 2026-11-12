@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { RegistrationFlow } from '@/components/registration/registration-flow';
+import { AccountTypeSelector } from '@/components/registration/account-type-selector';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export const metadata: Metadata = {
@@ -12,14 +12,16 @@ export const metadata: Metadata = {
 /**
  * Registration route (/register) — public.
  *
- * Registration Phase v1.0: this route renders the approved CONVERSATIONAL
- * registration experience (discovery first, then name/WhatsApp/email,
- * dual Email + WhatsApp OTP verification, then password). The legacy
- * form-first registration is fully retired (L11); there is no alternate
- * registration path.
+ * Simple account-type selection experience. The user picks one of four
+ * account options:
+ *   - Client             -> /register/client
+ *   - Service Provider   -> /register/agency
+ *   - Employee/Freelancer -> choice page, then existing routes
+ *   - News Organisation  -> /news-organisation/register
  *
- * Registration NEVER creates an authenticated session — the backend
- * issues no tokens until /api/auth/login.
+ * The conversational Client/Agency discovery experience has been replaced
+ * by conventional step-by-step forms. Registration NEVER creates an
+ * authenticated session — the backend issues no tokens until /api/auth/login.
  *
  * Visual: the whole flow sits inside ONE centred `surface-glass` modal
  * (the single glass surface this screen is allowed - APP-SIDE BLUR BUDGET).
@@ -37,8 +39,6 @@ export default function RegisterPage() {
         <div className="absolute inset-x-0 top-0 h-[28rem] bg-[radial-gradient(ellipse_at_top,rgb(37_99_235/0.16),transparent_60%)]" />
         <div className="absolute inset-0 bg-grid-faint" />
         <div className="absolute inset-0 bg-auth-gradient-animate" />
-        {/* Slow glow anchored on the INPUT AREA so the eye lands on the one
-            field in play rather than the card title. */}
         <div className="absolute inset-0 bg-registration-focus-glow" />
       </div>
 
@@ -55,22 +55,19 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        {/* The ONE glass surface on this screen. The `surface` prop (not a
-            className) is what selects it - stacking surface-glass onto a
-            surface-panel base is an emit-order hazard documented in
-            globals.css. */}
         <Card surface="glass" className="rounded-3xl">
           <CardHeader className="space-y-1.5">
             <CardTitle className="text-xl font-semibold tracking-tight text-slate-50">
-              नमस्ते 👋 मैं SocialOps हूँ
+              Choose your account type
             </CardTitle>
             <CardDescription className="text-sm leading-relaxed text-slate-300">
-              कुछ आसान सवालों से शुरू करते हैं — फिर आपका account बन जाएगा।
-              (A few quick questions first, then your account.)
+              Select the option that best describes you. Each path uses a
+              conventional registration form with email and WhatsApp
+              verification.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <RegistrationFlow />
+            <AccountTypeSelector />
           </CardContent>
         </Card>
 
