@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Briefcase, Search, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -13,41 +14,41 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { apiFetch } from '@/lib/api';
-import { loadSuperAdminSession } from '@/lib/super-admin-session';
+import { fetchEmployees } from '@/lib/super-admin-api';
+import { loadSuperAdminSession, clearSuperAdminSession } from '@/lib/super-admin-session';
+import { apiFetch, ApiError } from '@/lib/api';
 
-interface Employee {
-  id: string;
-  userId: string;
-  fullName: string | null;
-  email: string;
-  phone: string | null;
-  createdAt: string;
-}
-
-interface PaginatedResponse<T> {
-  data: T[];
-  meta: {
-    total: number;
-    page: number;
-    limit: number;
-  };
-}
-
-function fetchWithSessionToken<T>(url: string): Promise<T> {
-  const sessionData = loadSuperAdminSession();
-  return apiFetch<T>(url, {
-    headers: { 'X-Admin-Session-Token': sessionData?.sessionToken ?? '' },
-  });
-}
-
+/**
+ * Cross-tenant employee profiles dashboard.
+ *
+ * Uses the centralized super-admin-api helper (fetchEmployees) so that
+ * the X-Admin-Session-Token header injection and 403 → step-up redirect
+ * are consistent with the rest of the super-admin UI.
+ */
 export default function EmployeesPage() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['superadmin', 'employees'],
-    queryFn: () => fetchWithSessionToken<PaginatedResponse<Employee>>('/admin/employees?limit=50'),
+    queryFn: () => fetchEmployees({ limit: 50 }),
+    retry: false,
   });
 
   const employees = data?.data ?? [];
+
+  // Handle 403 from expired/revoked step-up sessions by redirecting
+  // to the step-up page. The apiFetch layer already throws ApiError
+  // with status 403 — we catch it here to trigger re-authentication.
+  const handleSuperAdminError = useCallback((error: unknown) => {
+    if (error instanceof ApiError && error.status === 403) {
+      clearSuperAdminSession();
+      window.location.href = '/super-admin/step-up';
+    }
+  }, []);
+
+  useEffect(() => {
+    if (error) {
+      handleSuperAdminError(error);
+    }
+  }, [error, handleSuperAdminError]);
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6 p-6">
@@ -62,9 +63,11 @@ export default function EmployeesPage() {
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-100">Employees</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-100">
+            Employees
+          </h1>
           <p className="mt-1 text-sm text-slate-400">
-            Manage and monitor all employee profiles registered on the platform.
+            Cross-tenant list of all employee profiles registered on the platform.
           </p>
         </div>
         <div className="relative w-full max-w-sm sm:w-72">

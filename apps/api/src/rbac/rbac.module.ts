@@ -1,5 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { OrganizationContextService } from './organization-context.service.js';
+import { OrganizationRoleService } from './organization-role.service.js';
 import { OrganizationMembershipGuard } from './guards/organization-membership.guard.js';
 import { RoleGuard } from './guards/role.guard.js';
 
@@ -19,11 +20,13 @@ import { RoleGuard } from './guards/role.guard.js';
 @Module({
   providers: [
     OrganizationContextService,
+    OrganizationRoleService,
     OrganizationMembershipGuard,
     RoleGuard,
   ],
   exports: [
     OrganizationContextService,
+    OrganizationRoleService,
     OrganizationMembershipGuard,
     RoleGuard,
   ],

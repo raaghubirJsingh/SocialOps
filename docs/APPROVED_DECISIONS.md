@@ -1421,8 +1421,8 @@ committed or pushed in producing this entry.
 
 ## Decision 020 — SuperAdmin Global Read-Only Visibility and Step-Up OTP Login
 
-Status: PROPOSED
-Approved: (pending human confirmation)
+Status: FINAL
+Approved: 2026-11-12
 
 ### 1. Summary
 
@@ -1526,6 +1526,29 @@ approval before any code is written:
 
 No code, schema, migration, or dependency change accompanies this entry.
 
+### 8a. Implementation Status (2026-11-12 Amendment)
+
+The implementation authorized by this decision has since been completed and
+verified. The following components now exist in the repository and are
+governed by this decision:
+
+- **Prisma models:** `AdminAuditEvent`, `AdminStepUpChallenge`,
+  `AdminStepUpSession` (all created, `consumedAt` removed from
+  `AdminStepUpSession` per Decision 027)
+- **Admin module:** `apps/api/src/admin/` (step-up challenge, session,
+  guard, controller)
+- **Platform admin module:** `apps/api/src/platform-admin/` (bootstrap,
+  grant/revoke, global reads, audit)
+- **Step-up OTP endpoints:** `POST /api/admin/step-up/challenge`,
+  `POST /api/admin/step-up/verify`, `POST /api/admin/step-up/resend`
+- **Frontend admin UI:** `(app)/super-admin/` route group with dashboard
+  modules (organizations, users, clients, employees, audit,
+  platform-admins, settings, step-up challenge)
+
+All implementation was performed under separate, explicit human approval
+gates per AGENTS.md Section 15. This entry records the capability approval;
+the implementation gates listed in Section 8 were satisfied individually.
+
 ### 9. Evidence basis
 
 This entry was produced from a read-only repository inspection: the Prisma
@@ -1538,6 +1561,175 @@ model list, `apps/api/src/clients/guards/socialops-admin.guard.ts`,
 `apps/api/src/registration/rate-limit.service.ts`,
 `apps/api/src/registration/providers/dev-console.provider.ts`, and the
 `ClientEvent` audit pattern. No file other than this one was modified.
+
+## Decision 025 — Bootstrap Authorization Mechanism (BOOTSTRAP_ADMIN_SECRET + BOOTSTRAP_ADMIN_USER_ID)
+
+Status: FINAL
+Approved: 2026-11-12
+
+### Summary
+
+This decision formally approves the deployment-controlled, one-time bootstrap authorization mechanism for creating the first SocialOps Super Admin. It addresses the TOCTOU vulnerability and lack of authorization in the original `@Public()` bootstrap endpoint.
+
+### Approved Design
+
+**Two-Factor Authorization:**
+
+1. **Factor 1 — Deployment Secret (`BOOTSTRAP_ADMIN_SECRET`):** A 32+ character CSPRNG-generated secret set at deploy time, stored exclusively in deployment secret management (Vault, AWS Secrets Manager, Kubernetes secrets, etc.). Never committed to source control or `.env` files. The bootstrap endpoint requires the caller to present this secret in the request body (`bootstrapSecret` field). Comparison uses constant-time comparison (`crypto.timingSafeEqual` with length normalization) to prevent timing attacks. On mismatch: HTTP 403.
+
+2. **Factor 2 — Target Identity Binding (`BOOTSTRAP_ADMIN_USER_ID`):** The UUID of the specific user who may be bootstrapped as the first Super Admin. Set at deploy time. The request body's `userId` field is **ignored for authorization purposes** (it may be validated for UUID format but never used to select the bootstrap target). The target user is derived exclusively from this environment variable. If unset or malformed: HTTP 503 (fail-closed). If the target user does not exist: HTTP 404.
+
+**Rate Limiting:** Strict rate limiter (5 attempts/hour/IP, Redis-backed) on the bootstrap endpoint to prevent credential guessing. Exceeding the limit returns HTTP 429.
+
+**Secret Handling:** The bootstrap secret is never logged at any level. Audit events record only the action and target user ID.
+
+**One-Time Enforcement:** After successful bootstrap, a `GlobalSetting` row `bootstrap_admin_completed = 'true'` is written atomically within the bootstrap transaction. Subsequent bootstrap requests check this row and reject with HTTP 409 `PLATFORM_ADMIN_EXISTS`.
+
+**Atomicity:** The entire flow — secret verification, identity binding check, existence check, user update, `bootstrap_admin_completed` setting write, and audit insertion — executes inside a single `prisma.$transaction` with `pg_advisory_xact_lock` on a fixed key (`hash('platform-bootstrap')` → `0x534f4349`) to serialize concurrent requests.
+
+**Deployment Control:** Both environment variables are set at deploy time, not in code. If either is unset, bootstrap returns HTTP 503 (fail-closed). This preserves support for multiple future Super Admin accounts via `grantAdmin` (which requires step-up + `PLATFORM_ROLE_GRANT`).
+
+**Secret Provisioning, Rotation & Recovery:**
+- **Provisioning:** Generate `BOOTSTRAP_ADMIN_SECRET` (32+ char, CSPRNG) and `BOOTSTRAP_ADMIN_USER_ID` (existing user UUID) at deploy time. Store only in deployment secret management.
+- **Rotation:** If the secret must be rotated before bootstrap completes, redeploy with new values. The old secret immediately becomes invalid.
+- **Recovery:** If bootstrap fails or the target user is deleted, the secret remains valid for a new target user (update `BOOTSTRAP_ADMIN_USER_ID` and redeploy). No database migration required.
+- **Post-Bootstrap:** After successful bootstrap, both env vars can be removed from the deployment configuration.
+
+**Expected Responses:**
+- Missing/invalid `BOOTSTRAP_ADMIN_SECRET` or `BOOTSTRAP_ADMIN_USER_ID` → 503 (fail-closed)
+- Invalid/absent `bootstrapSecret` in request → 403
+- Mismatched `bootstrapSecret` → 403
+- `BOOTSTRAP_ADMIN_USER_ID` unset/malformed → 503
+- Target user (from `BOOTSTRAP_ADMIN_USER_ID`) does not exist → 404
+- Bootstrap already completed (`bootstrap_admin_completed = true`) → 409 `PLATFORM_ADMIN_EXISTS`
+- Rate limit exceeded → 429
+
+**Explicitly Rejected:** A unique partial index on `isSocialOpsAdmin WHERE true` — this would permit only one Super Admin ever, breaking the requirement for multiple future Super Admin accounts.
+
+### Implementation Files (Verified Complete)
+
+- `apps/api/src/platform-admin/platform-admin.service.ts` — `bootstrapFirstAdmin()` with secret verification, identity binding, advisory lock, completion flag
+- `apps/api/src/platform-admin/dto/platform-admin.dto.ts` — `bootstrapPlatformAdminSchema` with `bootstrapSecret` field; `ALL_PLATFORM_PERMISSIONS` fixed to 11 items
+- `apps/api/src/platform-admin/platform-admin.controller.ts` — Bootstrap route updated
+- `apps/api/.env.example` — Placeholders for `BOOTSTRAP_ADMIN_SECRET`, `BOOTSTRAP_ADMIN_USER_ID`
+- `apps/api/src/platform-admin/platform-admin.service.spec.ts` — Tests: unauthorized (403), repeated (409), concurrent (20 parallel → 1 success), nonexistent user (404), existing admin (409)
+
+### Verification Criteria
+
+All test cases pass:
+- Unauthorized request (wrong/missing secret) → 403
+- Repeated request after bootstrap completes → 409 `PLATFORM_ADMIN_EXISTS`
+- Concurrent requests (20 parallel) → exactly 1 succeeds, 19 fail with 403/409
+- Bootstrap with valid secret but non-existent userId → 404
+- Bootstrap with valid secret but already-existing admin → 409
+
+## Decision 026 — Bootstrap Atomicity (PostgreSQL Advisory Lock)
+
+Status: FINAL
+Approved: 2026-11-12
+
+### Summary
+
+This decision formally approves the use of PostgreSQL advisory locks (`pg_advisory_xact_lock`) to make the bootstrap operation truly atomic, eliminating the TOCTOU (Time-of-Check-Time-of-Use) window in the original implementation.
+
+### Approved Design
+
+**Mechanism:** `pg_advisory_xact_lock(0x534f4349)` — the hex representation of "SOCI" (SocialOps), acquired at the start of the bootstrap transaction and held until transaction commit/rollback.
+
+**Why Advisory Lock:**
+- **Minimal** — no schema change, no new tables, no application-level mutex infrastructure
+- **Transactional** — automatically released on transaction end (commit or rollback), cannot be leaked
+- **Serializable** — PostgreSQL guarantees mutual exclusion for the same lock key within the same database
+- **Performance** — lightweight, no disk I/O, no WAL traffic for lock acquisition itself
+
+**Scope:** The lock covers the entire bootstrap critical section:
+1. Secret verification
+2. Identity binding check
+3. Existence check (`findFirst` where `isSocialOpsAdmin = true`)
+4. User update (`isSocialOpsAdmin = true`, permissions grant, timestamps)
+5. `GlobalSetting` write (`bootstrap_admin_completed = 'true'`)
+6. `AdminAuditEvent` insert
+
+**Concurrency Test:** 20 parallel bootstrap requests → exactly 1 succeeds, 19 fail with `PLATFORM_ADMIN_EXISTS` (409). The advisory lock ensures the `findFirst` + `update` sequence is serialized.
+
+### Implementation Files (Verified Complete)
+
+- `apps/api/src/platform-admin/platform-admin.service.ts` — `bootstrapFirstAdmin()` uses `prisma.$executeRaw\`SELECT pg_advisory_xact_lock(0x534f4349)\`` at transaction start
+- `apps/api/src/platform-admin/platform-admin.service.spec.ts` — Concurrent test (20 parallel requests)
+
+### Verification Criteria
+
+- `prisma.$executeRaw` called with advisory lock in transaction
+- 20 parallel requests → exactly 1 success, 19 `ConflictException`
+- Lock automatically released on transaction commit/rollback (no manual release needed)
+
+## Decision 027 — Step-Up Session Model (TTL-Bound, Remove consumedAt)
+
+Status: FINAL
+Approved: 2026-11-12
+
+### Summary
+
+This decision formally approves the TTL-bound (Time-To-Live), reusable 15-minute step-up session model for Super Admin access. The single-use `consumedAt` model is rejected in favor of Option A: TTL-bound sessions that support parallel SPA requests within the 15-minute window.
+
+### Approved Design
+
+**Session Model:**
+- **Duration:** 15 minutes from creation (`expiresAt`)
+- **Reusable:** Multiple parallel requests with the same session token succeed within the TTL window
+- **Revocation:** `revokeAllSessions()` sets `revokedAt` on all active sessions for a user; subsequent `validateSession()` returns null immediately
+- **No Consumption:** The `consumedAt` column is removed; `consumeSession()` method is removed; the guard uses `validateSession()` exclusively (read-only, TTL-bound)
+
+**Why TTL-Bound:**
+- **SPA Parallelism:** Single-page applications frequently issue 5-10 concurrent API requests on page load. A single-use session would force re-authentication on every page navigation or parallel fetch.
+- **15-Minute Window:** Sufficient for admin tasks while limiting exposure window.
+- **Immediate Revocation:** `revokedAt` provides instant invalidation on logout, admin revocation, or security event — no need to wait for TTL expiry.
+
+**Guard Behavior (`AdminStepUpGuard`):**
+- Reads `X-Admin-Session-Token` header
+- Validates via `validateSession()` — checks: session exists, `revokedAt === null`, `expiresAt > now()`
+- Returns `{ userId }` or `null`
+- **Never** calls `consumeSession()` (method removed)
+- Attaches `req.adminStepUpUserId` for downstream use
+
+**Schema Change:**
+```prisma
+model AdminStepUpSession {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @db.Uuid
+  sessionTokenHash String   @unique
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+```
+The `consumedAt` column is removed.
+
+**Migration:** `20261112000000_remove_admin_step_up_session_consumed_at` — `ALTER TABLE "AdminStepUpSession" DROP COLUMN "consumedAt";`
+
+### Implementation Files (Verified Complete)
+
+- `apps/api/prisma/schema.prisma` — `AdminStepUpSession` model without `consumedAt`
+- `apps/api/prisma/migrations/20261112000000_remove_admin_step_up_session_consumed_at/migration.sql` — Drop column migration (created, not applied)
+- `apps/api/src/admin/admin-step-up.service.ts` — `validateSession()` only (read-only, TTL-bound); `consumeSession()` removed
+- `apps/api/src/admin/guards/admin-step-up.guard.ts` — Uses `validateSession()`; comment updated to TTL-bound
+- `apps/api/src/admin/admin-step-up.service.spec.ts` — Tests: logout, revocation, expiry, parallel SPA requests (10 concurrent)
+- `apps/api/src/admin/guards/admin-step-up.guard.spec.ts` — Tests: TTL-bound behavior
+
+### Verification Criteria
+
+- `prisma validate` passes (schema without `consumedAt`)
+- `consumeSession()` method removed; no remaining references in codebase
+- Logout: `revokeAllSessions()` sets `revokedAt`; subsequent `validateSession()` returns null
+- Revocation: `revokeAllSessions()` after partial session lifetime → immediate invalidation
+- Expiry: Session with `expiresAt` in past → `validateSession()` returns null
+- Parallel SPA requests: 10 concurrent requests with same session token all succeed (TTL-bound, not consumed)
+- Guard behavior unchanged: `AdminStepUpGuard` continues to use `validateSession()` (read-only, TTL-bound)
 
 ## Decision 021 — Social Account Global URL Uniqueness
 

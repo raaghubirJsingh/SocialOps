@@ -4,6 +4,7 @@ import { PrismaModule } from '../prisma/prisma.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { AdminStepUpModule } from '../admin/admin-step-up.module.js';
 import { GlobalSettingsModule } from '../content/ai/global-settings.module.js';
+import { RegistrationModule } from '../registration/registration.module.js';
 import { PlatformAdminService } from './platform-admin.service.js';
 import { PlatformAdminController } from './platform-admin.controller.js';
 import { PlatformAdminSettingsController } from './platform-admin-settings.controller.js';
@@ -12,6 +13,8 @@ import { PlatformAdminUsersService } from './platform-admin-users.service.js';
 import { PlatformAdminClientsService } from './platform-admin-clients.service.js';
 import { PlatformAdminEmployeesService } from './platform-admin-employees.service.js';
 import { PlatformPermissionGuard } from './guards/platform-permission.guard.js';
+import { OrganizationRoleService } from '../rbac/organization-role.service.js';
+import { OrganizationRoleController } from '../rbac/organization-role.controller.js';
 
 /**
  * Platform Administrator Module.
@@ -24,20 +27,33 @@ import { PlatformPermissionGuard } from './guards/platform-permission.guard.js';
  * - getAdmin: single platform admin lookup
  * - Global read endpoints: organizations, users, clients
  * - Global settings endpoints: system-wide configuration (Decision 022)
+ * - Organization role assignment endpoints: update roles within organizations
+ * - SOCIALOPS_ADMIN audit endpoints: cross-tenant audit event listing
  *
  * All operations are audited in AdminAuditEvent.
  * All routes protected by AdminStepUpGuard (SOCIALOPS_ADMIN + step-up verified).
  * Per-permission enforcement via PlatformPermissionGuard.
  */
 @Module({
-  imports: [PrismaModule, AuthModule, AdminStepUpModule, GlobalSettingsModule],
-  controllers: [PlatformAdminController, PlatformAdminSettingsController],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    AdminStepUpModule,
+    GlobalSettingsModule,
+    RegistrationModule,
+  ],
+  controllers: [
+    PlatformAdminController,
+    PlatformAdminSettingsController,
+    OrganizationRoleController,
+  ],
   providers: [
     PlatformAdminService,
     PlatformAdminOrganizationsService,
     PlatformAdminUsersService,
     PlatformAdminClientsService,
     PlatformAdminEmployeesService,
+    OrganizationRoleService,
     PlatformPermissionGuard,
   ],
   exports: [
@@ -46,6 +62,7 @@ import { PlatformPermissionGuard } from './guards/platform-permission.guard.js';
     PlatformAdminUsersService,
     PlatformAdminClientsService,
     PlatformAdminEmployeesService,
+    OrganizationRoleService,
   ],
 })
 export class PlatformAdminModule {}

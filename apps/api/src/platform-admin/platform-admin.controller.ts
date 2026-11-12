@@ -3,10 +3,13 @@ import {
   Controller,
   Get,
   HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
   Query,
+  Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 
@@ -18,11 +21,16 @@ import { Public } from '../rbac/decorators/public.decorator.js';
 import { AdminStepUpGuard } from '../admin/guards/admin-step-up.guard.js';
 import { PlatformPermissionGuard } from './guards/platform-permission.guard.js';
 import { RequirePlatformPermission } from './dto/platform-permission.constants.js';
-import { PlatformAdminService, PaginatedPlatformAdmins, PlatformAdminInfo } from './platform-admin.service.js';
+import {
+  PlatformAdminService,
+  PaginatedPlatformAdmins,
+  PlatformAdminInfo,
+} from './platform-admin.service.js';
 import { PlatformAdminOrganizationsService } from './platform-admin-organizations.service.js';
 import { PlatformAdminUsersService } from './platform-admin-users.service.js';
 import { PlatformAdminClientsService } from './platform-admin-clients.service.js';
 import { PlatformAdminEmployeesService } from './platform-admin-employees.service.js';
+import { RateLimitService } from '../registration/rate-limit.service.js';
 import {
   grantPlatformAdminSchema,
   revokePlatformAdminSchema,
@@ -71,6 +79,15 @@ import type {
  * - Password hashes, token hashes, SocialAccountCredential, InternalNote.body, Content.body
  *   never included in any global-read endpoint
  */
+/** Minimal structural view of the response (passthrough mode). */
+interface HeaderSink {
+  set(name: string, value: string): unknown;
+}
+
+interface IpRequest {
+  ip?: string;
+}
+
 @Controller('admin')
 @Public()
 export class PlatformAdminController {
@@ -80,7 +97,25 @@ export class PlatformAdminController {
     private readonly usersService: PlatformAdminUsersService,
     private readonly clientsService: PlatformAdminClientsService,
     private readonly employeesService: PlatformAdminEmployeesService,
+    private readonly rateLimit: RateLimitService,
   ) {}
+
+  private clientIp(req: IpRequest): string {
+    return req.ip ?? 'unknown';
+  }
+
+  private async enforceBootstrapRateLimit(
+    res: HeaderSink,
+    req: IpRequest,
+  ): Promise<void> {
+    const result = await this.rateLimit.consume('bootstrap', {
+      ip: this.clientIp(req),
+    });
+    if (!result.allowed) {
+      res.set('Retry-After', String(result.retryAfterSeconds));
+      throw RateLimitService.rateLimitException(result.retryAfterSeconds);
+    }
+  }
 
   // ============================================
   // Platform Admin Management
@@ -90,13 +125,20 @@ export class PlatformAdminController {
    * Bootstrap the first platform administrator.
    * Fails if any platform admin already exists.
    * Grants all permissions by default.
+   * Rate limited: 5 attempts per hour per IP.
    */
   @Post('platform-admins/bootstrap')
-  @HttpCode(201)
+  @HttpCode(HttpStatus.CREATED)
   @Public()
   async bootstrap(
-    @Body(new ZodValidationPipe(bootstrapPlatformAdminSchema)) dto: BootstrapPlatformAdminDto,
+    @Body(new ZodValidationPipe(bootstrapPlatformAdminSchema))
+    dto: BootstrapPlatformAdminDto,
+    @Req() req: IpRequest,
+    @Res({ passthrough: true }) res: HeaderSink,
   ): Promise<PlatformAdminInfo> {
+    // Enforce rate limit (5 attempts per hour per IP)
+    await this.enforceBootstrapRateLimit(res, req);
+
     // For bootstrap, we don't have a user yet - we'll create the first admin
     // The service will handle checking if any admin already exists
     return this.platformAdminService.bootstrapFirstAdmin(null, dto);
@@ -111,7 +153,8 @@ export class PlatformAdminController {
   @RequirePlatformPermission('PLATFORM_ROLE_GRANT')
   async grant(
     @CurrentUser() user: JwtAccessPayload,
-    @Body(new ZodValidationPipe(grantPlatformAdminSchema)) dto: GrantPlatformAdminDto,
+    @Body(new ZodValidationPipe(grantPlatformAdminSchema))
+    dto: GrantPlatformAdminDto,
   ): Promise<PlatformAdminInfo> {
     return this.platformAdminService.grantAdmin(user.sub, dto);
   }
@@ -127,7 +170,8 @@ export class PlatformAdminController {
   @RequirePlatformPermission('PLATFORM_ROLE_REVOKE')
   async revoke(
     @CurrentUser() user: JwtAccessPayload,
-    @Body(new ZodValidationPipe(revokePlatformAdminSchema)) dto: RevokePlatformAdminDto,
+    @Body(new ZodValidationPipe(revokePlatformAdminSchema))
+    dto: RevokePlatformAdminDto,
   ): Promise<PlatformAdminInfo> {
     return this.platformAdminService.revokeAdmin(user.sub, dto);
   }
@@ -140,7 +184,8 @@ export class PlatformAdminController {
   @RequirePlatformPermission('PLATFORM_ROLE_GRANT', 'PLATFORM_ROLE_REVOKE')
   async listAdmins(
     @CurrentUser() user: JwtAccessPayload,
-    @Query(new ZodValidationPipe(platformAdminListQuerySchema)) query: PlatformAdminListQueryDto,
+    @Query(new ZodValidationPipe(platformAdminListQuerySchema))
+    query: PlatformAdminListQueryDto,
   ): Promise<PaginatedPlatformAdmins> {
     return this.platformAdminService.listAdmins(query);
   }
@@ -251,7 +296,11 @@ export class PlatformAdminController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query('includeSensitive') includeSensitive?: string,
   ) {
-    return this.clientsService.getById(id, includeSensitive === 'true', user.sub);
+    return this.clientsService.getById(
+      id,
+      includeSensitive === 'true',
+      user.sub,
+    );
   }
 
   // ============================================
@@ -296,7 +345,13 @@ export class PlatformAdminController {
     @Query('targetType') targetType?: string,
   ): Promise<{
     data: AdminAuditEvent[];
-    meta: { page: number; limit: number; total: number; hasNextPage: boolean; hasPrevPage: boolean };
+    meta: {
+      page: number;
+      limit: number;
+      total: number;
+      hasNextPage: boolean;
+      hasPrevPage: boolean;
+    };
   }> {
     return this.platformAdminService.listAuditLogs(
       page ? parseInt(page, 10) : 1,

@@ -837,16 +837,15 @@ model AdminStepUpChallenge {
 /// A short-lived session token issued ONLY after a successful step-up OTP
 /// verification. It is the credential that satisfies SUPERADMIN routes; a
 /// normal access token can never satisfy them. Only the SHA-256 hash is
-/// persisted (AGENTS.md §8). Sessions are single-use: consumed on first
-/// SUPERADMIN request and revoked afterwards, so a leaked session token
-/// cannot be replayed.
+/// persisted (AGENTS.md §8). Sessions are TTL-bound (15-minute expiry)
+/// and can be used for multiple SUPERADMIN requests until they expire or
+/// are explicitly revoked, supporting SPA dashboards with parallel requests.
 model AdminStepUpSession {
   id               String   @id @default(uuid()) @db.Uuid
   userId           String   @db.Uuid
   sessionTokenHash String   @unique
   expiresAt        DateTime
   revokedAt        DateTime?
-  consumedAt       DateTime?
   createdAt        DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)

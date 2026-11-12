@@ -1,13 +1,14 @@
-import {
-  ForbiddenException,
-  Inject,
-  Injectable,
-} from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'node:crypto';
 import { randomInt } from 'node:crypto';
 
-import type { AdminStepUpChallenge, AdminStepUpSession, User, AdminStepUpChannel } from '@prisma/client';
+import type {
+  AdminStepUpChallenge,
+  AdminStepUpSession,
+  User,
+  AdminStepUpChannel,
+} from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service.js';
 
@@ -108,7 +109,9 @@ export class AdminStepUpService {
     const otp = this.generateOtp();
     console.log(`[DEV ONLY] SuperAdmin OTP: ${otp}`);
     const codeHash = await this.hashOtp(otp);
-    const expiresAt = new Date(Date.now() + ADMIN_STEP_UP_TTL_MINUTES * 60 * 1000);
+    const expiresAt = new Date(
+      Date.now() + ADMIN_STEP_UP_TTL_MINUTES * 60 * 1000,
+    );
 
     // Atomic upsert on the userId unique key: creates the row on first issue,
     // re-issues the SAME row afterwards. Attempts are preserved unless this
@@ -179,10 +182,7 @@ export class AdminStepUpService {
     }
 
     // Check if currently locked
-    if (
-      row.lockedUntil &&
-      row.lockedUntil.getTime() > now.getTime()
-    ) {
+    if (row.lockedUntil && row.lockedUntil.getTime() > now.getTime()) {
       return {
         outcome: 'locked',
         retryAfterSeconds: Math.ceil(
@@ -258,7 +258,9 @@ export class AdminStepUpService {
       const otp = this.generateOtp();
       console.log(`[DEV ONLY] SuperAdmin OTP (resend seed): ${otp}`);
       const codeHash = await this.hashOtp(otp);
-      const expiresAt = new Date(Date.now() + ADMIN_STEP_UP_TTL_MINUTES * 60 * 1000);
+      const expiresAt = new Date(
+        Date.now() + ADMIN_STEP_UP_TTL_MINUTES * 60 * 1000,
+      );
       await this.prisma.adminStepUpChallenge.upsert({
         where: { userId: userId },
         create: {
@@ -275,14 +277,14 @@ export class AdminStepUpService {
           usedAt: null,
         },
       });
-      return { sendStatus: 'sent', resendRemaining: ADMIN_STEP_UP_MAX_RESENDS - 1 };
+      return {
+        sendStatus: 'sent',
+        resendRemaining: ADMIN_STEP_UP_MAX_RESENDS - 1,
+      };
     }
 
     // Check if locked
-    if (
-      row.lockedUntil &&
-      row.lockedUntil.getTime() > now.getTime()
-    ) {
+    if (row.lockedUntil && row.lockedUntil.getTime() > now.getTime()) {
       throw new ForbiddenException({
         code: ADMIN_STEP_UP_ERROR_CODES.OTP_LOCKED,
         message: ADMIN_STEP_UP_LOCKED_MESSAGE,
@@ -303,7 +305,10 @@ export class AdminStepUpService {
 
     if (existing) {
       const reserved = await this.prisma.adminStepUpChallenge.updateMany({
-        where: { id: existing.id, resendCount: { lt: ADMIN_STEP_UP_MAX_RESENDS } },
+        where: {
+          id: existing.id,
+          resendCount: { lt: ADMIN_STEP_UP_MAX_RESENDS },
+        },
         data: { resendCount: { increment: 1 } },
       });
       if (reserved.count === 0) {
@@ -318,7 +323,9 @@ export class AdminStepUpService {
     const otp = this.generateOtp();
     console.log(`[DEV ONLY] SuperAdmin OTP: ${otp}`);
     const codeHash = await this.hashOtp(otp);
-    const expiresAt = new Date(Date.now() + ADMIN_STEP_UP_TTL_MINUTES * 60 * 1000);
+    const expiresAt = new Date(
+      Date.now() + ADMIN_STEP_UP_TTL_MINUTES * 60 * 1000,
+    );
     const rowResult = await this.prisma.adminStepUpChallenge.upsert({
       where: { userId: userId },
       create: {
@@ -394,15 +401,14 @@ export class AdminStepUpService {
   /**
    * Validate a session token (read-only, TTL-bound check).
    *
-   * Unlike consumeSession(), this method does NOT mark the token as consumed.
-   * The token remains valid for its 15-minute TTL and can be used for multiple
-   * SUPERADMIN requests, which is required for SPA dashboard page loads that
-   * issue several parallel queries.
+   * This method does NOT mark the token as consumed. The token remains
+   * valid for its 15-minute TTL and can be used for multiple SUPERADMIN
+   * requests, which is required for SPA dashboard page loads that issue
+   * several parallel queries.
    *
    * The token is invalidated by:
    *   - expiry (TTL check)
    *   - explicit revocation via revokeAllSessions() (called on logout)
-   *   - a prior explicit consumeSession() call (e.g. manual session lock)
    */
   async validateSession(
     sessionToken: string,
@@ -417,57 +423,10 @@ export class AdminStepUpService {
 
     if (
       !session ||
-      session.consumedAt !== null ||
       session.revokedAt !== null ||
       session.expiresAt.getTime() <= Date.now()
     ) {
       return null;
-    }
-
-    return { userId: session.userId };
-  }
-
-  /**
-   * Explicitly consume (lock) a session token — single-use consumption.
-   *
-   * This is NOT called by the guard on each request (the guard uses
-   * validateSession instead). It is available for explicit session
-   * termination scenarios, such as an admin manually locking their
-   * session after a sensitive operation.
-   *
-   * The updateMany with a `consumedAt: null` WHERE guard ensures that
-   * concurrent calls race safely: exactly one succeeds.
-   */
-  async consumeSession(
-    sessionToken: string,
-  ): Promise<{ userId: string } | null> {
-    const sessionTokenHash = createHash('sha256')
-      .update(sessionToken)
-      .digest('hex');
-
-    const session = await this.prisma.adminStepUpSession.findUnique({
-      where: { sessionTokenHash },
-    });
-
-    if (
-      !session ||
-      session.consumedAt !== null ||
-      session.revokedAt !== null ||
-      session.expiresAt.getTime() <= Date.now()
-    ) {
-      return null;
-    }
-
-    const updated = await this.prisma.adminStepUpSession.updateMany({
-      where: {
-        id: session.id,
-        consumedAt: null,
-      },
-      data: { consumedAt: new Date() },
-    });
-
-    if (updated.count === 0) {
-      return null; // raced
     }
 
     return { userId: session.userId };

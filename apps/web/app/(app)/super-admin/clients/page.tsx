@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Users, Search, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -14,43 +15,45 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { apiFetch } from '@/lib/api';
-import { loadSuperAdminSession } from '@/lib/super-admin-session';
+import { fetchClients } from '@/lib/super-admin-api';
+import { loadSuperAdminSession, clearSuperAdminSession } from '@/lib/super-admin-session';
+import { apiFetch, ApiError } from '@/lib/api';
 
-interface Client {
-  id: string;
-  name: string;
-  type: 'INDIVIDUAL' | 'BUSINESS';
-  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
-  onboardingStatus: 'PENDING' | 'ACTIVE';
-  website: string | null;
-  industry: string | null;
-  createdAt: string;
-}
-
-interface PaginatedResponse<T> {
-  data: T[];
-  meta: {
-    total: number;
-    page: number;
-    limit: number;
-  };
-}
-
-function fetchWithSessionToken<T>(url: string): Promise<T> {
-  const sessionData = loadSuperAdminSession();
-  return apiFetch<T>(url, {
-    headers: { 'X-Admin-Session-Token': sessionData?.sessionToken ?? '' },
-  });
-}
-
+/**
+ * Cross-tenant clients dashboard.
+ *
+ * Uses the centralized super-admin-api helper (fetchClients) so that
+ * the X-Admin-Session-Token header injection and 403 → step-up redirect
+ * are consistent with the rest of the super-admin UI.
+ *
+ * Note: Client.notes and PII (directEmail, directPhone, primaryContact*,
+ * address*) are intentionally NOT displayed — the backend SAFE_CLIENT_SELECT
+ * excludes them per Decision 020 §4.
+ */
 export default function ClientsPage() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['superadmin', 'clients'],
-    queryFn: () => fetchWithSessionToken<PaginatedResponse<Client>>('/admin/clients?limit=50'),
+    queryFn: () => fetchClients({ limit: 50 }),
+    retry: false,
   });
 
   const clients = data?.data ?? [];
+
+  // Handle 403 from expired/revoked step-up sessions by redirecting
+  // to the step-up page. The apiFetch layer already throws ApiError
+  // with status 403 — we catch it here to trigger re-authentication.
+  const handleSuperAdminError = useCallback((error: unknown) => {
+    if (error instanceof ApiError && error.status === 403) {
+      clearSuperAdminSession();
+      window.location.href = '/super-admin/step-up';
+    }
+  }, []);
+
+  useEffect(() => {
+    if (error) {
+      handleSuperAdminError(error);
+    }
+  }, [error, handleSuperAdminError]);
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6 p-6">
@@ -65,9 +68,11 @@ export default function ClientsPage() {
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-100">Clients</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-100">
+            Clients
+          </h1>
           <p className="mt-1 text-sm text-slate-400">
-            Manage and monitor all platform client records and accounts.
+            Cross-tenant list of all platform client records and accounts.
           </p>
         </div>
         <div className="relative w-full max-w-sm sm:w-72">
