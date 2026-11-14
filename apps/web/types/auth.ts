@@ -276,6 +276,84 @@ export interface RegisterEmployeeRequest {
   password: string;
 }
 
+/**
+ * Request body for POST /api/auth/registration/client.
+ * Explicit CLIENT registration. Account type is explicit and server-validated.
+ */
+export interface RegisterClientRequest {
+  fullName: string;
+  email: string;
+  phone: UserPhoneInput;
+  clientType?: ClientType | null;
+  password: string;
+}
+
+/**
+ * Request body for POST /api/auth/registration/agency.
+ * Explicit SERVICE_PROVIDER / Agency registration.
+ */
+export interface RegisterAgencyRequest {
+  fullName: string;
+  email: string;
+  phone: UserPhoneInput;
+  organizationName: string;
+  password: string;
+}
+
+/**
+ * Request body for News Organisation registration.
+ */
+export interface RegisterNewsOrganisationRequest {
+  fullName: string;
+  email: string;
+  phone: UserPhoneInput;
+  organisationName: string;
+  website?: string;
+  organisationDescription?: string;
+  designation?: string;
+  password: string;
+}
+
+/**
+ * Phone input shape used by registration forms.
+ * V1: India only (country = 'IN', number = 10-digit national format).
+ */
+export interface UserPhoneInput {
+  country: string;
+  number: string;
+}
+
+/**
+ * Minimal stub types for auth-client.ts functions whose backend endpoints
+ * do not currently exist. Kept to satisfy imports without removing functions.
+ * Do not call these from UI — no backend contract is implemented.
+ */
+export interface RegisterFreelancerRequest {
+  fullName: string;
+  email: string;
+  phone?: string;
+  password: string;
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ForgotPasswordResponse {
+  status: 'queued';
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  password: string;
+}
+
+export interface ResetPasswordResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: AuthenticatedUser;
+}
+
 export interface RefreshRequest {
   refreshToken: string;
 }

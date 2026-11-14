@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { RegistrationFlow } from '@/components/registration/registration-flow';
+import { RegistrationChoice } from '@/components/registration/registration-choice';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export const metadata: Metadata = {
@@ -60,17 +60,16 @@ export default function RegisterPage() {
             surface-panel base is an emit-order hazard documented in
             globals.css. */}
         <Card surface="glass" className="rounded-3xl">
-          <CardHeader className="space-y-1.5">
+          <CardHeader className="space-y-1.5 text-center">
             <CardTitle className="text-xl font-semibold tracking-tight text-slate-50">
-              नमस्ते 👋 मैं SocialOps हूँ
+              Choose Your Account Type
             </CardTitle>
             <CardDescription className="text-sm leading-relaxed text-slate-300">
-              कुछ आसान सवालों से शुरू करते हैं — फिर आपका account बन जाएगा।
-              (A few quick questions first, then your account.)
+              Select the account type that best describes how you want to use SocialOps.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <RegistrationFlow />
+            <RegistrationChoice />
           </CardContent>
         </Card>
 
