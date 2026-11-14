@@ -15,6 +15,8 @@ import type {
   OtpVerifyRequest,
   OtpVerifyResponse,
   RegisterEmployeeRequest,
+  RegisterAgencyRequest,
+  RegisterClientRequest,
   RegistrationCompleteResponse,
   RegistrationPasswordRequest,
   RegistrationResumeRequest,
