@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { RegistrationFlow } from '@/components/registration/registration-flow';
+import { RegistrationChoice } from '@/components/registration/registration-choice';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export const metadata: Metadata = {
@@ -70,7 +70,7 @@ export default function RegisterPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <RegistrationFlow />
+            <RegistrationChoice />
           </CardContent>
         </Card>
 
