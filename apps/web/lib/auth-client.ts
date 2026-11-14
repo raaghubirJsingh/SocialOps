@@ -29,6 +29,7 @@ import type {
 
 import { ApiError, apiFetch } from './api';
 import { clearSession, saveSession } from './session-storage';
+import { normalizeSelectedUserPhone } from './user-phone';
 
 /**
  * Client-side authentication helpers.
@@ -192,6 +193,74 @@ export async function registerEmployee(
   return apiFetch<RegisterResult>('/auth/register-employee', {
     method: 'POST',
     body: input,
+  });
+}
+
+/**
+ * Start a pending CLIENT registration (simple form).
+ *
+ * POST /api/auth/registration/start — creates a PendingRegistration
+ * with accountType=CLIENT (explicit, server-set). Dispatches BOTH Email
+ * and WhatsApp OTP challenges simultaneously. Returns the raw
+ * resumeToken ONCE (stage credential, not a session).
+ */
+export async function registerClient(
+  input: RegisterClientRequest,
+): Promise<RegistrationStartResponse> {
+  const phone = normalizeSelectedUserPhone(
+    input.phone.country,
+    input.phone.number,
+  );
+  if (!phone) {
+    throw new ApiError(
+      400,
+      'Invalid phone number for the selected country',
+      null,
+    );
+  }
+  return apiFetch<RegistrationStartResponse>('/auth/registration/start', {
+    method: 'POST',
+    body: {
+      fullName: input.fullName,
+      email: input.email,
+      phone,
+      accountType: 'CLIENT',
+      clientType: input.clientType ?? null,
+    },
+  });
+}
+
+/**
+ * Start a pending SERVICE_PROVIDER / Agency registration (simple form).
+ *
+ * POST /api/auth/registration/start — creates a PendingRegistration
+ * with accountType=SERVICE_PROVIDER (explicit, server-set). Dispatches
+ * BOTH Email and WhatsApp OTP challenges simultaneously. Returns the raw
+ * resumeToken ONCE (stage credential, not a session).
+ */
+export async function registerAgency(
+  input: RegisterAgencyRequest,
+): Promise<RegistrationStartResponse> {
+  const phone = normalizeSelectedUserPhone(
+    input.phone.country,
+    input.phone.number,
+  );
+  if (!phone) {
+    throw new ApiError(
+      400,
+      'Invalid phone number for the selected country',
+      null,
+    );
+  }
+  return apiFetch<RegistrationStartResponse>('/auth/registration/start', {
+    method: 'POST',
+    body: {
+      fullName: input.fullName,
+      email: input.email,
+      phone,
+      accountType: 'SERVICE_PROVIDER',
+      clientType: null,
+    },
   });
 }
 
